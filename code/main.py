@@ -8,10 +8,8 @@ from segmentation_models_pytorch.losses import TverskyLoss, FocalLoss
 from torch import GradScaler, autocast
 from tqdm import tqdm
 
+from nn.data import data_load
 from nn.models import SegformerBinarySegmentation
-
-from nn.data import PolypDataset, data_load
-
 from utils.torch import get_default_device, set_default_device
 
 """ 
@@ -146,8 +144,10 @@ def show_gradcam_on_image(img_tensor, heatmap):
 if __name__ == "__main__":
 
     (train_loader,
-     val_loader,
-     test_loader) = data_load(test_split=TEST_SPLIT)
+     val_loader) = data_load(test_split=TEST_SPLIT)
+
+    print(f"Train Images: {len(train_loader)}")
+    print(f"Val Images: {len(val_loader)}")
 
     #Set the default device to the best available GPU ... or CPU if no GPU available
     device = get_default_device()
@@ -166,11 +166,12 @@ if __name__ == "__main__":
         print(f"Epoch {epoch + 1}/{NUM_EPOCHS}")
         train_loss, train_dice = train_one_epoch(model, optimizer, scaler, train_loader)
         print(f"Train Loss: {train_loss:.4f}, Train Dice: {train_dice:.4f}")
+
         val_loss, val_metrics = evaluate(model, val_loader)
         if val_metrics['dice'] > BEST_DICE:
             BEST_DICE = val_metrics['dice']
-        torch.save(model.state_dict(), "best_segformer.pth")
-        print("Model saved!")
+            torch.save(model.state_dict(), "best_segformer.pth")
+            print("Model saved!")
 
     model.eval()
     target_layer = model.decode_head[0]

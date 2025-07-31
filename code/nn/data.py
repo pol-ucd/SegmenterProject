@@ -8,7 +8,7 @@ import numpy as np
 from albumentations.pytorch import ToTensorV2
 from pycocotools import mask as maskUtils
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset, random_split
 
 
 class PolypDataset(Dataset):
@@ -16,6 +16,10 @@ class PolypDataset(Dataset):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.transforms = transforms
+
+    def set_transform(self, transform):
+        if transform is not None:
+            self.transforms = transform
 
     def __len__(self):
         return len(self.image_paths)
@@ -39,12 +43,39 @@ class PolypDataset(Dataset):
         return img, mask.unsqueeze(0).float()  # [1,H,W]
 
 
-def data_load(test_split=0.3) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
+class PolypSubset(Dataset):
+    def __init__(self, subset, transform=None):
+        self.subset = subset
+        self.transform = transform
+
+    def __getitem__(self, index):
+        x, y = self.subset[index]
+        if self.transform:
+            x = self.transform(x)
+        return x, y
+
+    def __len__(self):
+        return len(self.subset)
+
+def train_val_dataset(dataset, test_split=0.3):
+    """
+    Split a dataset into training and validation subsets according to the test split value
+    :param dataset: A torch.utils.Dataset instance
+    :param test_split: percentage of the dataset to use for validation
+    :return: (training subset, test subset)
+    """
+    train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=test_split)
+    return Subset(dataset, train_idx), Subset(dataset, val_idx)
+
+def data_load(test_split=0.3) -> tuple[DataLoader[Any], DataLoader[Any]]:
 
     train_transform = A.Compose([A.Resize(512, 512),
                                  A.HorizontalFlip(p=0.5),
                                  A.RandomBrightnessContrast(p=0.4),
-                                 A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=15, p=0.5),
+                                 A.ShiftScaleRotate(shift_limit=0.05,
+                                                    scale_limit=0.1,
+                                                    rotate_limit=15,
+                                                    p=0.5),
                                  A.GaussianBlur(p=0.2),
                                  A.Normalize(),
                                  ToTensorV2()])
@@ -60,30 +91,25 @@ def data_load(test_split=0.3) -> tuple[DataLoader[Any], DataLoader[Any], DataLoa
     valid_imgs = sorted(glob('../data/Polyp Segmentation/valid/*.jpg'))
     valid_jsons = sorted(glob('../data/Polyp Segmentation/valid/*.json'))
 
-    print(f"Found {len(train_imgs)} training images")
-    print(f"Found {len(train_jsons)} training JSON")
-    print(f"Found {len(valid_imgs)} validation images")
-    print(f"Found {len(valid_jsons)} validation JSON")
-
     all_imgs = train_imgs + valid_imgs
     all_jsons = train_jsons + valid_jsons
 
-    (train_imgs, temp_imgs,
-     train_jsons, temp_jsons) = train_test_split(all_imgs, all_jsons,
-                                                 test_size=test_split,
-                                                 random_state=42)
+    all_ds = PolypDataset(all_imgs, all_jsons, transforms=None)
 
-    (val_imgs, test_imgs,
-     val_jsons, test_jsons) = train_test_split(temp_imgs, temp_jsons,
-                                               test_size=stest_split,
-                                               random_state=42)
+    test_len = int(len(all_ds) * test_split)
+    lengths = [len(all_ds)  - test_len, test_len]
 
-    train_ds = PolypDataset(train_imgs, train_jsons, train_transform)
-    val_ds = PolypDataset(val_imgs, val_jsons, valid_transform)
-    test_ds = PolypDataset(test_imgs, test_jsons, valid_transform)
+    train_subset, val_subset = random_split(all_ds, lengths)
+
+    train_ds = PolypSubset(
+        train_subset, transform=train_transform
+    )
+
+    val_ds = PolypSubset(
+        val_subset, transform=valid_transform
+    )
 
     train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=2, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_ds, batch_size=2, shuffle=False, num_workers=2)
-    test_loader = DataLoader(test_ds, batch_size=2, shuffle=False, num_workers=2)
+    val_loader: DataLoader[Any] = DataLoader(val_ds, batch_size=2, shuffle=False, num_workers=2)
 
-    return train_loader, val_loader, test_loader
+    return train_loader, val_loader
