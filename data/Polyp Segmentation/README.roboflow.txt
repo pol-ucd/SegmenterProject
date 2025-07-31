@@ -2,7 +2,7 @@
 Polyp Segmentation - v2 2025-06-04 4:16pm
 ==============================
 
-This dataset was exported via roboflow.com on July 29, 2025 at 1:13 PM GMT
+This dataset was exported via roboflow.com on June 4, 2025 at 3:17 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -18,7 +18,7 @@ visit https://github.com/roboflow/notebooks
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
 The dataset includes 787 images.
-Polyp-normal are annotated in COCO Segmentation format.
+Polyp-normal are annotated in SAM 2 format.
 
 The following pre-processing was applied to each image:
 * Auto-orientation of pixel data (with EXIF-orientation stripping)

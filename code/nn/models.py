@@ -27,7 +27,7 @@ class SegformerBinarySegmentation(nn.Module):
                                size=pixel_values.shape[2:],
                                mode='bilinear',
                                align_corners=False)
-        return logits  # [B, 1, 512, 512]
+        return logits.float()  # [B, 1, 512, 512]
 
 
 if __name__ == '__main__':

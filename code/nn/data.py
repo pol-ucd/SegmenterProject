@@ -5,6 +5,7 @@ from typing import Any
 import albumentations as A
 import cv2
 import numpy as np
+import torch
 from albumentations.pytorch import ToTensorV2
 from pycocotools import mask as maskUtils
 from sklearn.model_selection import train_test_split
@@ -39,8 +40,10 @@ class PolypDataset(Dataset):
         if self.transforms:
             augmented = self.transforms(image=img, mask=mask)
             img, mask = augmented['image'], augmented['mask']
+        else:
+            img, mask = torch.tensor(img), torch.tensor(mask)
 
-        return img, mask.unsqueeze(0).float()  # [1,H,W]
+        return img, mask.unsqueeze(-1).float()  # [1,H,W]
 
 
 class PolypSubset(Dataset):
@@ -49,10 +52,11 @@ class PolypSubset(Dataset):
         self.transform = transform
 
     def __getitem__(self, index):
-        x, y = self.subset[index]
+        img, mask = self.subset[index]
         if self.transform:
-            x = self.transform(x)
-        return x, y
+            augmented = self.transform(image=img.numpy(), mask=mask.numpy())
+            img, mask = augmented['image'], augmented['mask']
+        return img, mask
 
     def __len__(self):
         return len(self.subset)

@@ -21,11 +21,15 @@ BEST_DICE = 0
 
 
 def combined_loss(preds, targets):
+    targets = targets.squeeze()
+    preds = preds.squeeze()
+
     if preds.shape[-2:] != targets.shape[-2:]:
         targets = F.interpolate(targets, size=preds.shape[-2:], mode='nearest')
-    return 0.5 * bce(preds, targets) + 0.3 * tversky(torch.sigmoid(preds), targets) + 0.2 * focal(torch.sigmoid(preds),
-                                                                                                  targets)
 
+    return (0.5 * bce(preds, targets)
+            + 0.3 * tversky(torch.sigmoid(preds), targets)
+            + 0.2 * focal(torch.sigmoid(preds),targets))
 
 def compute_metrics(preds, targets, threshold=0.5):
     preds = (preds > threshold).float()
@@ -45,7 +49,7 @@ def train_one_epoch(model, optimizer, scaler, loader):
         images, masks = images.to(device), masks.to(device)
 
         optimizer.zero_grad()
-        with autocast():
+        with autocast(device_type='mps'):
             logits = model(pixel_values=images)
             loss = combined_loss(logits, masks)
             probs = torch.sigmoid(logits)
@@ -150,8 +154,9 @@ if __name__ == "__main__":
     print(f"Val Images: {len(val_loader)}")
 
     #Set the default device to the best available GPU ... or CPU if no GPU available
-    device = get_default_device()
-    set_default_device(device)
+    # device = get_default_device()
+    # set_default_device(device)
+    device='cpu'
 
     model = SegformerBinarySegmentation().to(device)
     bce = nn.BCEWithLogitsLoss()
@@ -172,16 +177,17 @@ if __name__ == "__main__":
             BEST_DICE = val_metrics['dice']
             torch.save(model.state_dict(), "best_segformer.pth")
             print("Model saved!")
-
-    model.eval()
-    target_layer = model.decode_head[0]
-    grad_cam = GradCAM(model, target_layer)
-
-    for images, masks in test_loader:
-        images = images.to(device)
-        for i in range(images.size(0)):
-            input_img = images[i].unsqueeze(0)
-            heatmap = grad_cam(input_img)
-            show_gradcam_on_image(input_img[0], heatmap)
-        # TODO: can we do this without a break statement?
-        break  # only one batch
+    
+    #TODO: save heatmaps for visual comparison later
+    # model.eval()
+    # target_layer = model.decode_head[0]
+    # grad_cam = GradCAM(model, target_layer)
+    #
+    # for images, masks in test_loader:
+    #     images = images.to(device)
+    #     for i in range(images.size(0)):
+    #         input_img = images[i].unsqueeze(0)
+    #         heatmap = grad_cam(input_img)
+    #         show_gradcam_on_image(input_img[0], heatmap)
+    #     # TODO: can we do this without a break statement?
+    #     break  # only one batch
