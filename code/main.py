@@ -150,8 +150,8 @@ if __name__ == "__main__":
     (train_loader,
      val_loader) = data_load(test_split=TEST_SPLIT)
 
-    print(f"Train Images: {len(train_loader)}")
-    print(f"Val Images: {len(val_loader)}")
+    print(f"Training batches: {len(train_loader)}")
+    print(f"Test batches: {len(val_loader)}")
 
     #Set the default device to the best available GPU ... or CPU if no GPU available
     # device = get_default_device()
@@ -177,7 +177,7 @@ if __name__ == "__main__":
             BEST_DICE = val_metrics['dice']
             torch.save(model.state_dict(), "best_segformer.pth")
             print("Model saved!")
-    
+
     #TODO: save heatmaps for visual comparison later
     # model.eval()
     # target_layer = model.decode_head[0]

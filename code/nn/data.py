@@ -71,7 +71,7 @@ def train_val_dataset(dataset, test_split=0.3):
     train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=test_split)
     return Subset(dataset, train_idx), Subset(dataset, val_idx)
 
-def data_load(test_split=0.3) -> tuple[DataLoader[Any], DataLoader[Any]]:
+def data_load(test_split=0.3, batch_size=4) -> tuple[DataLoader[Any], DataLoader[Any]]:
 
     train_transform = A.Compose([A.Resize(512, 512),
                                  A.HorizontalFlip(p=0.5),
@@ -92,28 +92,34 @@ def data_load(test_split=0.3) -> tuple[DataLoader[Any], DataLoader[Any]]:
     train_imgs = sorted(glob('../data/Polyp Segmentation/train/*.jpg'))
     train_jsons = sorted(glob('../data/Polyp Segmentation/train/*.json'))
 
-    valid_imgs = sorted(glob('../data/Polyp Segmentation/valid/*.jpg'))
-    valid_jsons = sorted(glob('../data/Polyp Segmentation/valid/*.json'))
+    test_imgs = sorted(glob('../data/Polyp Segmentation/valid/*.jpg'))
+    test_jsons = sorted(glob('../data/Polyp Segmentation/valid/*.json'))
 
-    all_imgs = train_imgs + valid_imgs
-    all_jsons = train_jsons + valid_jsons
+    all_imgs = train_imgs + test_imgs
+    all_jsons = train_jsons + test_jsons
+
+    print(f"Found {len(all_imgs)} images and {len(all_jsons)} annotations")
 
     all_ds = PolypDataset(all_imgs, all_jsons, transforms=None)
 
     test_len = int(len(all_ds) * test_split)
     lengths = [len(all_ds)  - test_len, test_len]
 
-    train_subset, val_subset = random_split(all_ds, lengths)
+    train_idx, val_idx = random_split(all_ds, lengths)
 
     train_ds = PolypSubset(
-        train_subset, transform=train_transform
+        train_idx, transform=train_transform
     )
 
     val_ds = PolypSubset(
-        val_subset, transform=valid_transform
+        val_idx, transform=valid_transform
     )
 
-    train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=2, shuffle=True, num_workers=2)
-    val_loader: DataLoader[Any] = DataLoader(val_ds, batch_size=2, shuffle=False, num_workers=2)
+    print(f"Found {len(train_ds)} training samples and {len(val_ds)} test samples")
+
+    train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=batch_size,
+                                               shuffle=True, num_workers=4)
+    val_loader: DataLoader[Any] = DataLoader(val_ds, batch_size=batch_size,
+                                             shuffle=False, num_workers=4)
 
     return train_loader, val_loader
