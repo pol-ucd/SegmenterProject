@@ -71,7 +71,7 @@ def train_val_dataset(dataset, test_split=0.3):
     train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=test_split)
     return Subset(dataset, train_idx), Subset(dataset, val_idx)
 
-def data_load(test_split=0.3, batch_size=4) -> tuple[DataLoader[Any], DataLoader[Any]]:
+def data_load(test_split=0.3, batch_size=8) -> tuple[DataLoader[Any], DataLoader[Any]]:
 
     train_transform = A.Compose([A.Resize(512, 512),
                                  A.HorizontalFlip(p=0.5),
@@ -118,8 +118,8 @@ def data_load(test_split=0.3, batch_size=4) -> tuple[DataLoader[Any], DataLoader
     print(f"Found {len(train_ds)} training samples and {len(val_ds)} test samples")
 
     train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=batch_size,
-                                               shuffle=True, num_workers=4)
+                                               shuffle=True, num_workers=2)
     val_loader: DataLoader[Any] = DataLoader(val_ds, batch_size=batch_size,
-                                             shuffle=False, num_workers=4)
+                                             shuffle=False, num_workers=2)
 
     return train_loader, val_loader
