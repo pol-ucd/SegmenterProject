@@ -1,5 +1,6 @@
 import json
 from glob import glob
+from typing import Any
 
 import albumentations as A
 import cv2
@@ -15,7 +16,8 @@ from sklearn.model_selection import train_test_split
 from torch import GradScaler, autocast
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from transformers import SegformerModel
+
+from code.nn.models import SegformerBinarySegmentation
 
 
 class PolypDataset(Dataset):
@@ -46,59 +48,41 @@ class PolypDataset(Dataset):
         return img, mask.unsqueeze(0).float()  # [1,H,W]
 
 
-train_transform = A.Compose([A.Resize(512, 512), A.HorizontalFlip(p=0.5), A.RandomBrightnessContrast(p=0.4),
-                             A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=15, p=0.5),
-                             A.GaussianBlur(p=0.2), A.Normalize(), ToTensorV2()])
-valid_transform = A.Compose([A.Resize(512, 512), A.Normalize(), ToTensorV2()])
+def data_setup():
+    # global train_loader, val_loader, test_loader
 
-train_imgs = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/train/.jpg'))
-train_jsons = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/train/.json'))
-valid_imgs = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/valid/.jpg'))
-valid_jsons = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/valid/.json'))
+    train_transform = A.Compose([A.Resize(512, 512), A.HorizontalFlip(p=0.5), A.RandomBrightnessContrast(p=0.4),
+                                 A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=15, p=0.5),
+                                 A.GaussianBlur(p=0.2), A.Normalize(), ToTensorV2()])
 
-all_imgs = train_imgs + valid_imgs
-all_jsons = train_jsons + valid_jsons
+    valid_transform = A.Compose([A.Resize(512, 512), A.Normalize(), ToTensorV2()])
 
-(train_imgs, temp_imgs,
- train_jsons, temp_jsons) = train_test_split(all_imgs, all_jsons,
-                                             test_size=0.3,
-                                             random_state=42)
-(val_imgs, test_imgs,
- val_jsons, test_jsons) = train_test_split(temp_imgs, temp_jsons,
-                                           test_size=1 / 3,
-                                           random_state=42)
+    train_imgs = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/train/.jpg'))
+    train_jsons = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/train/.json'))
 
-train_ds = PolypDataset(train_imgs, train_jsons, train_transform)
-val_ds = PolypDataset(val_imgs, val_jsons, valid_transform)
-test_ds = PolypDataset(test_imgs, test_jsons, valid_transform)
-train_loader = DataLoader(train_ds, batch_size=2, shuffle=True, num_workers=2)
-val_loader = DataLoader(val_ds, batch_size=2, shuffle=False, num_workers=2)
-test_loader = DataLoader(test_ds, batch_size=2, shuffle=False, num_workers=2)
+    valid_imgs = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/valid/.jpg'))
+    valid_jsons = sorted(glob('/kaggle/input/conor-data/Polyp Segmentation.v2i.sam2/valid/.json'))
 
+    all_imgs = train_imgs + valid_imgs
+    all_jsons = train_jsons + valid_jsons
 
-class SegformerBinarySegmentation(nn.Module):
-    def init(self):
-        super().init()
-        self.backbone = SegformerModel.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512")
-        hidden_dim = self.backbone.config.hidden_sizes[-1]
-        self.decode_head = nn.Sequential(nn.Conv2d(hidden_dim, 256, kernel_size=3, padding=1), nn.BatchNorm2d(256),
-                                         nn.ReLU(inplace=True),
-                                         nn.Conv2d(256, 1, kernel_size=1)
-                                         )
+    (train_imgs, temp_imgs,
+     train_jsons, temp_jsons) = train_test_split(all_imgs, all_jsons,
+                                                 test_size=0.3,
+                                                 random_state=42)
+    (val_imgs, test_imgs,
+     val_jsons, test_jsons) = train_test_split(temp_imgs, temp_jsons,
+                                               test_size=1 / 3,
+                                               random_state=42)
+    train_ds = PolypDataset(train_imgs, train_jsons, train_transform)
+    val_ds = PolypDataset(val_imgs, val_jsons, valid_transform)
+    test_ds = PolypDataset(test_imgs, test_jsons, valid_transform)
 
-    def forward(self, pixel_values):
-        features = self.backbone(pixel_values=pixel_values).last_hidden_state  # [B, C, H/32, W/32]
-        logits = self.decode_head(features)  # [B, 1, H/32, W/32]
-        logits = F.interpolate(logits, size=pixel_values.shape[2:], mode='bilinear', align_corners=False)
-        return logits  # [B, 1, 512, 512]
+    train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=2, shuffle=True, num_workers=2)
+    val_loader = DataLoader(val_ds, batch_size=2, shuffle=False, num_workers=2)
+    test_loader = DataLoader(test_ds, batch_size=2, shuffle=False, num_workers=2)
 
-
-# TODO: Fix this to select device for more platform - including Apple
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = SegformerBinarySegmentation().to(device)
-bce = nn.BCEWithLogitsLoss()
-tversky = TverskyLoss(mode='binary', alpha=0.2, beta=0.4)
-focal = FocalLoss(mode='binary')
+    return train_loader, val_loader, test_loader
 
 
 def combined_loss(preds, targets):
@@ -106,11 +90,6 @@ def combined_loss(preds, targets):
         targets = F.interpolate(targets, size=preds.shape[-2:], mode='nearest')
     return 0.5 * bce(preds, targets) + 0.3 * tversky(torch.sigmoid(preds), targets) + 0.2 * focal(torch.sigmoid(preds),
                                                                                                   targets)
-
-
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
-scaler = GradScaler()
 
 
 def compute_metrics(preds, targets, threshold=0.5):
@@ -123,7 +102,7 @@ def compute_metrics(preds, targets, threshold=0.5):
             'precision': (TP / (TP + FP + eps)).item(), 'recall': (TP / (TP + FN + eps)).item()}
 
 
-def train_one_epoch(loader):
+def train_one_epoch(model, optimizer, scaler, loader):
     model.train()
     total_loss = 0
     total_dice = 0
@@ -145,7 +124,7 @@ def train_one_epoch(loader):
     return total_loss / len(loader), total_dice / len(loader)
 
 
-def evaluate(loader):
+def evaluate(model, loader):
     model.eval()
     total_loss = 0
     total_metrics = {'dice': 0, 'iou': 0, 'precision': 0, 'recall': 0}
@@ -230,11 +209,27 @@ def show_gradcam_on_image(img_tensor, heatmap):
 if __name__ == "__main__":
     num_epochs = 200
     best_dice = 0
+
+    (train_loader,
+     val_loader,
+     test_loader) = data_setup()
+
+    # TODO: Fix this to select device for more platform - including Apple
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = SegformerBinarySegmentation().to(device)
+    bce = nn.BCEWithLogitsLoss()
+    tversky = TverskyLoss(mode='binary', alpha=0.2, beta=0.4)
+    focal = FocalLoss(mode='binary')
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+    scaler = GradScaler()
+
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
-        train_loss, train_dice = train_one_epoch(train_loader)
+        train_loss, train_dice = train_one_epoch(model, optimizer, scaler, train_loader)
         print(f"Train Loss: {train_loss:.4f}, Train Dice: {train_dice:.4f}")
-        val_loss, val_metrics = evaluate(val_loader)
+        val_loss, val_metrics = evaluate(model, val_loader)
         if val_metrics['dice'] > best_dice:
             best_dice = val_metrics['dice']
         torch.save(model.state_dict(), "best_segformer.pth")
