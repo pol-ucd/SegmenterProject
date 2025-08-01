@@ -21,9 +21,10 @@ class DiceScore(nn.Module):
 
     def _do_calculation(self, pred, target):
         pred = torch.sigmoid(pred)
-        n_samples = pred.size(0)
-        intersection = (pred * target).sum()
-        union = pred.sum() + target.sum()
+        pred = (pred > 0.5).bool()
+        target = (target > 0).bool()
+        intersection = (pred & target).float().sum()
+        union = (pred | target).float().sum()
         dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
         return dice
 
@@ -34,18 +35,19 @@ class IOUScore(nn.Module):
         self.smooth = smooth
 
     def forward(self, pred, target):
-        return self._do_calculation(pred)
+        return self._do_calculation(pred, target)
 
     def __call__(self, pred, target):
-        return self._do_calculation(pred)
+        return self._do_calculation(pred, target)
 
-    def _do_calculation(self, pred):
-        outputs = pred.squeeze(1)  # BATCH x 1 x H x W => BATCH x H x W
-        intersection = (outputs & pred).float().sum()
-        union = (outputs | pred).float().sum()
+    def _do_calculation(self, pred, target):
+        pred = torch.sigmoid(pred)
+        pred = (pred > 0.5).bool()
+        target = (target > 0).bool()
+        intersection = (pred & target).float().sum()
+        union = (pred | target).float().sum()
         iou = (intersection + self.smooth) / (union + self.smooth)
         return iou
-
 
 """
 Implements Hanija's Combined Loss for Binary image classification.

@@ -33,7 +33,9 @@ def compute_metrics(preds, targets, threshold=0.5):
 if __name__ == "__main__":
 
     (train_loader,
-     val_loader) = data_load(test_split=TEST_SPLIT, batch_size=BATCH_SIZE)
+     val_loader,
+     train_names,
+     val_names) = data_load(test_split=TEST_SPLIT, batch_size=BATCH_SIZE)
 
     n_val = len(val_loader)*BATCH_SIZE
     n_train = len(train_loader)*BATCH_SIZE
@@ -73,11 +75,11 @@ if __name__ == "__main__":
         print(f"Train Loss: {train_loss/n_train:.4f}, Train Dice: {train_dice/n_train:.4f}")
 
         val_loss, val_metrics = trainer.evaluate(save_preds=False, save_preds_path="")
-        print(f"Total evaluation Loss: {val_loss/n_val:.4f} | Dice: {val_metrics['dice']/n_val:.4f}")
+        print(f"Total evaluation Loss: {val_loss/n_val:.4f} | Dice: {val_metrics['dice']/n_val:.4f} | IOU: {val_metrics['iou']/n_val:.4f}")
         if val_metrics['dice'] > best_dice_score:
             best_dice_score = val_metrics['dice']
             torch.save(model.state_dict(), "best_segformer.pth")
-            _, _ = trainer.evaluate(save_preds=True)
+            # _, _ = trainer.evaluate(save_preds=True)
             print(f"Model saved for dice score: {val_metrics['dice']:.4f}")
 
     #TODO: save heatmaps for visual comparison later
