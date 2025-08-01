@@ -13,8 +13,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
-TRAIN_DIR = '../data/Polyp Segmentation/train'
-VALID_DIR = '../data/Polyp Segmentation/valid'
+TRAIN_DIR = 'data/Polyp Segmentation/train'
+VALID_DIR = 'data/Polyp Segmentation/valid'
 TRAIN_IMGS = os.path.join(TRAIN_DIR, '*.jpg')
 VALID_IMGS = os.path.join(VALID_DIR, '*.jpg')
 TRAIN_JSONS = os.path.join(TRAIN_DIR, '*.json')

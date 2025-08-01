@@ -11,7 +11,8 @@ Some constants
 """
 TEST_SPLIT = 0.3  # Passed to data_load to set the size of test/validation set
 BATCH_SIZE = 8
-NUM_EPOCHS = 200  # Training epochs
+NUM_EPOCHS = 1  # Training epochs
+SAVE_PREDS_PATH = "data/Polyp Segmentation/predicted_masks"
 
 
 # TODO: this function needs to be reworked. Ignoring it for now and just returning Dice Score
@@ -71,11 +72,12 @@ if __name__ == "__main__":
         train_loss, train_dice = trainer.train()
         print(f"Train Loss: {train_loss/n_train:.4f}, Train Dice: {train_dice/n_train:.4f}")
 
-        val_loss, val_metrics = trainer.evaluate()
+        val_loss, val_metrics = trainer.evaluate(save_preds=False, save_preds_path="")
         print(f"Total evaluation Loss: {val_loss/n_val:.4f} | Dice: {val_metrics['dice']/n_val:.4f}")
         if val_metrics['dice'] > best_dice_score:
             best_dice_score = val_metrics['dice']
             torch.save(model.state_dict(), "best_segformer.pth")
+            _, _ = trainer.evaluate(save_preds=True)
             print(f"Model saved for dice score: {val_metrics['dice']:.4f}")
 
     #TODO: save heatmaps for visual comparison later

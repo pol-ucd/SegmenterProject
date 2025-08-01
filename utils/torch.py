@@ -6,7 +6,7 @@ from torch import device
 
 from nn.models import SegformerBinarySegmentation
 
-from nn.modules import CombinedLoss, DiceScore
+from nn.modules import CombinedLoss, DiceScore, IOUScore
 from tqdm import tqdm
 
 
@@ -81,6 +81,7 @@ class TrainingManager:
         self.eval_loader = eval_loader
 
         self.dice_score = DiceScore()
+        self.iou_score = IOUScore()
 
     def train(self):
         """
@@ -117,10 +118,11 @@ class TrainingManager:
 
         return total_loss, total_dice
 
-    def evaluate(self):
+    def evaluate(self, save_preds=False, save_preds_path=None):
         self.model.eval()
         total_loss = 0
         total_dice_score = 0
+        total_iou_score = 0
         total_metrics = {'dice': 0, 'iou': 0, 'precision': 0, 'recall': 0}
 
         with torch.no_grad():
@@ -129,10 +131,15 @@ class TrainingManager:
                 logits = self.model(pixel_values=images)
                 loss = self.criterion(logits, masks)
 
+                if save_preds is True and save_preds_path is not None:
+                    print(logits.shape, logits.max(), logits.min())
+
                 total_dice_score += self.dice_score(logits, masks).item()
+                total_iou_score += self.iou_score(logits, masks).item()
                 total_loss += loss.item()
 
         total_metrics['dice'] = total_dice_score
+        total_metrics['iou'] = total_iou_score
 
         # for k in total_metrics:
         #     total_metrics[k] += metrics[k]

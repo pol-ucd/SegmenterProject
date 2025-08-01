@@ -89,11 +89,11 @@ def data_load(test_split=0.3, batch_size=8) -> tuple[DataLoader[Any], DataLoader
                                  ToTensorV2()])
 
     #TODO: Convert file paths into configuration options and/or command line parameters
-    train_imgs = sorted(glob('../data/Polyp Segmentation/train/*.jpg'))
-    train_jsons = sorted(glob('../data/Polyp Segmentation/train/*.json'))
+    train_imgs = sorted(glob('data/Polyp Segmentation/train/*.jpg'))
+    train_jsons = sorted(glob('data/Polyp Segmentation/train/*.json'))
 
-    test_imgs = sorted(glob('../data/Polyp Segmentation/valid/*.jpg'))
-    test_jsons = sorted(glob('../data/Polyp Segmentation/valid/*.json'))
+    test_imgs = sorted(glob('data/Polyp Segmentation/valid/*.jpg'))
+    test_jsons = sorted(glob('data/Polyp Segmentation/valid/*.json'))
 
     all_imgs = train_imgs + test_imgs
     all_jsons = train_jsons + test_jsons
