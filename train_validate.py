@@ -80,7 +80,7 @@ if __name__ == "__main__":
             best_dice_score = val_metrics['dice']
             torch.save(model.state_dict(), "best_segformer.pth")
             # _, _ = trainer.evaluate(save_preds=True)
-            print(f"Model saved for dice score: {val_metrics['dice']:.4f}")
+            print(f"Model saved for dice score: {val_metrics['dice']/n_val:.4f}")
 
     #TODO: save heatmaps for visual comparison later
     # model.eval()
