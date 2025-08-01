@@ -1,0 +1,67 @@
+import torch
+import torch.nn as nn
+from torch.nn import functional as F
+
+from segmentation_models_pytorch.losses import TverskyLoss, FocalLoss
+
+"""
+Implements Dice Loss for Binary image classification.
+Is also callable so it can be used to evaluate loss with no_grad()
+"""
+class DiceScore(nn.Module):
+    def __init__(self, smooth=1):
+        super(DiceScore, self).__init__()
+        self.smooth = smooth
+
+    def forward(self, pred, target):
+        pred = torch.sigmoid(pred)
+        n_samples = pred.size(0)
+        intersection = (pred * target).sum()
+        union = pred.sum() + target.sum()
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
+        return dice
+
+    def __call__(self, pred, target):
+        pred = torch.sigmoid(pred)
+        n_samples = pred.size(0)
+        intersection = (pred * target).sum()
+        union = pred.sum() + target.sum()
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
+        return dice
+
+"""
+Implements Hanija's Combined Loss for Binary image classification.
+Is also callable so it can be used to evaluate loss with no_grad()
+"""
+class CombinedLoss(nn.Module):
+    def __init__(self, weights=None):
+        super(CombinedLoss, self).__init__()
+        if weights is None:
+            weights = {'bce': 0.5, 'tversky': 0.3, 'focal': 0.2}
+        self.weights = weights
+        self.bce = nn.BCEWithLogitsLoss()
+        self.tversky = TverskyLoss(mode='binary', alpha=0.2, beta=0.4)
+        self.focal = FocalLoss(mode='binary')
+
+    def forward(self, pred, target):
+        target = target.squeeze()
+        pred = pred.squeeze()
+
+        if pred.shape[-2:] != target.shape[-2:]:
+            targets = F.interpolate(target, size=pred.shape[-2:], mode='nearest')
+
+        return (self.weights['bce'] * self.bce(pred, target)
+                + self.weights['tversky'] * self.tversky(torch.sigmoid(pred), target)
+                + self.weights['focal'] * self.focal(torch.sigmoid(pred),target))
+
+    def __call__(self, pred, target):
+        target = target.squeeze()
+        pred = pred.squeeze()
+
+        if pred.shape[-2:] != target.shape[-2:]:
+            targets = F.interpolate(target, size=pred.shape[-2:], mode='nearest')
+
+        return (self.weights['bce'] * self.bce(pred, target)
+                + self.weights['tversky'] * self.tversky(torch.sigmoid(pred), target)
+                + self.weights['focal'] * self.focal(torch.sigmoid(pred),target))
+
