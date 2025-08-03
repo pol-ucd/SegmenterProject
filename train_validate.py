@@ -49,7 +49,7 @@ def process_args():
 
     # Add the arguments
     parser.add_argument(
-        "train_path",
+        "--train_path",
         type=str,
         nargs='?',
         default="data/Polyp Segmentation/train",
@@ -57,7 +57,7 @@ def process_args():
     )
 
     parser.add_argument(
-        "val_path",
+        "--val_path",
         type=str,
         nargs='?',
         default="data/Polyp Segmentation/valid",
@@ -65,7 +65,7 @@ def process_args():
     )
 
     parser.add_argument(
-        "n_epochs",
+        "--n_epochs",
         type=validate_positive_integer,
         nargs="?",  # Makes the argument optional
         default=4,  # Sets the default value if not provided
@@ -73,7 +73,7 @@ def process_args():
     )
 
     parser.add_argument(
-        "n_batch",
+        "--n_batch",
         type=validate_positive_integer,
         nargs="?",  # Makes the argument optional
         default=4,  # Sets the default value if not provided
@@ -81,7 +81,7 @@ def process_args():
     )
 
     parser.add_argument(
-        "test_split",
+        "--test_split",
         type=validate_01_float,
         nargs="?",  # Makes the argument optional
         default=0.3,  # Sets the default value if not provided
@@ -95,6 +95,8 @@ def process_args():
 if __name__ == "__main__":
 
     args = process_args()
+
+    print(args)
 
     """
     I was confused by the original code because it took a rtain/test split but 
