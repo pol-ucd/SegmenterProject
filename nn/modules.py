@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
 
 from segmentation_models_pytorch.losses import TverskyLoss, FocalLoss
 
@@ -70,12 +69,16 @@ class CombinedLoss(nn.Module):
         return self._do_calculation(pred, target)
 
     def _do_calculation(self, pred, target):
-        target = target.squeeze()
-        pred = pred.squeeze()
-        if pred.shape[-2:] != target.shape[-2:]:
-            targets = F.interpolate(target, size=pred.shape[-2:], mode='nearest')
-        loss = (self.weights['bce'] * self.bce(pred, target)
-                + self.weights['tversky'] * self.tversky(torch.sigmoid(pred), target)
-                + self.weights['focal'] * self.focal(torch.sigmoid(pred), target))
-        return loss
+        # print(f"1. Is contiguous? target: {target.is_contiguous()}, pred: {pred.is_contiguous()}")
+        # target = target.squeeze()
+        # pred = pred.squeeze()
+        #
+        # print(f"2. Is contiguous? target: {target.is_contiguous()}, pred: {pred.is_contiguous()}")
+        pred = pred.transpose(3, 1)
+        logits = torch.sigmoid(pred).contiguous()
+        bce = self.bce(pred, target)
+        tversky = self.tversky(logits, target)
+        focal = self.focal(logits, target)
+
+        return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
 

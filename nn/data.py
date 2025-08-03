@@ -10,7 +10,7 @@ import torch
 from albumentations.pytorch import ToTensorV2
 from pycocotools import mask as maskUtils
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Dataset, DataLoader, Subset, random_split
+from torch.utils.data import Dataset, DataLoader
 
 
 class PolypDataset(Dataset):
@@ -62,17 +62,17 @@ class PolypSubset(Dataset):
     def __len__(self):
         return len(self.subset)
 
-def train_val_dataset(dataset, test_split=0.3):
-    """
-    Split a dataset into training and validation subsets according to the test split value
-    :param dataset: A torch.utils.Dataset instance
-    :param test_split: percentage of the dataset to use for validation
-    :return: (training subset, test subset)
-    """
-    train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=test_split)
-    return Subset(dataset, train_idx), Subset(dataset, val_idx)
 
-def data_load(test_split=0.3, batch_size=8) -> tuple[DataLoader[Any], DataLoader[Any], list[str], list[str]]:
+"""
+Load the data requested and return training and validation DataLoader objects split according
+to the test_split value
+
+:returns (train_loader, val_loader)
+"""
+def data_load(data_path,
+              test_split,
+              batch_size,
+              verbose=False) -> tuple[DataLoader[Any], DataLoader[Any]]:
 
     train_transform = A.Compose([A.Resize(512, 512),
                                  A.HorizontalFlip(p=0.5),
@@ -89,41 +89,45 @@ def data_load(test_split=0.3, batch_size=8) -> tuple[DataLoader[Any], DataLoader
                                  A.Normalize(),
                                  ToTensorV2()])
 
-    #TODO: Convert file paths into configuration options and/or command line parameters
-    train_imgs = sorted(glob('data/Polyp Segmentation/train/*.jpg'))
-    train_jsons = sorted(glob('data/Polyp Segmentation/train/*.json'))
+    all_imgs = sorted(glob(os.path.join(data_path, '*.jpg')))
+    all_jsons = sorted(glob(os.path.join(data_path, '*.json')))
 
-    test_imgs = sorted(glob('data/Polyp Segmentation/valid/*.jpg'))
-    test_jsons = sorted(glob('data/Polyp Segmentation/valid/*.json'))
+    train_loader, val_loader = None, None
+    n_train, n_val = 0, 0
 
-    test_names = [os.path.basename(x) for x in test_imgs]
-    train_names = [os.path.basename(x) for x in train_imgs]
+    if 0.0 < test_split < 1.0:
+        train_imgs, test_imgs, train_jsons, test_jsons = train_test_split(all_imgs,
+                                                                          all_jsons,
+                                                                          test_size=test_split,
+                                                                          random_state=42
+                                                                          )
 
-    all_imgs = train_imgs + test_imgs
-    all_jsons = train_jsons + test_jsons
+        train_ds = PolypDataset(train_imgs, train_jsons, transforms=train_transform)
 
-    print(f"Found {len(all_imgs)} images and {len(all_jsons)} annotations")
+        val_ds = PolypDataset(test_imgs, test_jsons, transforms=valid_transform)
 
-    all_ds = PolypDataset(all_imgs, all_jsons, transforms=None)
+        train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=batch_size,
+                                                   shuffle=True, num_workers=2)
+        val_loader: DataLoader[Any] = DataLoader(val_ds, batch_size=batch_size,
+                                                 shuffle=False, num_workers=2)
+        n_train, n_val = len(train_ds), len(val_ds)
 
-    test_len = int(len(all_ds) * test_split)
-    lengths = [len(all_ds)  - test_len, test_len]
+    elif test_split <= 0.0:
+        train_ds = PolypDataset(all_imgs, all_jsons, transforms=train_transform)
+        train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=batch_size,
+                                                   shuffle=True, num_workers=2)
+        val_loader: None
+        n_train = len(train_ds)
+    else:
+        val_ds = PolypDataset(all_imgs, all_jsons, transforms=valid_transform)
+        val_loader: DataLoader[Any] = DataLoader(val_ds, batch_size=batch_size,
+                                                 shuffle=False, num_workers=2)
+        train_loader = None
 
-    train_idx, val_idx = random_split(all_ds, lengths)
+        n_val = len(val_ds)
 
-    train_ds = PolypSubset(
-        train_idx, transform=train_transform
-    )
 
-    val_ds = PolypSubset(
-        val_idx, transform=valid_transform
-    )
+    if verbose:
+        print(f"Found {n_train} training samples and {n_val} test samples")
 
-    print(f"Found {len(train_ds)} training samples and {len(val_ds)} test samples")
-
-    train_loader: DataLoader[Any] = DataLoader(train_ds, batch_size=batch_size,
-                                               shuffle=True, num_workers=2)
-    val_loader: DataLoader[Any] = DataLoader(val_ds, batch_size=batch_size,
-                                             shuffle=False, num_workers=2)
-
-    return train_loader, val_loader, train_names, test_names
+    return train_loader, val_loader
