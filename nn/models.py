@@ -178,6 +178,7 @@ if __name__ == '__main__':
 
     model2 = SegformerBinarySegmentation2().to(device)
     # summary(model2)
+    print(model2.classifier)
 
     # Perform a forward pass with autocast
     print("2. Performing forward pass with dummy input and labels using autocast...")

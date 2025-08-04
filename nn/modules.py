@@ -24,7 +24,7 @@ class DiceScore(nn.Module):
         target = (target > 0).bool()
         intersection = (pred & target).float().sum()
         union = (pred | target).float().sum()
-        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
+        dice = (2.0 * intersection + self.smooth) / (union + intersection + self.smooth)
         return dice
 
 
