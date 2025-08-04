@@ -6,7 +6,7 @@ from torch import GradScaler
 from nn.data import data_load
 from nn.models import SegformerBinarySegmentation, SegformerBinarySegmentation2
 from nn.modules import CombinedLoss
-from utils.torch import TrainingManager, get_default_device
+from utils.torch_utils import TrainingManager, get_default_device
 
 
 # TODO: this function needs to be reworked. Ignoring it for now.
@@ -92,15 +92,17 @@ def process_args():
     return parser.parse_args()
 
 
-if __name__ == "__main__":
-
+def main():
     args = process_args()
 
     print(args)
 
+    # Set the default device to the best available GPU ... or CPU if no GPU available
+    device = get_default_device()
+    print(f"Using {device} device for model training.")
+
     """
-    I was confused by the original code because it took a rtain/test split but 
-    didn't seem to use the splits. So I've implemented a data_load function that
+    I've implemented a data_load function that
     can generate a train/test split if needed - but for now I'm just taking 100% 
     of the training and 100% validation data and using them to train and then to 
     validate respectively.
@@ -108,14 +110,14 @@ if __name__ == "__main__":
     (train_loader,
      _) = data_load(args.train_path,
                     # test_split=args.test_split,
-                    test_split=0.0,
+                    test_split=0.0,  # Use 100% for training
                     batch_size=args.n_batch,
                     verbose=True)
 
     (_,
      val_loader) = data_load(args.val_path,
                              # test_split=args.test_split,
-                             test_split=1.0,
+                             test_split=1.0,  # Use 100% for testing/validation
                              batch_size=args.n_batch,
                              verbose=True)
 
@@ -125,13 +127,9 @@ if __name__ == "__main__":
     print(f"Training batches: {len(train_loader)}")
     print(f"Test batches: {len(val_loader)}")
 
-    #Set the default device to the best available GPU ... or CPU if no GPU available
-    device = get_default_device()
-    print(f"Using {device} device for model training.")
-
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
-    model = SegformerBinarySegmentation().to(device)  #Old Word doc model
-    # model = SegformerBinarySegmentation2(pretrained_model_name_or_path= pretained_model).to(device)
+    # model = SegformerBinarySegmentation().to(device)  #Old Word doc model
+    model = SegformerBinarySegmentation2(pretrained_model=pretained_model).to(device)
     loss_fn = CombinedLoss()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
@@ -150,15 +148,18 @@ if __name__ == "__main__":
                               scaler=scaler,
                               train_loader=train_loader,
                               eval_loader=val_loader,
-                              device=device
+                              save_preds=False,
+                              save_preds_path=""
                               )
+    train_params = {}
+    eval_params = {}
     best_dice_score = 0.0
     for epoch in range(args.n_epochs):
         print(f"Epoch {epoch + 1}/{args.n_epochs}")
-        train_loss, train_dice = trainer.train()
+        train_loss, train_dice = trainer.train(**train_params)
         print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice: {train_dice / n_train:.4f}")
 
-        val_loss, val_metrics = trainer.evaluate(save_preds=False, save_preds_path="")
+        val_loss, val_metrics = trainer.evaluate(**eval_params)
         print(
             f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice: {val_metrics['dice'] / n_val:.4f} | IOU: {val_metrics['iou'] / n_val:.4f}")
         if val_metrics['dice'] > best_dice_score:
@@ -166,3 +167,8 @@ if __name__ == "__main__":
             torch.save(model.state_dict(), "best_segformer.pth")
             # _, _ = trainer.evaluate(save_preds=True)
             print(f"Model saved for dice score: {val_metrics['dice'] / n_val:.4f}")
+
+
+if __name__ == "__main__":
+
+   main()

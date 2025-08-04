@@ -14,7 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 
 
 class PolypDataset(Dataset):
-    def __init__(self, image_paths, mask_paths, transforms=None):
+    def __init__(self, image_paths, mask_paths, transforms=None, device=None):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.transforms = transforms
@@ -44,7 +44,7 @@ class PolypDataset(Dataset):
         else:
             img, mask = torch.tensor(img), torch.tensor(mask)
 
-        return img, mask.unsqueeze(-1).float()  # [1,H,W]
+        return img.half(), mask.unsqueeze(-1).long()  # [1,H,W]
 
 
 class PolypSubset(Dataset):
