@@ -52,7 +52,7 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
         self.base_model = SegformerModel.from_pretrained(self.pretrained_model,
                                                          config=self.config,
                                                          ignore_mismatched_sizes=True)
-        
+
         hidden_dim = self.base_model.config.hidden_sizes[-1]
 
         self.decode_head = nn.Sequential(nn.Conv2d(hidden_dim,
