@@ -179,8 +179,8 @@ class IOUScore(nn.Module):
     def forward(self, pred, target):
         return self._do_calculation(pred, target)
 
-    def __call__(self, pred, target):
-        return self._do_calculation(pred, target)
+    # def __call__(self, pred, target):
+    #     return self._do_calculation(pred, target)
 
     def _do_calculation(self, pred, target):
         pred = torch.sigmoid(pred)
