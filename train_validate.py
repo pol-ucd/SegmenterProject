@@ -247,6 +247,7 @@ def main():
         iou_score = 1 - (val_metrics['iou']/n_val)
         print(
             f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice: {dice_score:.4f} | IOU: {iou_score:.4f}")
+        scheduler.step(epoch + 1)
         if dice_score > best_dice_score:
             best_dice_score = dice_score
             torch.save(model.state_dict(), "best_segformer.pth")
