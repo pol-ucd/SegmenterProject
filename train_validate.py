@@ -4,7 +4,8 @@ import torch
 from torch import GradScaler
 
 from nn.data import data_load
-from nn.models import SegformerBinarySegmentation, SegformerBinarySegmentation2, SegformerBinarySegmentation3
+from nn.models import SegformerBinarySegmentation, SegformerBinarySegmentation2, SegformerBinarySegmentation3, \
+    SegformerBinarySegmentation4
 from nn.modules import CombinedLoss
 from utils.torch_utils import TrainingManager, get_default_device
 
@@ -179,7 +180,8 @@ def main():
 
     # Set the default device to the best available GPU ... or CPU if no GPU available
     device = get_default_device()
-    device = "cpu"
+    device = 'cpu'
+    args.n_epochs = 1
     print(f"Using {device} device for model training.")
 
     """
@@ -210,7 +212,7 @@ def main():
 
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
     # model = SegformerBinarySegmentation().to(device)  #Old Word doc model
-    model = SegformerBinarySegmentation3(pretrained_model=pretained_model).to(device)
+    model = SegformerBinarySegmentation4(pretrained_model=pretained_model, num_classes=1).to(device)
     loss_fn = CombinedLoss()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)

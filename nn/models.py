@@ -17,12 +17,13 @@ Base class for the Segformer models
 """
 class SegformerBinaryClassifierBase(nn.Module):
     default_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
-    def __init__(self, pretrained_model: str = None):
+    def __init__(self, pretrained_model: str = None, num_classes: int = None):
         super().__init__()
         self.pretrained_model = pretrained_model or SegformerBinaryClassifierBase.default_model
 
         self.config = SegformerConfig.from_pretrained(self.pretrained_model)
-        self.config.num_labels = 1  # Binary classifier
+
+        self.num_classes = num_classes or 1 # Default is a binary classifier
 
         self.base_model = None
 
@@ -41,14 +42,15 @@ Implementation from Word document - deprecated I expect!!
 """
 class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
     def __init__(self,
-                 pretrained_model: str = None):
+                 pretrained_model: str = None, num_classes: int = None):
         """
         Initialise the custom Segformer model.
         Args:
             pretrained_model_name_or_path (str): The name or path of the pretrained
                                                  Segformer model to load from Hugging Face.
         """
-        super().__init__(pretrained_model)
+        super().__init__(pretrained_model, num_classes)
+
         self.base_model = SegformerModel.from_pretrained(self.pretrained_model,
                                                          config=self.config,
                                                          ignore_mismatched_sizes=True)
@@ -62,7 +64,7 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
                                          nn.BatchNorm2d(256),
                                          nn.ReLU(inplace=True),
                                          nn.Conv2d(in_channels=256,
-                                                   out_channels=1,
+                                                   out_channels=self.num_classes,
                                                    kernel_size=1)
                                          )
 
@@ -86,8 +88,8 @@ Implementation from finalcode.py.
 """
 class SegformerBinarySegmentation2(SegformerBinaryClassifierBase):
 
-    def __init__(self, pretrained_model: str = None):
-        super().__init__(pretrained_model)
+    def __init__(self, pretrained_model: str = None, num_classes: int = None):
+        super().__init__(pretrained_model, num_classes)
 
         self.hidden_dim = int(self.config.decoder_hidden_size)
 
@@ -104,7 +106,7 @@ class SegformerBinarySegmentation2(SegformerBinaryClassifierBase):
             nn.Conv2d(classifier_in_size, 256, kernel_size=3, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 1, kernel_size=1)
+            nn.Conv2d(256, self.num_classes, kernel_size=1)
         )
 
 
@@ -186,8 +188,8 @@ Implementation merging the description in Word doc with code from finalcode.py.
 """
 class SegformerBinarySegmentation3(SegformerBinaryClassifierBase):
 
-    def __init__(self, pretrained_model: str = None):
-        super().__init__(pretrained_model)
+    def __init__(self, pretrained_model: str = None, num_classes: int = None):
+        super().__init__(pretrained_model, num_classes)
 
         self.hidden_dim = int(self.config.decoder_hidden_size)
 
@@ -205,7 +207,7 @@ class SegformerBinarySegmentation3(SegformerBinaryClassifierBase):
         custom_decode_head = CustomSegformerDecodeHead(
             in_channels=in_channels,
             out_channels=768,  # Same as the original model
-            num_classes=1,  # Single class output
+            num_classes=self.num_classes,  # Single class output
         )
 
         # Replace the original decode_head with the custom one
@@ -234,6 +236,81 @@ class SegformerBinarySegmentation3(SegformerBinaryClassifierBase):
                                align_corners=False)
 
         return logits
+
+"""
+Implementation merging the description in Word doc with code from finalcode.py.
+
+    A custom neural network built on top of SegformerForSemanticSegmentation
+    for binary semantic segmentation.
+
+    The outputs from SegformerForSemanticSegmentation are feed to 
+    a custom classification layer: Conv2d -> BatchNorm2d -> ReLU -> Conv2d (output 1 channel).
+"""
+
+class SegformerBinarySegmentation4(SegformerBinaryClassifierBase):
+    """
+    A wrapper class for SegformerForSemanticSegmentation that replaces its
+    decode_head with a custom Sequential layer for multi-class classification.
+    """
+
+    def __init__(self, pretrained_model: str, num_classes: int):
+        """
+        Initializes the Segformer model with a custom classification head.
+
+        Args:
+            model_id (str): The ID of the pre-trained Segformer model to load
+                            (e.g., "nvidia/segformer-b4-finetuned-ade-512-512").
+            num_classes (int): The number of output classes for semantic segmentation.
+        """
+        super().__init__(pretrained_model, num_classes)
+
+        in_channels_for_custom_head = self.config.num_labels
+        # Ignore_mismatched_sizes=True` because we are changing the
+        # effective output channels of the final classifier, even if we replace it.
+        self.base_model = SegformerForSemanticSegmentation.from_pretrained(self.pretrained_model,
+                                                                           config=self.config,
+                                                                           ignore_mismatched_sizes=True)
+        # Define the custom decode head as a PyTorch Sequential layer.
+        # This head takes the fused features from the Segformer encoder
+        # and processes them for multi-class classification.
+        self.classifier = nn.Sequential(
+            # First Conv2d layer: maintains channel dimension, applies 3x3 convolution.
+            nn.Conv2d(in_channels=in_channels_for_custom_head,
+                      out_channels=in_channels_for_custom_head,
+                      kernel_size=3,
+                      padding=1),
+            # BatchNorm2d: normalizes activations, improving training stability.
+            nn.BatchNorm2d(in_channels_for_custom_head),
+            # ReLU activation: introduces non-linearity.
+            nn.ReLU(),
+            # Final Conv2d layer: maps features to the desired number of output classes.
+            # Kernel size 1x1 is common for classification layers.
+            nn.Conv2d(in_channels=in_channels_for_custom_head,
+                      out_channels=num_classes,
+                      kernel_size=self.num_classes),
+        )
+
+    def forward(self, pixel_values: torch.Tensor, labels: torch.Tensor = None):
+        """
+        Performs a forward pass through the Segformer model with the custom head.
+
+        Args:
+            pixel_values (torch.Tensor): The input image tensor (batch_size, channels, height, width).
+            labels (torch.Tensor, optional): The ground truth labels for loss calculation. Defaults to None.
+
+        Returns:
+            transformers.modeling_outputs.SemanticSegmenterOutput: An object containing
+            the model's output logits and potentially the loss if labels are provided.
+        """
+        # The `SegformerForSemanticSegmentation`'s forward method internally
+        # handles the encoder output and passes it to the `decode_head`.
+        # By replacing `decode_head`, our custom layer will be used automatically.
+        outputs = self.base_model(pixel_values=pixel_values).logits
+        outputs = self.classifier(outputs)
+        outputs = F.interpolate(outputs,
+                                size=pixel_values.shape[2:],
+                                mode='bilinear', align_corners=False)
+        return outputs
 
 
 if __name__ == '__main__':
@@ -312,4 +389,24 @@ if __name__ == '__main__':
         print("Output shape is NOT as expected. Please check the implementation.")
 
     print("\n3. Example complete.")
+
+    model4 = SegformerBinarySegmentation3().to(device)
+
+    # Perform a forward pass with autocast
+    print("4. Performing forward pass with dummy input and labels using autocast...")
+    with torch.autocast(device_type=device_type, dtype=torch.float16):
+        # When labels are provided, the model will also compute the loss.
+        output4 = model4(pixel_values=dummy_input, labels=dummy_labels)
+
+    # Print the shape of the output logits
+    # Expected shape: (batch_size, num_labels=1, height, width)
+    print(f"Output logits shape: {output4.shape}")
+
+    # Verify output properties
+    if output4.shape == torch.Size([1, 1, 512, 512]):
+        print("Output shape is as expected for binary semantic segmentation.")
+    else:
+        print("Output shape is NOT as expected. Please check the implementation.")
+
+    print("\n4. Example complete.")
 

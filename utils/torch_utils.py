@@ -4,7 +4,7 @@ Utilities to help with PyTorch
 import torch
 from torch import autocast
 
-from nn.modules import CombinedLoss, DiceScore, IOUScore
+from nn.modules import CombinedLoss, DiceLoss, IOULoss
 from tqdm import tqdm
 
 
@@ -89,8 +89,8 @@ class TrainingManager:
         else:
             self.save_preds = False
 
-        self.dice_score = DiceScore()
-        self.iou_score = IOUScore()
+        self.dice_loss = DiceLoss()
+        self.iou_loss = IOULoss()
 
     def train(self, **train_params):
         """
@@ -121,9 +121,9 @@ class TrainingManager:
                 logits = self.model(pixel_values=images)
                 logits = logits.reshape(logits.shape)   # Kludge to make it work on MPS devices
                 loss = self.criterion(logits, masks.float())
-                dice = self.dice_score(logits, masks)
+                dice = self.dice_loss(logits, masks)
             total_loss += loss.item()
-            total_dice += dice.item()
+            total_dice += 1 - dice.item()
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -164,8 +164,8 @@ class TrainingManager:
                     # TODO: implement saving later
                     print(logits.shape, logits.max(), logits.min())
 
-                total_dice_score += self.dice_score(logits, masks).item()
-                total_iou_score += self.iou_score(logits, masks).item()
+                total_dice_score += 1 - self.dice_loss(logits, masks).item()
+                total_iou_score += 1 - self.iou_loss(logits, masks).item()
                 total_loss += loss.item()
 
         total_metrics['dice'] = total_dice_score

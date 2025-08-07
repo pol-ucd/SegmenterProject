@@ -44,7 +44,7 @@ class PolypDataset(Dataset):
         else:
             img, mask = torch.tensor(img), torch.tensor(mask)
 
-        return img.half(), mask.unsqueeze(-1).long()  # [1,H,W]
+        return img.float(), mask.unsqueeze(-1).long()  # [1,H,W]
 
 
 class PolypSubset(Dataset):
