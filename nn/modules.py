@@ -230,4 +230,4 @@ class CombinedLoss(nn.Module):
         # focal = self.focal(logits, target.float())
         dice = self.dice(logits, target)
         # return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
-        return dice 
+        return dice

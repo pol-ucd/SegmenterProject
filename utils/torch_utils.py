@@ -113,7 +113,7 @@ class TrainingManager:
                 logits = self.model(pixel_values=images)
                 logits = logits.reshape(logits.shape)   # Kludge to make it work on MPS devices
                 loss = self.criterion(logits, masks.float())
-                dice = self.dice_loss(logits, masks)
+                dice = self.dice_loss(logits, masks.float())
             total_loss += loss.item()
             total_dice += 1 - dice.item()
 
@@ -156,8 +156,8 @@ class TrainingManager:
                     # TODO: implement saving later
                     print(logits.shape, logits.max(), logits.min())
 
-                total_dice_score += 1 - self.dice_loss(logits, masks).item()
-                total_iou_score += 1 - self.iou_loss(logits, masks).item()
+                total_dice_score += 1 - self.dice_loss(logits, masks.float()).item()
+                total_iou_score += 1 - self.iou_loss(logits, masks.float()).item()
                 total_loss += loss.item()
 
         total_metrics['dice'] = total_dice_score
