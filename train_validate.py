@@ -240,16 +240,18 @@ def main():
     for epoch in range(args.n_epochs):
         print(f"Epoch {epoch + 1}/{args.n_epochs}")
         train_loss, train_dice = trainer.train(**train_params)
-        print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice: {train_dice / n_train:.4f}")
+        print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice: {1 - (train_dice / n_train):.4f}")
 
         val_loss, val_metrics = trainer.evaluate(**eval_params)
+        dice_score = 1 - (val_metrics['dice']/n_val)
+        iou_score = 1 - (val_metrics['iou']/n_val)
         print(
-            f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice: {val_metrics['dice'] / n_val:.4f} | IOU: {val_metrics['iou'] / n_val:.4f}")
-        if val_metrics['dice'] > best_dice_score:
-            best_dice_score = val_metrics['dice']
+            f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice: {dice_score:.4f} | IOU: {iou_score:.4f}")
+        if dice_score > best_dice_score:
+            best_dice_score = dice_score
             torch.save(model.state_dict(), "best_segformer.pth")
             # _, _ = trainer.evaluate(save_preds=True)
-            print(f"Model saved for dice score: {val_metrics['dice'] / n_val:.4f}")
+            print(f"Model saved for dice score: {dice_score:.4f}")
 
 
 if __name__ == "__main__":

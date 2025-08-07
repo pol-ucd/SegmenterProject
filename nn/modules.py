@@ -22,8 +22,8 @@ class TverskyLoss(nn.Module):
 
     def forward(self, inputs, targets):
         # Flatten tensors
-        inputs = inputs.reshape(-1)
-        targets = targets.reshape(-1)
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
 
         true_pos = (inputs * targets).sum()
         false_neg = ((1 - inputs) * targets).sum()
@@ -42,8 +42,8 @@ class DiceLoss(nn.Module):
 
     def forward(self, inputs, targets):
         inputs = torch.sigmoid(inputs)  # for logits, ensure values are in [0, 1]
-        inputs = inputs.reshape(-1)
-        targets = targets.reshape(-1)
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
 
         # True Positives
         true_pos = (inputs * targets).sum()
@@ -106,8 +106,8 @@ class IOULoss(nn.Module):
 
     def forward(self, inputs, targets):
         inputs = torch.sigmoid(inputs)  # make sure inputs are between 0 and 1
-        inputs = inputs.reshape(-1)
-        targets = targets.reshape(-1)
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
 
         # True Positives: predicted 1, actual 1
         true_pos = (inputs * targets).sum()

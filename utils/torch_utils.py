@@ -135,10 +135,10 @@ class TrainingManager:
         """
         # TODO: implement parameters
         self.model.eval()
-        total_loss = 0
-        total_dice_score = 0
-        total_iou_score = 0
-        total_metrics = {'dice': 0, 'iou': 0, 'precision': 0, 'recall': 0}
+        total_loss = 0.0
+        total_dice_loss = 0.0
+        total_iou_loss = 0.0
+        total_metrics = {'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
         with torch.no_grad():
             for images, masks in self.eval_loader:
@@ -156,13 +156,12 @@ class TrainingManager:
                     # TODO: implement saving later
                     print(logits.shape, logits.max(), logits.min())
 
-                print(self.dice_loss(logits, masks.float()).item())
-                total_dice_score += 1 - self.dice_loss(logits, masks.float()).item()
-                total_iou_score += 1 - self.iou_loss(logits, masks.float()).item()
+                total_dice_loss += self.dice_loss(logits, masks.float()).item()
+                total_iou_loss += self.iou_loss(logits, masks.float()).item()
                 total_loss += loss.item()
 
-        total_metrics['dice'] = total_dice_score
-        total_metrics['iou'] = total_iou_score
+        total_metrics['dice'] = total_dice_loss
+        total_metrics['iou'] = total_iou_loss
 
         # for k in total_metrics:
         #     total_metrics[k] += metrics[k]
