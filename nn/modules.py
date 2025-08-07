@@ -208,7 +208,8 @@ class CombinedLoss(nn.Module):
         # self.bce = BinaryCrossEntropyLoss()
         # self.tversky = TverskyLoss(alpha=0.2, beta=0.4)
         # self.focal = FocalLoss()
-        self.tversky = TverskyLoss()
+        # self.tversky = TverskyLoss()
+        self.dice = DiceLoss()
 
     def forward(self, pred, target):
         return self._do_calculation(pred, target)
@@ -225,8 +226,8 @@ class CombinedLoss(nn.Module):
         pred = pred.transpose(3, 1)
         logits = torch.sigmoid(pred).contiguous()
         # bce = self.bce(pred, target.float())
-        tversky = self.tversky(logits, target.float())
+        # tversky = self.tversky(logits, target.float())
         # focal = self.focal(logits, target.float())
-
+        dice = self.dice(logits, target)
         # return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
-        return tversky
+        return dice 
