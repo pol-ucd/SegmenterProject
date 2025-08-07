@@ -205,9 +205,10 @@ class CombinedLoss(nn.Module):
             weights = {'bce': 0.5, 'tversky': 0.3, 'focal': 0.2}
         self.weights = weights
         # self.bce = nn.BCEWithLogitsLoss()
-        self.bce = BinaryCrossEntropyLoss()
-        self.tversky = TverskyLoss(alpha=0.2, beta=0.4)
-        self.focal = FocalLoss()
+        # self.bce = BinaryCrossEntropyLoss()
+        # self.tversky = TverskyLoss(alpha=0.2, beta=0.4)
+        # self.focal = FocalLoss()
+        self.tversky = TverskyLoss()
 
     def forward(self, pred, target):
         return self._do_calculation(pred, target)
