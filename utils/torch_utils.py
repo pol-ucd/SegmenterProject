@@ -156,6 +156,7 @@ class TrainingManager:
                     # TODO: implement saving later
                     print(logits.shape, logits.max(), logits.min())
 
+                print(self.dice_loss(logits, masks.float()).item())
                 total_dice_score += 1 - self.dice_loss(logits, masks.float()).item()
                 total_iou_score += 1 - self.iou_loss(logits, masks.float()).item()
                 total_loss += loss.item()

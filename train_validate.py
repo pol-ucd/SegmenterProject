@@ -180,6 +180,7 @@ def main():
 
     # Set the default device to the best available GPU ... or CPU if no GPU available
     device = get_default_device()
+    device='cpu'
     args.n_epochs = 1
     print(f"Using {device} device for model training.")
 
