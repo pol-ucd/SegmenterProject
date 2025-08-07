@@ -69,11 +69,12 @@ to the test_split value
 
 :returns (train_loader, val_loader)
 """
+
+
 def data_load(data_path,
               test_split,
               batch_size,
               verbose=False) -> tuple[DataLoader[Any], DataLoader[Any]]:
-
     train_transform = A.Compose([A.Resize(512, 512),
                                  A.HorizontalFlip(p=0.5),
                                  A.RandomBrightnessContrast(p=0.4),
@@ -126,8 +127,51 @@ def data_load(data_path,
 
         n_val = len(val_ds)
 
-
     if verbose:
         print(f"Found {n_train} training samples and {n_val} test samples")
 
     return train_loader, val_loader
+
+
+def data_load_all(train_path,
+                  valid_path,
+                  test_split,
+                  batch_size,
+                  verbose=False) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
+    train_transform = A.Compose([A.Resize(512, 512),
+                                 A.HorizontalFlip(p=0.5),
+                                 A.RandomBrightnessContrast(p=0.4),
+                                 A.ShiftScaleRotate(shift_limit=0.05,
+                                                    scale_limit=0.1,
+                                                    rotate_limit=15,
+                                                    p=0.5),
+                                 A.GaussianBlur(p=0.2),
+                                 A.Normalize(),
+                                 ToTensorV2()])
+
+    valid_transform = A.Compose([A.Resize(512, 512),
+                                 A.Normalize(),
+                                 ToTensorV2()])
+
+    train_imgs = sorted(glob(os.path.join(train_path, '*.jpg')))
+    train_jsons = sorted(glob(os.path.join(train_path, '*.json')))
+    valid_imgs = sorted(glob(os.path.join(valid_path, '*.jpg')))
+    valid_jsons = sorted(glob(os.path.join(valid_path, '*.json')))
+
+    all_imgs = train_imgs + valid_imgs
+    all_jsons = train_jsons + valid_jsons
+    train_imgs, temp_imgs, train_jsons, temp_jsons = train_test_split(all_imgs, all_jsons, test_size=0.3,
+                                                                      random_state=42)
+    val_imgs, test_imgs, val_jsons, test_jsons = train_test_split(temp_imgs, temp_jsons, test_size=1 / 3,
+                                                                  random_state=42)
+
+    train_ds = PolypDataset(train_imgs, train_jsons, train_transform)
+    val_ds = PolypDataset(val_imgs, val_jsons, valid_transform)
+    test_ds = PolypDataset(test_imgs, test_jsons, valid_transform)
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+
+
+    return train_loader, val_loader, test_loader
