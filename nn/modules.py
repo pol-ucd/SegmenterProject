@@ -224,9 +224,9 @@ class CombinedLoss(nn.Module):
         # print(f"2. Is contiguous? target: {target.is_contiguous()}, pred: {pred.is_contiguous()}")
         pred = pred.transpose(3, 1)
         logits = torch.sigmoid(pred).contiguous()
-        bce = self.bce(pred, target.float())
+        # bce = self.bce(pred, target.float())
         tversky = self.tversky(logits, target.float())
-        focal = self.focal(logits, target.float())
+        # focal = self.focal(logits, target.float())
 
         # return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
         return tversky
