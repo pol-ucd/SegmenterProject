@@ -163,11 +163,4 @@ class TrainingManager:
         total_metrics['dice'] = total_dice_loss
         total_metrics['iou'] = total_iou_loss
 
-        # for k in total_metrics:
-        #     total_metrics[k] += metrics[k]
-        #     avg_loss = total_loss / len(loader)
-        #     avg_metrics = {k: total_metrics[k] / len(loader) for k in total_metrics}
-        # print(
-        #     f"Val Loss: {avg_loss:.4f} | Dice: {avg_metrics['dice']:.4f} | IoU: {avg_metrics['iou']:.4f} | Precision: {avg_metrics['precision']:.4f} | Recall: {avg_metrics['recall']:.4f}")
-        # return avg_loss, avg_metrics
         return total_loss, total_metrics

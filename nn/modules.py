@@ -210,6 +210,7 @@ class CombinedLoss(nn.Module):
         # self.focal = FocalLoss()
         # self.tversky = TverskyLoss()
         self.dice = DiceLoss()
+        self.iou = IOULoss()
 
     def forward(self, pred, target):
         return self._do_calculation(pred, target)
@@ -228,6 +229,7 @@ class CombinedLoss(nn.Module):
         # bce = self.bce(pred, target.float())
         # tversky = self.tversky(logits, target.float())
         # focal = self.focal(logits, target.float())
-        dice = self.dice(logits, target)
+        # dice = self.dice(logits, target)
+        iou = self.iou(logits, target)
         # return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
-        return dice
+        return iou.sum()
