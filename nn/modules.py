@@ -263,6 +263,7 @@ class CombinedLoss(nn.Module):
 
     def _do_calculation(self, pred, target):
         pred = pred.transpose(3, 1)
+        pred = pred.reshape(pred.shape)
         bce = self.bce(pred, target)
         tversky = self.tversky(pred, target)
         focal = self.focal(pred, target)
