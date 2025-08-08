@@ -149,6 +149,7 @@ def train_evaluate_noargs():
                               optimizer,
                               criterion=loss_fn,
                               scaler=scaler,
+                              scheduler=scheduler,
                               train_loader=train_loader,
                               eval_loader=val_loader,
                               save_preds=False,
@@ -156,17 +157,17 @@ def train_evaluate_noargs():
                               )
     train_params = {}
     eval_params = {}
-    best_dice_score = 0.0
+    best_dice_loss = 0.0
     for epoch in range(args.n_epochs):
         print(f"Epoch {epoch + 1}/{args.n_epochs}")
         train_loss, train_dice = trainer.train(**train_params)
-        print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice: {train_dice / n_train:.4f}")
+        print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice Loss: {train_dice / n_train:.4f}")
 
         val_loss, val_metrics = trainer.evaluate(**eval_params)
         print(
-            f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice: {val_metrics['dice'] / n_val:.4f} | IOU: {val_metrics['iou'] / n_val:.4f}")
-        if val_metrics['dice'] > best_dice_score:
-            best_dice_score = val_metrics['dice']
+            f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice Loss: {val_metrics['dice'] / n_val:.4f} | IOU Loss: {val_metrics['iou'] / n_val:.4f}")
+        if val_metrics['dice'] < best_dice_loss:
+            best_dice_loss = val_metrics['dice']
             torch.save(model.state_dict(), "best_segformer.pth")
             # _, _ = trainer.evaluate(save_preds=True)
             print(f"Model saved for dice score: {val_metrics['dice'] / n_val:.4f}")

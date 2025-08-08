@@ -53,6 +53,7 @@ class TrainingManager:
                  optimizer=None,
                  criterion=None,
                  scaler=None,
+                 scheduler=None,
                  train_loader=None,
                  eval_loader=None,
                  save_preds=False,
@@ -75,6 +76,7 @@ class TrainingManager:
             self.criterion = CombinedLoss()
 
         self.scaler = scaler
+        self.scheduler = scheduler
 
         if train_loader is None:
             raise ValueError('Invalid data loader in train_loader parameter. Please provide a valid data loader')
@@ -115,8 +117,8 @@ class TrainingManager:
                 logits = self.model(pixel_values=images)
                 loss = self.criterion(logits, masks.float())
                 dice = self.dice_loss(logits, masks.float())
-            total_loss += loss.item()/n_batch
-            total_dice += 1 - (dice.item()/n_batch)
+            total_loss += loss.item()
+            total_dice += dice.item()
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -126,6 +128,8 @@ class TrainingManager:
             else:
                 loss.backward() # Fails on MPS, works on CPU/CUDA
                 self.optimizer.step()
+            if self.scheduler is not None:
+                self.scheduler.step()
 
         return total_loss, total_dice
 
@@ -159,9 +163,9 @@ class TrainingManager:
 
                 total_dice_loss += self.dice_loss(logits, masks.float()).item()
                 total_iou_loss += self.iou_loss(logits, masks.float()).item()
-                total_loss += loss.item()/n_batch
+                total_loss += loss.item()
 
-        total_metrics['dice'] = total_dice_loss/n_batch
-        total_metrics['iou'] = total_iou_loss/n_batch
+        total_metrics['dice'] = total_dice_loss
+        total_metrics['iou'] = total_iou_loss
 
         return total_loss, total_metrics
