@@ -1,38 +1,81 @@
+from abc import abstractmethod, ABC
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from segmentation_models_pytorch.losses import TverskyLoss as TL, FocalLoss as FL
 
-class TverskyLoss(nn.Module):
+class BaseLossClass(nn.Module, ABC):
+    def __init__(self):
+        super(BaseLossClass, self).__init__()
+
+    def forward(self, logits, true):
+        self.n_batch = true.shape[0]
+        if self.n_batch != logits.shape[0]:
+            raise ValueError("logits and targets must have the same batch size as dim 0")
+        self.pos_prob = torch.sigmoid(logits)
+
+        self.true_pos = (true * self.pos_prob).sum()
+        self.false_neg = ((1 - true) * self.pos_prob).sum()
+        self.false_pos = (true * (1 - self.pos_prob)).sum()
+
+
+class TverskyLoss(BaseLossClass):
+    """Computes the Tversky loss [1].
+
+
+    :param alpha: controls the penalty for false positives.
+    :param beta: controls the penalty for false negatives.
+    :param eps: added to the denominator for numerical stability.
+
+    :returns tversky_loss: the Tversky loss.
+
+    Notes:
+        alpha = beta = 0.5 => dice coeff
+        alpha = beta = 1 => tanimoto coeff
+        alpha + beta = 1 => F beta coeff
+
+    References:
+        [1]: https://arxiv.org/abs/1706.05721
     """
-    :param - float alpha controls the penalty for false positives.
-    :param - float beta controls the penalty for false negatives.
-    :param - float smooth avoids division by zero and stabilizes learning.
 
-    For example, setting alpha=0.7, beta=0.3 biases the loss
-    to penalize false positives more harshly — making the model
-    more conservative.
+    def __init__(self, alpha:float =0.5, beta:float =0.5, smooth:float =1.0):
+        """
+        Assumes inputs are
+        a. logits, and,
+        b. 4-d shape (with the batch dimension as shape[0])
 
-    """
+        returns the cumulative batch loss (you normalise return value to get mean or cumulative loss)
 
-    def __init__(self, alpha=0.5, beta=0.5, smooth=1.0):
+        :param alpha: float - regulariser for false positives
+        :param beta: float - regulariser for false negatives
+        :param smooth: float - smoothing factor to avoid divide by zero
+
+        """
         super(TverskyLoss, self).__init__()
         self.alpha = alpha
         self.beta = beta
         self.smooth = smooth
 
     def forward(self, inputs, targets):
-        # Flatten tensors
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
+        """
+        :param inputs - a tensor of shape [B, H, W] or [B, 1, H, W].
+        :param logits: a tensor of shape [B, C, H, W]. Corresponds to
+            the raw output or logits of the model.
+        :returns float - (1 - tversky_score)*batch_size
+        """
+        super(TverskyLoss, self).forward(inputs, targets)
+        # n_batch = inputs.shape[0]
+        # if n_batch != targets.shape[0]:
+        #     raise ValueError("inputs and targets must have the same batch size as dim 0")
+        #
+        # true_pos = (inputs * targets).sum()
+        # false_neg = ((1 - inputs) * targets).sum()
+        # false_pos = (inputs * (1 - targets)).sum()
 
-        true_pos = (inputs * targets).sum()
-        false_neg = ((1 - inputs) * targets).sum()
-        false_pos = (inputs * (1 - targets)).sum()
+        tversky_score = (self.true_pos + self.smooth) / \
+                        (self.true_pos + self.alpha * self.false_pos + self.beta * self.false_neg + self.smooth)
 
-        tversky_score = (true_pos + self.smooth) / \
-                        (true_pos + self.alpha * false_pos + self.beta * false_neg + self.smooth)
-
-        return 1 - tversky_score  # Tversky loss
+        return self.n_batch - tversky_score  # Tversky loss
 
 
 class DiceLoss(nn.Module):
@@ -204,13 +247,10 @@ class CombinedLoss(nn.Module):
         if weights is None:
             weights = {'bce': 0.5, 'tversky': 0.3, 'focal': 0.2}
         self.weights = weights
-        # self.bce = nn.BCEWithLogitsLoss()
-        # self.bce = BinaryCrossEntropyLoss()
-        # self.tversky = TverskyLoss(alpha=0.2, beta=0.4)
-        # self.focal = FocalLoss()
-        # self.tversky = TverskyLoss()
-        self.dice = DiceLoss()
-        self.iou = IOULoss()
+        self.bce = nn.BCEWithLogitsLoss()
+        self.tversky = TL(alpha=0.2, beta=0.4, mode='binary')
+        self.focal = FL(mode='binary')
+
 
     def forward(self, pred, target):
         return self._do_calculation(pred, target)
@@ -219,17 +259,23 @@ class CombinedLoss(nn.Module):
     #     return self._do_calculation(pred, target)
 
     def _do_calculation(self, pred, target):
-        # print(f"1. Is contiguous? target: {target.is_contiguous()}, pred: {pred.is_contiguous()}")
-        # target = target.squeeze()
-        # pred = pred.squeeze()
-        #
-        # print(f"2. Is contiguous? target: {target.is_contiguous()}, pred: {pred.is_contiguous()}")
-        pred = pred.transpose(3, 1)
-        logits = torch.sigmoid(pred).contiguous()
-        # bce = self.bce(pred, target.float())
-        # tversky = self.tversky(logits, target.float())
-        # focal = self.focal(logits, target.float())
-        # dice = self.dice(logits, target)
-        iou = self.iou(logits, target)
-        # return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
-        return iou.sum()
+        # pred = pred.transpose(3, 1)
+        bce = self.bce(pred, target.float())
+        tversky = self.tversky(pred, target.float())
+        focal = self.focal(pred, target.float())
+        return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
+
+if __name__ == "__main__":
+    from segmentation_models_pytorch.losses import TverskyLoss as TL
+    """ Unit testing """
+    n_batch = 5
+
+    test_target = torch.randint(low=0, high=1, size=(n_batch, 3, 256, 256)).float()
+    test_prob = torch.rand(n_batch, 3, 256, 256)
+    test_logits = torch.log(test_prob/(1 - test_prob))
+    loss_fn = TverskyLoss()
+    loss_fn2 = TL(mode="binary")
+    loss = loss_fn(test_logits, test_target).item()
+    loss2 = (loss_fn2(test_logits, test_target)).item()
+    print(loss, loss2)
+
