@@ -265,9 +265,9 @@ class CombinedLoss(nn.Module):
     def _do_calculation(self, pred, target):
         pred = pred.transpose(3, 1)
         pred = pred.reshape(pred.shape)
-        bce = self.bce(pred, target)
-        tversky = self.tversky(pred, target)
-        focal = self.focal(pred, target)
+        bce = self.bce(pred, target.float())
+        tversky = self.tversky(pred, target.float())
+        focal = self.focal(pred, target.float())
         return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
 
 
