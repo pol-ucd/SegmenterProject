@@ -90,8 +90,8 @@ class TrainingManager:
         else:
             self.save_preds = False
 
-        self.dice_loss = DL()
-        self.iou_loss = JL()
+        self.dice_loss = DL(mode='binary')
+        self.iou_loss = JL(mode='binary')
 
     def train(self, **train_params):
         """
