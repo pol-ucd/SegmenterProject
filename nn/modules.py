@@ -2,10 +2,11 @@ from abc import abstractmethod, ABC
 
 import torch
 import torch.nn as nn
-from segmentation_models_pytorch.losses import (TverskyLoss as TL,
-                                                FocalLoss as FL,
-                                                DiceLoss as DL,
-                                                JaccardLoss as JL)
+# from segmentation_models_pytorch.losses import (TverskyLoss as TL,
+#                                                 FocalLoss as FL,
+#                                                 DiceLoss as DL,
+#                                                 JaccardLoss as JL)
+from losses import TverskyLoss as TL, FocalLoss as FL
 
 class BaseLossClass(nn.Module, ABC):
     def __init__(self):

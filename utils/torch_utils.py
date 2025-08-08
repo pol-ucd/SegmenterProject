@@ -4,7 +4,8 @@ Utilities to help with PyTorch
 import torch
 from torch import autocast
 
-from nn.modules import CombinedLoss, DiceLoss, IOULoss
+from nn.modules import CombinedLoss
+from losses import (JaccardLoss as JL, DiceLoss as DL)
 from tqdm import tqdm
 
 
@@ -89,8 +90,8 @@ class TrainingManager:
         else:
             self.save_preds = False
 
-        self.dice_loss = DiceLoss()
-        self.iou_loss = IOULoss()
+        self.dice_loss = DL()
+        self.iou_loss = JL()
 
     def train(self, **train_params):
         """
