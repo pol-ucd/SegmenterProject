@@ -2,7 +2,10 @@ from abc import abstractmethod, ABC
 
 import torch
 import torch.nn as nn
-from segmentation_models_pytorch.losses import TverskyLoss as TL, FocalLoss as FL
+from segmentation_models_pytorch.losses import (TverskyLoss as TL,
+                                                FocalLoss as FL,
+                                                DiceLoss as DL,
+                                                JaccardLoss as JL)
 
 class BaseLossClass(nn.Module, ABC):
     def __init__(self):
@@ -259,23 +262,10 @@ class CombinedLoss(nn.Module):
     #     return self._do_calculation(pred, target)
 
     def _do_calculation(self, pred, target):
-        # pred = pred.transpose(3, 1)
+        pred = pred.transpose(3, 1)
         bce = self.bce(pred, target.float())
         tversky = self.tversky(pred, target.float())
         focal = self.focal(pred, target.float())
         return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
 
-if __name__ == "__main__":
-    from segmentation_models_pytorch.losses import TverskyLoss as TL
-    """ Unit testing """
-    n_batch = 5
-
-    test_target = torch.randint(low=0, high=1, size=(n_batch, 3, 256, 256)).float()
-    test_prob = torch.rand(n_batch, 3, 256, 256)
-    test_logits = torch.log(test_prob/(1 - test_prob))
-    loss_fn = TverskyLoss()
-    loss_fn2 = TL(mode="binary")
-    loss = loss_fn(test_logits, test_target).item()
-    loss2 = (loss_fn2(test_logits, test_target)).item()
-    print(loss, loss2)
 
