@@ -110,12 +110,13 @@ class TrainingManager:
             if masks.device != self.device:
                 masks = masks.to(self.device)
 
+            n_batch = images.shape[0]
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images)
                 loss = self.criterion(logits, masks.float())
                 dice = self.dice_loss(logits, masks.float())
-            total_loss += loss.item()
-            total_dice += 1 - dice.item()
+            total_loss += loss.item()/n_batch
+            total_dice += 1 - (dice.item()/n_batch)
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -147,7 +148,7 @@ class TrainingManager:
 
                 if masks.device != self.device:
                     masks = masks.to(self.device)
-
+                n_batch = images.shape[0]
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     logits = self.model(pixel_values=images)
                     loss = self.criterion(logits, masks)
@@ -158,9 +159,9 @@ class TrainingManager:
 
                 total_dice_loss += self.dice_loss(logits, masks.float()).item()
                 total_iou_loss += self.iou_loss(logits, masks.float()).item()
-                total_loss += loss.item()
+                total_loss += loss.item()/n_batch
 
-        total_metrics['dice'] = total_dice_loss
-        total_metrics['iou'] = total_iou_loss
+        total_metrics['dice'] = total_dice_loss/n_batch
+        total_metrics['iou'] = total_iou_loss/n_batch
 
         return total_loss, total_metrics
