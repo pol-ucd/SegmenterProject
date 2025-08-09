@@ -118,17 +118,18 @@ class TrainingManager:
             n_batch = images.shape[0]
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images)
-                total_loss += self.criterion(logits, masks.float()).item()
+                loss = self.criterion(logits, masks.float())
+                total_loss += loss.item()
                 total_dice_loss += self.dice_loss(logits, masks.float()).item()
                 total_iou_loss += self.iou_loss(logits, masks.float()).item()
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
-                self.scaler.scale(self.criterion).backward() # Fails on MPS, works on CPU/CUDA
+                self.scaler.scale(loss).backward() # Fails on MPS, works on CPU/CUDA
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
-                self.criterion.backward() # Fails on MPS, works on CPU/CUDA
+                loss.backward() # Fails on MPS, works on CPU/CUDA
                 self.optimizer.step()
             if self.scheduler is not None:
                 self.scheduler.step()
@@ -161,13 +162,13 @@ class TrainingManager:
                 n_batch = images.shape[0]
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     logits = self.model(pixel_values=images)
-                    loss = self.criterion(logits, masks)
+                    loss = self.criterion(logits, masks.float())
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     # TODO: implement saving later
                     print(logits.shape, logits.max(), logits.min())
 
-                total_dice_loss += self.dice_loss(logits, masks.float()).item()
+                total_dice_loss += loss.item()
                 total_iou_loss += self.iou_loss(logits, masks.float()).item()
                 total_loss += loss.item()
 

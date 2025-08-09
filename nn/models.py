@@ -253,7 +253,7 @@ class SegformerBinarySegmentation4(SegformerBinaryClassifierBase):
     decode_head with a custom Sequential layer for multi-class classification.
     """
 
-    def __init__(self, pretrained_model: str, num_classes: int):
+    def __init__(self, pretrained_model: str, num_classes: int = 1):
         """
         Initializes the Segformer model with a custom classification head.
 
