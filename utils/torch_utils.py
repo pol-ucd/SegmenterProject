@@ -95,17 +95,20 @@ class TrainingManager:
         self.dice_loss = DL(mode='binary')
         self.iou_loss = JL(mode='binary')
 
-    def train(self, **train_params):
+    def train(self, **train_params: object) -> dict[str, float]:
         """
         Trains one epoch using the data provided in self.train_loader
         :return: total loss and dice score
         """
         # TODO: implement parameters
         self.model.train()
-        total_loss = 0
-        total_dice = 0
+        total_loss = 0.0
+        total_dice_loss = 0.0
+        total_iou_loss = 0.0
+        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
         for images, masks in tqdm(self.train_loader):
+
             if images.device != self.device:
                 images = images.to(self.device)
 
@@ -115,25 +118,28 @@ class TrainingManager:
             n_batch = images.shape[0]
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images)
-                loss = self.criterion(logits, masks.float())
-                dice = self.dice_loss(logits, masks.float())
-            total_loss += loss.item()
-            total_dice += dice.item()
+                total_loss += self.criterion(logits, masks.float()).item()
+                total_dice_loss += self.dice_loss(logits, masks.float()).item()
+                total_iou_loss += self.iou_loss(logits, masks.float()).item()
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
-                self.scaler.scale(loss).backward() # Fails on MPS, works on CPU/CUDA
+                self.scaler.scale(self.criterion).backward() # Fails on MPS, works on CPU/CUDA
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
-                loss.backward() # Fails on MPS, works on CPU/CUDA
+                self.criterion.backward() # Fails on MPS, works on CPU/CUDA
                 self.optimizer.step()
             if self.scheduler is not None:
                 self.scheduler.step()
 
-        return total_loss, total_dice
+        total_metrics['loss'] = total_loss
+        total_metrics['dice'] = total_dice_loss
+        total_metrics['iou'] = total_iou_loss
 
-    def evaluate(self, **eval_params):
+        return total_metrics
+
+    def evaluate(self, **eval_params: object) -> dict[str, float]:
         """
         Evaluate using the data provided in self.eval_loader
         :return: total loss and dice score
@@ -143,7 +149,7 @@ class TrainingManager:
         total_loss = 0.0
         total_dice_loss = 0.0
         total_iou_loss = 0.0
-        total_metrics = {'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
+        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
         with torch.no_grad():
             for images, masks in self.eval_loader:
@@ -165,7 +171,8 @@ class TrainingManager:
                 total_iou_loss += self.iou_loss(logits, masks.float()).item()
                 total_loss += loss.item()
 
+        total_metrics['loss'] = total_loss
         total_metrics['dice'] = total_dice_loss
         total_metrics['iou'] = total_iou_loss
 
-        return total_loss, total_metrics
+        return total_metrics

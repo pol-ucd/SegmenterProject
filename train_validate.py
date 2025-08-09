@@ -4,8 +4,7 @@ import torch
 from torch import GradScaler
 
 from nn.data import data_load
-from nn.models import SegformerBinarySegmentation, SegformerBinarySegmentation2, SegformerBinarySegmentation3, \
-    SegformerBinarySegmentation4
+from nn.models import SegformerBinarySegmentation4
 from nn.modules import CombinedLoss
 from utils.torch_utils import TrainingManager, get_default_device
 
@@ -92,86 +91,86 @@ def process_args():
     # Parse the arguments from the command line
     return parser.parse_args()
 
-def train_evaluate_noargs():
-    args = {'train_path': 'data/Polyp Segmentation/train',
-            'val_path': 'data/Polyp Segmentation/valid',
-            'n_epochs': 100,
-            'n_batch': 4,
-            'test_split': 0.3}
-
-
-    # Set the default device to the best available GPU ... or CPU if no GPU available
-    device = get_default_device()
-    print(f"Using {device} device for model training.")
-
-    """
-    I've implemented a data_load function that
-    can generate a train/test split if needed - but for now I'm just taking 100% 
-    of the training and 100% validation data and using them to train and then to 
-    validate respectively.
-    """
-    (train_loader,
-     _) = data_load(args.train_path,
-                    # test_split=args.test_split,
-                    test_split=0.0,  # Use 100% for training
-                    batch_size=args.n_batch,
-                    verbose=True)
-
-    (_,
-     val_loader) = data_load(args.val_path,
-                             # test_split=args.test_split,
-                             test_split=1.0,  # Use 100% for testing/validation
-                             batch_size=args.n_batch,
-                             verbose=True)
-
-    n_val = len(val_loader) * args.n_batch
-    n_train = len(train_loader) * args.n_batch
-
-    print(f"Training batches: {len(train_loader)}")
-    print(f"Test batches: {len(val_loader)}")
-
-    pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
-    # model = SegformerBinarySegmentation().to(device)  #Old Word doc model
-    model = SegformerBinarySegmentation2(pretrained_model=pretained_model).to(device)
-    loss_fn = CombinedLoss()
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
-
-    """
-    Only use GradScaler if we have CUDA
-    """
-    scaler = None
-    if torch.cuda.is_available():
-        scaler = GradScaler()
-
-    trainer = TrainingManager(model,
-                              optimizer,
-                              criterion=loss_fn,
-                              scaler=scaler,
-                              scheduler=scheduler,
-                              train_loader=train_loader,
-                              eval_loader=val_loader,
-                              save_preds=False,
-                              save_preds_path=""
-                              )
-    train_params = {}
-    eval_params = {}
-    best_dice_loss = 0.0
-    for epoch in range(args.n_epochs):
-        print(f"Epoch {epoch + 1}/{args.n_epochs}")
-        train_loss, train_dice = trainer.train(**train_params)
-        print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice Loss: {train_dice / n_train:.4f}")
-
-        val_loss, val_metrics = trainer.evaluate(**eval_params)
-        print(
-            f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice Loss: {val_metrics['dice'] / n_val:.4f} | IOU Loss: {val_metrics['iou'] / n_val:.4f}")
-        if val_metrics['dice'] < best_dice_loss:
-            best_dice_loss = val_metrics['dice']
-            torch.save(model.state_dict(), "best_segformer.pth")
-            # _, _ = trainer.evaluate(save_preds=True)
-            print(f"Model saved for dice score: {val_metrics['dice'] / n_val:.4f}")
-
+# def train_evaluate_noargs():
+#     args = {'train_path': 'data/Polyp Segmentation/train',
+#             'val_path': 'data/Polyp Segmentation/valid',
+#             'n_epochs': 100,
+#             'n_batch': 4,
+#             'test_split': 0.3}
+#
+#
+#     # Set the default device to the best available GPU ... or CPU if no GPU available
+#     device = get_default_device()
+#     print(f"Using {device} device for model training.")
+#
+#     """
+#     I've implemented a data_load function that
+#     can generate a train/test split if needed - but for now I'm just taking 100%
+#     of the training and 100% validation data and using them to train and then to
+#     validate respectively.
+#     """
+#     (train_loader,
+#      _) = data_load(args.train_path,
+#                     # test_split=args.test_split,
+#                     test_split=0.0,  # Use 100% for training
+#                     batch_size=args.n_batch,
+#                     verbose=True)
+#
+#     (_,
+#      val_loader) = data_load(args.val_path,
+#                              # test_split=args.test_split,
+#                              test_split=1.0,  # Use 100% for testing/validation
+#                              batch_size=args.n_batch,
+#                              verbose=True)
+#
+#     n_val = len(val_loader) * args.n_batch
+#     n_train = len(train_loader) * args.n_batch
+#
+#     print(f"Training batches: {len(train_loader)}")
+#     print(f"Test batches: {len(val_loader)}")
+#
+#     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
+#     # model = SegformerBinarySegmentation().to(device)  #Old Word doc model
+#     model = SegformerBinarySegmentation2(pretrained_model=pretained_model).to(device)
+#     loss_fn = CombinedLoss()
+#
+#     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+#     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+#
+#     """
+#     Only use GradScaler if we have CUDA
+#     """
+#     scaler = None
+#     if torch.cuda.is_available():
+#         scaler = GradScaler()
+#
+#     trainer = TrainingManager(model,
+#                               optimizer,
+#                               criterion=loss_fn,
+#                               scaler=scaler,
+#                               scheduler=scheduler,
+#                               train_loader=train_loader,
+#                               eval_loader=val_loader,
+#                               save_preds=False,
+#                               save_preds_path=""
+#                               )
+#     train_params = {}
+#     eval_params = {}
+#     best_dice_loss = 0.0
+#     for epoch in range(args.n_epochs):
+#         print(f"Epoch {epoch + 1}/{args.n_epochs}")
+#         train_loss, train_dice = trainer.train(**train_params)
+#         print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice Loss: {train_dice / n_train:.4f}")
+#
+#         val_loss, val_metrics = trainer.evaluate(**eval_params)
+#         print(
+#             f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice Loss: {val_metrics['dice'] / n_val:.4f} | IOU Loss: {val_metrics['iou'] / n_val:.4f}")
+#         if val_metrics['dice'] < best_dice_loss:
+#             best_dice_loss = val_metrics['dice']
+#             torch.save(model.state_dict(), "best_segformer.pth")
+#             # _, _ = trainer.evaluate(save_preds=True)
+#             print(f"Model saved for dice score: {val_metrics['dice'] / n_val:.4f}")
+#
 
 
 def main():
@@ -237,23 +236,22 @@ def main():
                               )
     train_params = {}
     eval_params = {}
-    best_dice_score = 0.0
+    best_dice_loss = 0.0
     for epoch in range(args.n_epochs):
         print(f"Epoch {epoch + 1}/{args.n_epochs}")
-        train_loss, train_dice = trainer.train(**train_params)
-        print(f"Train Loss: {train_loss / n_train:.4f}, Train Dice: {1 - (train_dice / n_train):.4f}")
+        train_metrics = trainer.train(**train_params)
+        print(f"Training Losses: \n\tLoss: {train_metrics['loss']:.4f} | Dice: {train_metrics['dice']:.4f} | IOU: {train_metrics['iou']:.4f}")
 
-        val_loss, val_metrics = trainer.evaluate(**eval_params)
-        dice_score = 1 - (val_metrics['dice']/n_val)
-        iou_score = 1 - (val_metrics['iou']/n_val)
+        val_metrics = trainer.evaluate(**eval_params)
         print(
-            f"Total evaluation Loss: {val_loss / n_val:.4f} | Dice: {dice_score:.4f} | IOU: {iou_score:.4f}")
+            f"Evaluation Losses: \n\t{val_metrics['loss']:.4f} | Dice: {val_metrics['dice']:.4f} | IOU: {val_metrics['iou']:.4f}")
+
         scheduler.step(epoch + 1)
-        if dice_score > best_dice_score:
-            best_dice_score = dice_score
+        if val_metrics['dice'] < best_dice_loss:
+            best_dice_loss = val_metrics['dice']
             torch.save(model.state_dict(), "best_segformer.pth")
             # _, _ = trainer.evaluate(save_preds=True)
-            print(f"Model saved for dice score: {dice_score:.4f}")
+            print(f"Model saved for dice score: {best_dice_loss:.4f}")
 
 
 if __name__ == "__main__":
