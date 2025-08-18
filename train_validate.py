@@ -1,5 +1,6 @@
 import argparse
 
+import numpy as np
 import torch
 from torch import GradScaler
 
@@ -7,6 +8,65 @@ from losses import (DiceLoss as DL)
 from nn.data import data_load
 from nn.models import SegformerBinarySegmentation4
 from utils.torch_utils import TrainingManager, get_default_device
+
+
+class EarlyStopping:
+    def __init__(self, patience=5, min_delta=0.0, mode='min', verbose=False, save_path=None):
+        """
+        Args:
+            patience (int): Number of epochs to wait after last improvement.
+            min_delta (float): Minimum change to qualify as improvement.
+            mode (str): 'min' for loss, 'max' for accuracy or IoU.
+            verbose (bool): If True, prints updates.
+            save_path (str): If set, saves best model to this path.
+        """
+        assert mode in ['min', 'max'], "mode must be 'min' or 'max'"
+        self.patience = patience
+        self.min_delta = min_delta
+        self.mode = mode
+        self.verbose = verbose
+        self.save_path = save_path
+
+        self.best_score = None
+        self.counter = 0
+        self.early_stop = False
+        self.best_epoch = None
+
+        self._init_comparator()
+
+    def _init_comparator(self):
+        if self.mode == 'min':
+            self.compare = lambda current, best: current < best - self.min_delta
+            self.best_score = np.inf
+        else:
+            self.compare = lambda current, best: current > best + self.min_delta
+            self.best_score = -np.inf
+
+    def __call__(self, current_score, model=None, epoch=None):
+        if self.compare(current_score, self.best_score):
+            self.best_score = current_score
+            self.counter = 0
+            self.best_epoch = epoch
+            if self.verbose:
+                print(f"New best score: {current_score:.4f} at epoch {epoch}")
+            if self.save_path and model is not None:
+                torch.save(model.state_dict(), self.save_path)
+                if self.verbose:
+                    print(f"Model saved to {self.save_path}")
+        else:
+            self.counter += 1
+            if self.verbose:
+                print(f"No improvement. Patience: {self.counter}/{self.patience}")
+            if self.counter >= self.patience:
+                self.early_stop = True
+                if self.verbose:
+                    print(f"Early stopping triggered at epoch {epoch}")
+
+    def reset(self):
+        self.counter = 0
+        self.early_stop = False
+        self.best_score = np.inf if self.mode == 'min' else -np.inf
+        self.best_epoch = None
 
 
 # TODO: this function needs to be reworked. Ignoring it for now.
@@ -145,24 +205,35 @@ def main():
     train_params = {}
     eval_params = {}
     best_dice_loss = 1.0
+
+    early_stopper = EarlyStopping(patience=7, min_delta=0.001, mode='max', verbose=True,
+                                  save_path="best_model_classica.pt")
+
     for epoch in range(args.n_epochs):
         print(f"Epoch {epoch + 1}/{args.n_epochs}")
         print()
         train_metrics = trainer.train(**train_params)
-        print(
-            f"Training Losses: | Loss: {train_metrics['loss'] / n_train:.4f} | Dice: {train_metrics['dice'] / n_train:.4f} | IOU: {train_metrics['iou'] / n_train:.4f}")
-
         val_metrics = trainer.evaluate(**eval_params)
+        train_loss = train_metrics['loss'] / n_train
+        train_miou = train_metrics['dice'] / n_train
+        train_dice = train_metrics['dice'] / n_train
+        val_loss = val_metrics['loss'] / n_val
+        val_miou = val_metrics['dice'] / n_val
+        val_dice = val_metrics['dice'] / n_val
+
         print(
-            f"Evaluation Losses: | Loss: {val_metrics['loss'] / n_val:.4f} | Dice: {val_metrics['dice'] / n_val:.4f} | IOU: {val_metrics['iou'] / n_val:.4f}")
+            f"Training Losses: | Loss: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
+        print(
+            f"Evaluation Losses: | Loss: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
         print()
 
         scheduler.step(epoch + 1)
-        if val_metrics['dice'] / n_val < best_dice_loss:
-            best_dice_loss = val_metrics['dice'] / n_val
-            torch.save(model.state_dict(), "best_segformer.pth")
-            # _, _ = trainer.evaluate(save_preds=True)
-            print(f"Model saved for dice score: {best_dice_loss:.4f}")
+
+        early_stopper(val_miou, model, epoch)
+
+        if early_stopper.early_stop:
+            print(f"Training stopped early at epoch {epoch}")
+            break
 
 
 if __name__ == "__main__":
