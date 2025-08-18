@@ -15,6 +15,8 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
+from config import IMAGE_PATHS, MASK_PATHS, FILE_TYPES
+
 
 class SegmentationDataset(Dataset):
     def __init__(self, image_paths, mask_paths,
@@ -39,7 +41,7 @@ class SegmentationDataset(Dataset):
         img = cv2.imread(self.image_paths[idx], cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mask = cv2.imread(self.mask_paths[idx], cv2.IMREAD_GRAYSCALE)
-        mask = (mask > 127).astype(int) # expect a (0,1) mask .. some masks have more than two values
+        mask = (mask > 127).astype(int)  # expect a (0,1) mask .. some masks have more than two values
         return img, mask
 
     def __getitem__(self, idx):
@@ -64,9 +66,8 @@ class SegmentationDataset(Dataset):
             img1 = img1.clone()
             m1 = m1.clone()
 
-            img1[:, ry:ry+rh, rx:rx+rw] = img2[:, ry:ry+rh, rx:rx+rw]
-            m1[ry:ry+rh, rx:rx+rw] = m2[ry:ry+rh, rx:rx+rw]
-
+            img1[:, ry:ry + rh, rx:rx + rw] = img2[:, ry:ry + rh, rx:rx + rw]
+            m1[ry:ry + rh, rx:rx + rw] = m2[ry:ry + rh, rx:rx + rw]
 
         return img1, m1.type(torch.LongTensor)  # mask is LongTensor [H,W]
 
@@ -80,7 +81,6 @@ class SegmentationDataset(Dataset):
         rx = np.clip(cx - rw // 2, 0, W - rw)
         ry = np.clip(cy - rh // 2, 0, H - rh)
         return rx, ry, rw, rh
-
 
 
 class PolypDataset(Dataset):
@@ -284,3 +284,57 @@ def data_load_train_test(train_path,
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2)
 
     return train_loader, val_loader
+
+
+MAGE_PATHS = [
+    # "data/Classica/images",
+    "data/Polyp Segmentation/train",
+    "data/Polyp Segmentation/valid"]
+
+MASK_PATHS = [
+    # "data/Classica/masks",
+    "data/Polyp Segmentation/train_masks",
+    "data/Polyp Segmentation/valid_masks"]
+
+FILE_TYPES = ["*.jpg", "*.png", "*.jpeg"]
+
+
+def split_images_and_masks(image_paths: list = None,
+                           mask_paths: list = None,
+                           file_types: list = None,
+                           split: float = None) -> tuple[Any, Any, Any, Any]:
+    split_size = split if split is not None else 0.1
+    image_paths = IMAGE_PATHS if image_paths is None else image_paths
+    mask_paths = MASK_PATHS if mask_paths is None else mask_paths
+    file_types = FILE_TYPES if file_types is None else file_types
+
+    all_images, all_masks = [], []
+    train_idx, test_idx = [], []
+    for image_path, mask_path in zip(image_paths, mask_paths):
+        for file_type in file_types:
+            images_found = sorted(glob(os.path.join(image_path, file_type)))
+            masks_found = sorted(glob(os.path.join(mask_path, file_type)))
+            start_idx = len(all_images)
+            all_images.extend(images_found)
+            all_masks.extend(masks_found)
+
+            if len(images_found) > 0:
+                indices = np.arange(len(images_found)) + start_idx
+                _, _, _train, _test = train_test_split(indices[:, np.newaxis], indices,
+                                                       test_size=split_size,
+                                                       shuffle=False)
+                train_idx.extend(_train)
+                test_idx.extend(_test)
+
+    """ A quick sanity check to see if the images and masks are in the same order """
+    for idx, image in enumerate(all_images):
+        base_name = os.path.splitext(os.path.basename(image))[0].split("_")[0]
+        try:
+            assert os.path.splitext(os.path.basename(all_masks[idx]))[0].startswith(base_name)
+        except AssertionError:
+            print(f"Assertion error: image with {base_name} does not match with image[idx]")
+
+    all_images, all_masks = np.array(all_images), np.array(all_masks)
+
+    return (all_images[train_idx], all_masks[train_idx],
+            all_images[test_idx], all_masks[test_idx])

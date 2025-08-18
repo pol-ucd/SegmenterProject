@@ -1,25 +1,4 @@
 val_image,val_masks
-data/Classica/images/IBM_48_first_frame.png,data/Classica/masks/IBM_48_cancerous_mask_ann_1.png
-data/Classica/images/IBM_4_first_frame.png,data/Classica/masks/IBM_4_cancerous_mask_ann_0.png
-data/Classica/images/IBM_50_first_frame.png,data/Classica/masks/IBM_50_benign_mask_ann_1_ARCTUR.png
-data/Classica/images/IBM_52_first_frame.png,data/Classica/masks/IBM_52_benign_mask_ann_1.png
-data/Classica/images/IBM_53_first_frame.png,data/Classica/masks/IBM_53_cancerous_mask_ann_1.png
-data/Classica/images/IBM_54_first_frame.png,data/Classica/masks/IBM_54_benign_mask_ann_0.png
-data/Classica/images/IBM_8_first_frame.png,data/Classica/masks/IBM_8_benign_mask_ann_1.png
-data/Classica/images/MMUH_DTIF_0058_first_frame.png,data/Classica/masks/MMUH_DTIF_0058_benign_mask_ann_1.png
-data/Classica/images/MMUH_DTIF_0094_first_frame.png,data/Classica/masks/MMUH_DTIF_0094_cancerous_mask_ann_1.png
-data/Classica/images/MMUH_DTIF_0095_first_frame.png,data/Classica/masks/MMUH_DTIF_0095_cancerous_mask_ann_1_ARCTUR.png
-data/Classica/images/MMUH_DTIF_0096_first_frame.png,data/Classica/masks/MMUH_DTIF_0096_benign_mask_ann_1.png
-data/Classica/images/MMUH_DTIF_0100_first_frame.png,data/Classica/masks/MMUH_DTIF_0100_cancerous_mask_ann_1_ARCTUR.png
-data/Classica/images/MMUH_DTIF_0101_first_frame.png,data/Classica/masks/MMUH_DTIF_0101_cancerous_mask_ann_1.png
-data/Classica/images/MMUH_DTIF_0103_first_frame.png,data/Classica/masks/MMUH_DTIF_0103_benign_mask_ann_1.png
-data/Classica/images/REINERO__01092024_173849_first_frame.png,data/Classica/masks/REINERO__01092024_173849_benign_mask_ann_1.png
-data/Classica/images/Video TEM 22.4_first_frame.png,data/Classica/masks/Video TEM 22.4_cancerous_mask_ann_1.png
-data/Classica/images/WAT_DTIF_0005_first_frame.png,data/Classica/masks/WAT_DTIF_0005_cancerous_mask_ann_1.png
-data/Classica/images/WAT_DTIF_0007_first_frame.png,data/Classica/masks/WAT_DTIF_0007_cancerous_mask_ann_1.png
-data/Classica/images/WAT_DTIF_0008_first_frame.png,data/Classica/masks/WAT_DTIF_0008_cancerous_mask_ann_1.png
-data/Classica/images/WAT_DTIF_0010_first_frame.png,data/Classica/masks/WAT_DTIF_0010_benign_mask_ann_1_ARCTUR.png
-data/Classica/images/ch1_video_01_first_frame.png,data/Classica/masks/ch1_video_01_benign_mask_ann_0.png
 data/Polyp Segmentation/train/M_08052021075316_00000000U0556215_1_001-1_MP4-0005_jpg.rf.7bad67abf3e5b75d7241bf595e1897cd.jpg,data/Polyp Segmentation/train_masks/M_08052021075316_00000000U0556215_1_001-1_MP4-0005_jpg.rf.7bad67abf3e5b75d7241bf595e1897cd.jpg
 data/Polyp Segmentation/train/M_08052021075316_00000000U0556215_1_001-1_MP4-0006_jpg.rf.102bda7b9c3a5e9d38c79fc578a35b6a.jpg,data/Polyp Segmentation/train_masks/M_08052021075316_00000000U0556215_1_001-1_MP4-0006_jpg.rf.102bda7b9c3a5e9d38c79fc578a35b6a.jpg
 data/Polyp Segmentation/train/M_08052021075316_00000000U0556215_1_001-1_MP4-0007_jpg.rf.0042ab7e8fd555ba90cab949e7576d6b.jpg,data/Polyp Segmentation/train_masks/M_08052021075316_00000000U0556215_1_001-1_MP4-0007_jpg.rf.0042ab7e8fd555ba90cab949e7576d6b.jpg

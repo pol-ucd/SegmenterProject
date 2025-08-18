@@ -1,6 +1,8 @@
 """
 Utilities to help with PyTorch
 """
+import argparse
+
 import numpy as np
 import torch
 from torch import autocast
@@ -179,3 +181,23 @@ class TrainingManager:
         total_metrics['iou'] = np.mean(total_iou_loss)
 
         return total_metrics
+
+
+def validate_positive_integer(value):
+    """
+    Custom type function for argparse to ensure an integer is greater than zero.
+    """
+    ivalue = int(value)
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"'{value}' is an invalid positive integer value. Must be greater than zero.")
+    return ivalue
+
+
+def validate_01_float(value):
+    """
+    Custom type function for argparse to ensure a float is between 0 and 1.0
+    """
+    fvalue = float(value)
+    if fvalue <= 0 or fvalue > 1.0:
+        raise argparse.ArgumentTypeError(f"'{value}' is an invalid float value. Must be in the range [0, 1].")
+    return fvalue

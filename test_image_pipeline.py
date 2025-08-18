@@ -1,130 +1,24 @@
 import pandas as pd
 
+from nn.modules import EarlyStopping
+
 """
 Test script to check the data pipeline works
 """
-import os
-from glob import glob
-from typing import Any
 
 import numpy as np
 import torch
-from sklearn.model_selection import train_test_split
 from torch import optim, GradScaler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from losses.multiclass_jaccard import MulticlassDiceLoss
 
-from nn.data import SegmentationDataset
+from nn.data import SegmentationDataset, split_images_and_masks
 from nn.models import SegformerBinarySegmentation4
-from transforms.images import ValSegTransforms, TrainSegTransforms
-
-IMAGE_PATHS = [
-    # "data/Classica/images",
-    "data/Polyp Segmentation/train",
-    "data/Polyp Segmentation/valid"]
-
-MASK_PATHS = [
-    # "data/Classica/masks",
-    "data/Polyp Segmentation/train_masks",
-    "data/Polyp Segmentation/valid_masks"]
-
-FILE_TYPES = ["*.jpg", "*.png", "*.jpeg"]
+from transforms.images import ValidationImageTransforms, TrainingImageTransforms
 
 
-def split_images_and_masks(split: float = None) -> tuple[Any, Any, Any, Any]:
-    split_size = split if split is not None else 0.1
-
-    all_images, all_masks = [], []
-    train_idx, test_idx = [], []
-    for image_path, mask_path in zip(IMAGE_PATHS, MASK_PATHS):
-        for file_type in FILE_TYPES:
-            images_found = sorted(glob(os.path.join(image_path, file_type)))
-            masks_found = sorted(glob(os.path.join(mask_path, file_type)))
-            start_idx = len(all_images)
-            all_images.extend(images_found)
-            all_masks.extend(masks_found)
-
-            if len(images_found) > 0:
-                indices = np.arange(len(images_found)) + start_idx
-                _, _, _train, _test = train_test_split(indices[:, np.newaxis], indices,
-                                                       test_size=split_size,
-                                                       shuffle=False)
-                train_idx.extend(_train)
-                test_idx.extend(_test)
-
-    """ A quick sanity check to see if the images and masks are in the same order """
-    for idx, image in enumerate(all_images):
-        base_name = os.path.splitext(os.path.basename(image))[0].split("_")[0]
-        try:
-            assert os.path.splitext(os.path.basename(all_masks[idx]))[0].startswith(base_name)
-        except AssertionError:
-            print(f"Assertion error: image with {base_name} does not match with image[idx]")
-
-    all_images, all_masks = np.array(all_images), np.array(all_masks)
-
-    return (all_images[train_idx], all_masks[train_idx],
-            all_images[test_idx], all_masks[test_idx])
-
-
-class EarlyStopping:
-    def __init__(self, patience=5, min_delta=0.0, mode='min', verbose=False, save_path=None):
-        """
-        Args:
-            patience (int): Number of epochs to wait after last improvement.
-            min_delta (float): Minimum change to qualify as improvement.
-            mode (str): 'min' for loss, 'max' for accuracy or IoU.
-            verbose (bool): If True, prints updates.
-            save_path (str): If set, saves best model to this path.
-        """
-        assert mode in ['min', 'max'], "mode must be 'min' or 'max'"
-        self.patience = patience
-        self.min_delta = min_delta
-        self.mode = mode
-        self.verbose = verbose
-        self.save_path = save_path
-
-        self.best_score = None
-        self.counter = 0
-        self.early_stop = False
-        self.best_epoch = None
-
-        self._init_comparator()
-
-    def _init_comparator(self):
-        if self.mode == 'min':
-            self.compare = lambda current, best: current < best - self.min_delta
-            self.best_score = np.inf
-        else:
-            self.compare = lambda current, best: current > best + self.min_delta
-            self.best_score = -np.inf
-
-    def __call__(self, current_score, model=None, epoch=None):
-        if self.compare(current_score, self.best_score):
-            self.best_score = current_score
-            self.counter = 0
-            self.best_epoch = epoch
-            if self.verbose:
-                print(f"New best score: {current_score:.4f} at epoch {epoch}")
-            if self.save_path and model is not None:
-                torch.save(model.state_dict(), self.save_path)
-                if self.verbose:
-                    print(f"Model saved to {self.save_path}")
-        else:
-            self.counter += 1
-            if self.verbose:
-                print(f"No improvement. Patience: {self.counter}/{self.patience}")
-            if self.counter >= self.patience:
-                self.early_stop = True
-                if self.verbose:
-                    print(f"Early stopping triggered at epoch {epoch}")
-
-    def reset(self):
-        self.counter = 0
-        self.early_stop = False
-        self.best_score = np.inf if self.mode == 'min' else -np.inf
-        self.best_epoch = None
 
 
 class RunConfig:
@@ -243,14 +137,14 @@ def main():
 
     train_ds = SegmentationDataset(
         train_images, train_masks,
-        transform=TrainSegTransforms(size=(512, 512)),
+        transform=TrainingImageTransforms(size=(512, 512)),
         use_cutmix=True,
         cutmix_prob=0.2,
         num_classes=num_classes, ignore_index=ignore_index
     )
     val_ds = SegmentationDataset(
         val_images, val_masks,
-        transform=ValSegTransforms(size=(512, 512)),
+        transform=ValidationImageTransforms(size=(512, 512)),
         # use_cutmix=False,
         num_classes=num_classes, ignore_index=ignore_index
     )

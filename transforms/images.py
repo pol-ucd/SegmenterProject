@@ -16,8 +16,9 @@ import albumentations as A
 import cv2
 from albumentations.pytorch import ToTensorV2
 
-class TrainSegTransforms:
-    def __init__(self, size:tuple[int,int]=(512, 512)):
+
+class TrainingImageTransforms:
+    def __init__(self, size: tuple[int, int] = (512, 512)):
         self.tfm = A.Compose([
             # A.RandomResizedCrop(size=size,
             #                     scale=(0.8, 1.0),
@@ -36,7 +37,6 @@ class TrainSegTransforms:
                 fill=(0, 0, 0),  # fill color for image
                 fill_mask=255,  # fill value for mask
                 p=0.5),
-
             A.GaussianBlur(p=0.2),
             A.Normalize(),
             ToTensorV2(transpose_mask=True),
@@ -47,8 +47,8 @@ class TrainSegTransforms:
         return out["image"], out["mask"]  # mask -> [H, W] LongTensor
 
 
-class ValSegTransforms:
-    def __init__(self, size:tuple[int,int]=(512, 512)):
+class ValidationImageTransforms:
+    def __init__(self, size: tuple[int, int] = (512, 512)):
         self.tfm = A.Compose([
             A.Resize(height=size[0], width=size[1]),
             # A.Normalize(mean=(0.485, 0.456, 0.406),
@@ -60,4 +60,3 @@ class ValSegTransforms:
     def __call__(self, image, mask):
         out = self.tfm(image=image, mask=mask)
         return out["image"], out["mask"]
-

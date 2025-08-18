@@ -1,153 +1,43 @@
 import argparse
 
-import numpy as np
+import pandas as pd
 import torch
 from torch import GradScaler
+from torch.utils.data import DataLoader
 
 from losses import (DiceLoss as DL)
-from nn.data import data_load
+from nn.data import data_load, SegmentationDataset, split_images_and_masks
 from nn.models import SegformerBinarySegmentation4
-from utils.torch_utils import TrainingManager, get_default_device
-
-
-class EarlyStopping:
-    def __init__(self, patience=5, min_delta=0.0, mode='min', verbose=False, save_path=None):
-        """
-        Args:
-            patience (int): Number of epochs to wait after last improvement.
-            min_delta (float): Minimum change to qualify as improvement.
-            mode (str): 'min' for loss, 'max' for accuracy or IoU.
-            verbose (bool): If True, prints updates.
-            save_path (str): If set, saves best model to this path.
-        """
-        assert mode in ['min', 'max'], "mode must be 'min' or 'max'"
-        self.patience = patience
-        self.min_delta = min_delta
-        self.mode = mode
-        self.verbose = verbose
-        self.save_path = save_path
-
-        self.best_score = None
-        self.counter = 0
-        self.early_stop = False
-        self.best_epoch = None
-
-        self._init_comparator()
-
-    def _init_comparator(self):
-        if self.mode == 'min':
-            self.compare = lambda current, best: current < best - self.min_delta
-            self.best_score = np.inf
-        else:
-            self.compare = lambda current, best: current > best + self.min_delta
-            self.best_score = -np.inf
-
-    def __call__(self, current_score, model=None, epoch=None):
-        if self.compare(current_score, self.best_score):
-            self.best_score = current_score
-            self.counter = 0
-            self.best_epoch = epoch
-            if self.verbose:
-                print(f"New best score: {current_score:.4f} at epoch {epoch}")
-            if self.save_path and model is not None:
-                torch.save(model.state_dict(), self.save_path)
-                if self.verbose:
-                    print(f"Model saved to {self.save_path}")
-        else:
-            self.counter += 1
-            if self.verbose:
-                print(f"No improvement. Patience: {self.counter}/{self.patience}")
-            if self.counter >= self.patience:
-                self.early_stop = True
-                if self.verbose:
-                    print(f"Early stopping triggered at epoch {epoch}")
-
-    def reset(self):
-        self.counter = 0
-        self.early_stop = False
-        self.best_score = np.inf if self.mode == 'min' else -np.inf
-        self.best_epoch = None
-
-
-# TODO: this function needs to be reworked. Ignoring it for now.
-
-def validate_positive_integer(value):
-    """
-    Custom type function for argparse to ensure an integer is greater than zero.
-    """
-    ivalue = int(value)
-    if ivalue <= 0:
-        raise argparse.ArgumentTypeError(f"'{value}' is an invalid positive integer value. Must be greater than zero.")
-    return ivalue
-
-
-def validate_01_float(value):
-    """
-    Custom type function for argparse to ensure a float is between 0 and 1.0
-    """
-    fvalue = float(value)
-    if fvalue <= 0 or fvalue > 1.0:
-        raise argparse.ArgumentTypeError(f"'{value}' is an invalid float value. Must be in the range [0, 1].")
-    return fvalue
-
-
-def process_args():
-    parser = argparse.ArgumentParser()
-
-    # Add the arguments
-    parser.add_argument(
-        "--train_path",
-        type=str,
-        nargs='?',
-        default="data/Polyp Segmentation/train",
-        help="The path to the training data."
-    )
-
-    parser.add_argument(
-        "--val_path",
-        type=str,
-        nargs='?',
-        default="data/Polyp Segmentation/valid",
-        help="The path to the validation data."
-    )
-
-    parser.add_argument(
-        "--n_epochs",
-        type=validate_positive_integer,
-        nargs="?",  # Makes the argument optional
-        default=4,  # Sets the default value if not provided
-        help="The number of training epochs to run (default: 4)."
-    )
-
-    parser.add_argument(
-        "--n_batch",
-        type=validate_positive_integer,
-        nargs="?",  # Makes the argument optional
-        default=4,  # Sets the default value if not provided
-        help="The number of records per mini batch for training and validation (default: 4)."
-    )
-
-    parser.add_argument(
-        "--test_split",
-        type=validate_01_float,
-        nargs="?",  # Makes the argument optional
-        default=0.3,  # Sets the default value if not provided
-        help="The fraction of records to hold back for validation (default: 0.3)."
-    )
-
-    # Parse the arguments from the command line
-    return parser.parse_args()
-
+from nn.modules import EarlyStopping
+from transforms.images import ValidationImageTransforms, TrainingImageTransforms
+from utils.torch_utils import TrainingManager, validate_positive_integer, validate_01_float
 
 def main():
-    args = process_args()
 
-    print(args)
+    test_split = 0.1
+    num_classes = 2  # Binary classification {'not_lesion': 0, 'lesion': 1}
+    ignore_index = 255
+    batch_size = 4
+    num_workers = 0
+    n_epochs = 100
+    pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    save_model_name = "best_dice_model.pth"
 
-    # Set the default device to the best available GPU ... or CPU if no GPU available
-    device = get_default_device()
-    device='cpu'
-    args.n_epochs = 1
+    """
+    Load the list of training and testing images and masks.
+    We take the same percentage split from each separate source of images so
+    that we are guaranteed to have a representation from each source in the
+    training and testing sets.
+    """
+    train_images, train_masks, val_images, val_masks = split_images_and_masks(split=test_split)
+
+    df_file = pd.DataFrame({"val_image": val_images,
+                            "val_masks": val_masks, })
+    df_file.to_csv("validate_files.csv",
+                   index=False)
+
+
     print(f"Using {device} device for model training.")
 
     """
@@ -156,19 +46,25 @@ def main():
     of the training and 100% validation data and using them to train and then to 
     validate respectively.
     """
-    (train_loader,
-     _) = data_load(args.train_path,
-                    # test_split=args.test_split,
-                    test_split=0.0,  # Use 100% for training
-                    batch_size=args.n_batch,
-                    verbose=True)
 
-    (_,
-     val_loader) = data_load(args.val_path,
-                             # test_split=args.test_split,
-                             test_split=1.0,  # Use 100% for testing/validation
-                             batch_size=args.n_batch,
-                             verbose=True)
+    train_ds = SegmentationDataset(
+        train_images, train_masks,
+        transform=TrainingImageTransforms(size=(512, 512)),
+        use_cutmix=True,
+        cutmix_prob=0.2,
+        num_classes=num_classes, ignore_index=ignore_index
+    )
+    val_ds = SegmentationDataset(
+        val_images, val_masks,
+        transform=ValidationImageTransforms(size=(512, 512)),
+        # use_cutmix=False,
+        num_classes=num_classes, ignore_index=ignore_index
+    )
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size,
+                              shuffle=True, num_workers=num_workers, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size,
+                            shuffle=False, num_workers=num_workers, pin_memory=True)
 
     n_val = len(val_loader)
     n_train = len(train_loader)
@@ -176,12 +72,11 @@ def main():
     print(f"Training batches: {len(train_loader)}")
     print(f"Test batches: {len(val_loader)}")
 
-    pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
-    # model = SegformerBinarySegmentation().to(device)  #Old Word doc model
-    model = SegformerBinarySegmentation4(pretrained_model=pretained_model, num_classes=1).to(device)
-    # loss_fn = CombinedLoss()
-    loss_fn = DL(mode='binary')
+    model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
+                                         num_classes=1)
+    model.to(device)
 
+    loss_fn = DL(mode='binary')
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
@@ -204,16 +99,16 @@ def main():
                               )
     train_params = {}
     eval_params = {}
-    best_dice_loss = 1.0
 
     early_stopper = EarlyStopping(patience=7, min_delta=0.001, mode='max', verbose=True,
-                                  save_path="best_model_classica.pt")
+                                  save_path=save_model_name)
 
-    for epoch in range(args.n_epochs):
-        print(f"Epoch {epoch + 1}/{args.n_epochs}")
+    for epoch in range(n_epochs):
+        print(f"Epoch {epoch + 1}/{n_epochs}")
         print()
         train_metrics = trainer.train(**train_params)
         val_metrics = trainer.evaluate(**eval_params)
+        
         train_loss = train_metrics['loss'] / n_train
         train_miou = train_metrics['dice'] / n_train
         train_dice = train_metrics['dice'] / n_train
@@ -234,7 +129,6 @@ def main():
         if early_stopper.early_stop:
             print(f"Training stopped early at epoch {epoch}")
             break
-
 
 if __name__ == "__main__":
    main()
