@@ -5,11 +5,12 @@ from torch import GradScaler
 from torch.utils.data import DataLoader
 
 from losses import (DiceLoss as DL)
-from nn.data import data_load, SegmentationDataset, split_images_and_masks
+from nn.data import SegmentationDataset, split_images_and_masks
 from nn.models import SegformerBinarySegmentation4
 from nn.modules import EarlyStopping
 from transforms.images import ValidationImageTransforms, TrainingImageTransforms
-from utils.torch_utils import TrainingManager, validate_positive_integer, validate_01_float
+from utils.torch_utils import TrainingManager
+
 
 def main():
 
@@ -124,7 +125,7 @@ def main():
 
         scheduler.step(epoch + 1)
 
-        early_stopper(val_miou, model, epoch)
+        early_stopper(train_miou, model, epoch)
 
         if early_stopper.early_stop:
             print(f"Training stopped early at epoch {epoch}")
