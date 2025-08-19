@@ -1,14 +1,52 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from losses import TverskyLoss as TL, FocalLoss as FL, DiceLoss, JaccardLoss
+
+
+class HybridLoss(nn.Module):
+    def __init__(self, weight_ce=1.0, weight_dice=1.0, weight_focal=1.0):
+        super(HybridLoss, self).__init__()
+        self.weight_ce = weight_ce
+        self.weight_dice = weight_dice
+        self.weight_focal = weight_focal
+        self.ce_loss = nn.CrossEntropyLoss()
+
+    def dice_loss(self, pred, target, epsilon=1e-6):
+        pred = torch.softmax(pred, dim=1)  # [B, C, H, W]
+        target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+        intersection = (pred * target_onehot).sum(dim=(2, 3))
+        union = pred.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))
+        dice = (2. * intersection + epsilon) / (union + epsilon)
+        return 1 - dice.mean()
+
+    def focal_loss(self, pred, target, alpha=0.25, gamma=2.0):
+        pred = torch.softmax(pred, dim=1)
+        target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+        pt = torch.where(target_onehot == 1, pred, 1 - pred)
+        focal_term = alpha * (1 - pt) ** gamma
+        bce = -torch.log(pt + 1e-6)
+        return (focal_term * bce).mean()
+
+    def forward(self, pred, target):
+        loss_ce = self.ce_loss(pred, target)
+        loss_dice = self.dice_loss(pred, target)
+        loss_focal = self.focal_loss(pred, target)
+
+        total_loss = (
+            self.weight_ce * loss_ce +
+            self.weight_dice * loss_dice +
+            self.weight_focal * loss_focal
+        )
+        return total_loss
+
 
 """
 Implements Hanija's Combined Loss for Binary image classification.
 Is also callable so it can be used to evaluate loss with no_grad()
 """
-
 
 class CombinedLoss(nn.Module):
     def __init__(self, weights=None):

@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 
 from nn.data import SegmentationDataset, split_images_and_masks
 from nn.models import SegformerBinarySegmentation4
-from nn.modules import EarlyStopping, CombinedLoss
+from nn.modules import EarlyStopping, HybridLoss
 from transforms.images import ValidationImageTransforms, TrainingImageTransforms
 from utils.torch_utils import RunManager
 
@@ -75,7 +75,8 @@ def main():
 
 
     cl_weights = {'bce': 0.5, 'tversky': 0.0, 'focal': 0.25, 'dice': 0.25, 'jaccard': 0.0}
-    loss_fn = CombinedLoss(weights=cl_weights)
+    # loss_fn = CombinedLoss(weights=cl_weights)
+    loss_fn = HybridLoss(weight_ce=1.0, weight_dice=1.0, weight_focal=1.0)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
