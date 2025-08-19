@@ -34,7 +34,7 @@ class TrainingImageTransforms:
                 fit_output=False,  # keep original size
                 border_mode=0,  # cv2.BORDER_CONSTANT
                 fill=(0, 0, 0),  # fill color for image
-                fill_mask=255,  # fill value for mask
+                fill_mask=0,  # fill value for mask
                 p=0.5),
             A.GaussianBlur(p=0.2),
             A.Normalize(),

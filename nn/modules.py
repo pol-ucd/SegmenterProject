@@ -15,7 +15,7 @@ class HybridLoss(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss()
 
     def forward(self, pred, target):
-        loss_ce = self.ce_loss(pred, target)
+        loss_ce = self.ce_loss(pred, target.squeeze())
         loss_dice = dice_loss(pred, target)
         loss_focal = focal_loss(pred, target)
 
@@ -29,8 +29,7 @@ class HybridLoss(nn.Module):
 
 def dice_loss(pred, target, epsilon=1e-6):
     pred = torch.softmax(pred, dim=1)  # [B, C, H, W]
-    print(target.shape, target.dtype, pred.shape)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    target_onehot = F.one_hot(target.squeeze(), num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
     intersection = (pred * target_onehot).sum(dim=(2, 3))
     union = pred.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))
     dice = (2. * intersection + epsilon) / (union + epsilon)
@@ -39,7 +38,7 @@ def dice_loss(pred, target, epsilon=1e-6):
 
 def focal_loss(pred, target, alpha=0.25, gamma=2.0):
     pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    target_onehot = F.one_hot(target.squeeze(), num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
     pt = torch.where(target_onehot == 1, pred, 1 - pred)
     focal_term = alpha * (1 - pt) ** gamma
     bce = -torch.log(pt + 1e-6)
@@ -48,16 +47,12 @@ def focal_loss(pred, target, alpha=0.25, gamma=2.0):
 
 def iou_loss(pred, target, epsilon=1e-6):
     pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    target_onehot = F.one_hot(target.squeeze(), num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
     intersection = (pred * target_onehot).sum(dim=(2, 3))
     union = pred + target_onehot - (pred * target_onehot)
     union = union.sum(dim=(2, 3))
     iou = (intersection + epsilon) / (union + epsilon)
     return 1 - iou.mean()
-
-
-
-
 
 
 """
