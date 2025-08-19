@@ -76,7 +76,7 @@ def main():
     model.to(device)
 
     # loss_fn = DL(mode='binary')
-    cl_weights = {'bce': 0.1, 'tversky': 0.1, 'focal': 0.0, 'dice': 0.8, 'jaccard': 0.0}
+    cl_weights = {'bce': 0.2, 'tversky': 0.0, 'focal': 0.0, 'dice': 0.8, 'jaccard': 0.0}
     loss_fn = CombinedLoss(weights=cl_weights)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
