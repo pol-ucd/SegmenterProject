@@ -8,7 +8,7 @@ import torch
 from torch import autocast
 from tqdm import tqdm
 
-from losses import (JaccardLoss as JL, DiceLoss as DL)
+from nn.modules import dice_loss, iou_loss
 
 
 def get_default_device_type() -> str:
@@ -86,8 +86,8 @@ class RunManager:
         else:
             self.save_preds = False
 
-        self.dice_loss = DL(mode='binary')
-        self.iou_loss = JL(mode='binary')
+        # self.dice_loss = DL(mode='binary')
+        # self.iou_loss = JL(mode='binary')
 
 
     def train(self, **train_params: object) -> dict[str, float]:
@@ -117,8 +117,8 @@ class RunManager:
 
                 loss = self.criterion(logits, masks) # Mask: [B, H, W]
                 total_loss += [loss.item()]
-                total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
-                total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
+                total_dice_loss += [dice_loss(logits, masks).item()]
+                total_iou_loss += [iou_loss(logits, masks).item()]
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -163,8 +163,8 @@ class RunManager:
                     logits = self.model(pixel_values=images)
                     loss = self.criterion(logits, masks)
 
-                    total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
-                    total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
+                    total_dice_loss += [dice_loss(logits, masks).item()]
+                    total_iou_loss += [iou_loss(logits, masks).item()]
                     total_loss += [loss.item()]
 
                 if self.save_preds is True and self.save_preds_path is not None:
