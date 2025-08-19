@@ -176,7 +176,7 @@ class TrainingManager:
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     # Not implemented !
-                    print(logits.shape, logits.max(), logits.min())
+                    print("Saving predictions is not implemented yet")
 
             total_metrics['loss'] = np.mean(total_loss)
             total_metrics['dice'] = np.mean(total_dice_loss)
