@@ -3,9 +3,9 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from losses import (DiceLoss as DL)
 from nn.data import SegmentationDataset
 from nn.models import SegformerBinarySegmentation4
+from nn.modules import CombinedLoss
 from transforms.images import ValidationImageTransforms
 from utils.torch_utils import RunManager
 
@@ -16,7 +16,6 @@ def main():
     ignore_index = 255
     batch_size = 4
     num_workers = 0
-    n_epochs = 100
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -51,7 +50,9 @@ def main():
     model.load_state_dict(torch.load("best_dice_model.pth", map_location=device))
     model.to(device)
 
-    loss_fn = DL(mode='binary')
+    # loss_fn = DL(mode='binary')
+    cl_weights = {'bce': 0.2, 'tversky': 0.4, 'focal': 0.4, 'dice': 0.6, 'jaccard': 0.6}
+    loss_fn = CombinedLoss(weights=cl_weights)
 
     trainer = RunManager(model,
                          optimizer=None,
@@ -72,7 +73,7 @@ def main():
     val_dice = val_metrics['dice']
 
     print(
-        f"Evaluation Losses: | Loss: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
+        f"Evaluation Losses: | Combined Loss: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
     print()
 
 

@@ -116,9 +116,7 @@ class RunManager:
 
             if masks.device != self.device:
                 masks = masks.to(self.device)
-                masks = (masks > 127).long()
 
-            n_batch = images.shape[0]
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images)
                 loss = self.criterion(logits, masks.float())
@@ -162,7 +160,6 @@ class RunManager:
 
                 if masks.device != self.device:
                     masks = masks.to(self.device)
-                    masks = (masks > 127).long()
 
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     logits = self.model(pixel_values=images)
@@ -173,7 +170,6 @@ class RunManager:
                     total_loss += [loss.item()]
 
                 if self.save_preds is True and self.save_preds_path is not None:
-                    # Not implemented !
                     print("Saving predictions is not implemented yet")
 
             total_metrics['loss'] = np.mean(total_loss)

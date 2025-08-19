@@ -1,10 +1,8 @@
-from abc import ABC
-
 import numpy as np
 import torch
 import torch.nn as nn
-from losses import TverskyLoss as TL, FocalLoss as FL
 
+from losses import TverskyLoss as TL, FocalLoss as FL, DiceLoss, JaccardLoss
 
 """
 Implements Hanija's Combined Loss for Binary image classification.
@@ -16,22 +14,27 @@ class CombinedLoss(nn.Module):
     def __init__(self, weights=None):
         super(CombinedLoss, self).__init__()
         if weights is None:
-            weights = {'bce': 0.5, 'tversky': 0.3, 'focal': 0.2}
+            weights = {'bce': 0.2, 'tversky': 0.4, 'focal': 0.4, 'dice': 0.6, 'jaccard': 0.6}
         self.weights = weights
         self.bce = nn.BCEWithLogitsLoss()
         self.tversky = TL(alpha=0.2, beta=0.4, mode='binary')
         self.focal = FL(mode='binary')
+        self.dice = DiceLoss(mode='binary')
+        self.iou = JaccardLoss(mode='binary')
 
     def forward(self, pred, target):
         return self._do_calculation(pred, target)
 
     def _do_calculation(self, pred, target):
-        pred = pred.transpose(3, 1)
-        pred = pred.reshape(pred.shape)
         bce = self.bce(pred, target.float())
+        pred = pred.transpose(3, 1)
         tversky = self.tversky(pred, target.float())
         focal = self.focal(pred, target.float())
-        return self.weights['bce'] * bce + self.weights['tversky'] * tversky + self.weights['focal'] * focal
+        dice = self.dice(pred, target.float())
+        jaccard = self.iou(pred, target.float())
+        return (self.weights['bce'] * bce + self.weights['tversky'] * tversky
+                + self.weights['focal'] * focal + self.weights['dice'] * dice
+                + self.weights['jaccard'] * jaccard)
 
 
 class EarlyStopping:

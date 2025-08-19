@@ -4,10 +4,9 @@ import torch
 from torch import GradScaler
 from torch.utils.data import DataLoader
 
-from losses import (DiceLoss as DL)
 from nn.data import SegmentationDataset, split_images_and_masks
 from nn.models import SegformerBinarySegmentation4
-from nn.modules import EarlyStopping
+from nn.modules import EarlyStopping, CombinedLoss
 from transforms.images import ValidationImageTransforms, TrainingImageTransforms
 from utils.torch_utils import RunManager
 
@@ -76,7 +75,9 @@ def main():
                                          num_classes=1)
     model.to(device)
 
-    loss_fn = DL(mode='binary')
+    # loss_fn = DL(mode='binary')
+    cl_weights = {'bce': 0.1, 'tversky': 0.2, 'focal': 0.2, 'dice': 0.6, 'jaccard': 0.6}
+    loss_fn = CombinedLoss(weights=cl_weights)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
@@ -100,7 +101,7 @@ def main():
     train_params = {}
     eval_params = {}
 
-    early_stopper = EarlyStopping(patience=7, min_delta=0.001,
+    early_stopper = EarlyStopping(patience=10, min_delta=0.0001,
                                   mode='min', verbose=True,
                                   save_path=save_model_name)
 
@@ -118,14 +119,14 @@ def main():
         val_dice = val_metrics['dice']
 
         print(
-            f"Training Losses: | Loss: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
+            f"Training Losses  : | Compound Loss: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
         print(
-            f"Evaluation Losses: | Loss: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
+            f"Evaluation Losses: | Compound Loss: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
         print()
 
         scheduler.step(epoch + 1)
 
-        early_stopper(train_miou, model, epoch)
+        early_stopper(val_miou, model, epoch)
 
         if early_stopper.early_stop:
             print(f"Training stopped early at epoch {epoch}")
