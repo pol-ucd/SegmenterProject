@@ -176,9 +176,9 @@ class TrainingManager:
                 total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
                 total_loss += [loss.item()]
 
-        total_metrics['loss'] = np.mean(total_loss)
-        total_metrics['dice'] = np.mean(total_dice_loss)
-        total_metrics['iou'] = np.mean(total_iou_loss)
+            total_metrics['loss'] = np.mean(total_loss)
+            total_metrics['dice'] = np.mean(total_dice_loss)
+            total_metrics['iou'] = np.mean(total_iou_loss)
 
         return total_metrics
 
