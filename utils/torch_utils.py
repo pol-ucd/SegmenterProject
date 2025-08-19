@@ -117,8 +117,7 @@ class RunManager:
             if masks.device != self.device:
                 masks = masks.to(self.device)
                 if masks.max().item() != 1:
-                    masks /= 255
-                    masks = masks.long()
+                    masks = (masks > 127).long()
 
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images)
@@ -164,8 +163,7 @@ class RunManager:
                 if masks.device != self.device:
                     masks = masks.to(self.device)
                     if masks.max().item() != 1:
-                        masks /= 255
-                        masks = masks.long()
+                        masks = (masks > 127).long()
 
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     logits = self.model(pixel_values=images)
