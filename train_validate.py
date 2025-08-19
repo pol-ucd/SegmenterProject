@@ -15,7 +15,6 @@ def main():
 
     test_split = 0.1
     num_classes = 2  # Binary classification - so masks and predictions will have shape [B, num_classes, H, W]
-    ignore_index = 255
     batch_size = 4
     num_workers = 0
     n_epochs = 100
@@ -68,10 +67,11 @@ def main():
 
     """
     Setup the model 
+    
     """
 
     model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
-                                         num_classes=num_classes)
+                                         num_classes=num_classes)  #[B, num_classes, H, W]
     model.to(device)
 
 

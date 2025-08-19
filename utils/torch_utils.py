@@ -113,9 +113,9 @@ class RunManager:
                 #     masks = (masks > 127).long()
 
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-                logits = self.model(pixel_values=images)
-                print("Shapes: ", logits.shape, masks.shape)
-                loss = self.criterion(logits, masks)
+                logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
+
+                loss = self.criterion(logits, masks) # Mask: [B, H, W]
                 total_loss += [loss.item()]
                 total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
                 total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
