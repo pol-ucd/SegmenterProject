@@ -172,7 +172,6 @@ class TrainingManager:
                     total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
                     total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
                     total_loss += [loss.item()]
-                    print(total_loss)
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     # Not implemented !
@@ -181,7 +180,6 @@ class TrainingManager:
             total_metrics['loss'] = np.mean(total_loss)
             total_metrics['dice'] = np.mean(total_dice_loss)
             total_metrics['iou'] = np.mean(total_iou_loss)
-            print(total_metrics)
 
         return total_metrics
 
