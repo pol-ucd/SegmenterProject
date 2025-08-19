@@ -77,7 +77,9 @@ def main():
 
     # cl_weights = {'bce': 0.5, 'tversky': 0.0, 'focal': 0.25, 'dice': 0.25, 'jaccard': 0.0}
     # loss_fn = CombinedLoss(weights=cl_weights)
-    loss_fn = HybridLoss(weight_ce=1.0, weight_dice=1.0, weight_focal=1.0)
+    loss_fn = HybridLoss(weight_ce=0.5,
+                         weight_dice=0.25,
+                         weight_focal=0.25)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
