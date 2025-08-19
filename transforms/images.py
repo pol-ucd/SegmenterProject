@@ -13,7 +13,6 @@ not just as image transforms.
 """
 
 import albumentations as A
-import cv2
 from albumentations.pytorch import ToTensorV2
 
 
@@ -60,3 +59,18 @@ class ValidationImageTransforms:
     def __call__(self, image, mask):
         out = self.tfm(image=image, mask=mask)
         return out["image"], out["mask"]
+
+    class RescaleMaskTransforms:
+        def __init__(self, size: tuple[int, int] = (512, 512)):
+            self.tfm = A.Compose([
+                A.Resize(height=size[0], width=size[1]),
+                # A.Normalize(mean=(0.485, 0.456, 0.406),
+                #             std=(0.229, 0.224, 0.225)),
+                A.Normalize(),
+                ToTensorV2(transpose_mask=True),
+            ])
+
+        def __call__(self, image, mask):
+            out = self.tfm(image=image, mask=mask)
+            return out["image"], out["mask"]
+

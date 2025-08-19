@@ -9,7 +9,7 @@ from nn.data import SegmentationDataset, split_images_and_masks
 from nn.models import SegformerBinarySegmentation4
 from nn.modules import EarlyStopping
 from transforms.images import ValidationImageTransforms, TrainingImageTransforms
-from utils.torch_utils import TrainingManager
+from utils.torch_utils import RunManager
 
 
 def main():
@@ -88,15 +88,15 @@ def main():
     if torch.cuda.is_available():
         scaler = GradScaler()
 
-    trainer = TrainingManager(model,
-                              optimizer,
-                              criterion=loss_fn,
-                              scaler=scaler,
-                              train_loader=train_loader,
-                              eval_loader=val_loader,
-                              save_preds=False,
-                              save_preds_path=""
-                              )
+    trainer = RunManager(model,
+                         optimizer,
+                         criterion=loss_fn,
+                         scaler=scaler,
+                         train_loader=train_loader,
+                         eval_loader=val_loader,
+                         save_preds=False,
+                         save_preds_path=""
+                         )
     train_params = {}
     eval_params = {}
 

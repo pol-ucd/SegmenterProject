@@ -50,7 +50,7 @@ Models, optimizers etc. are instantiated first and then passed as object instanc
 a TrainingManager instance
 
 """
-class TrainingManager:
+class RunManager:
     def __init__(self,
                  model=None,
                  optimizer=None,
@@ -81,12 +81,10 @@ class TrainingManager:
         self.scaler = scaler
         self.scheduler = scheduler
 
-        if train_loader is None:
-            raise ValueError('Invalid data loader in train_loader parameter. Please provide a valid data loader')
         self.train_loader = train_loader
 
-        if eval_loader is None:
-            raise ValueError('Invalid data loader in eval_loader parameter. Please provide a valid data loader')
+        if eval_loader is None and train_loader is None:
+            raise ValueError('Please provide at least one valid training or validation data loader')
         self.eval_loader = eval_loader
 
         if save_preds is True and save_preds_path is not None:
@@ -97,6 +95,7 @@ class TrainingManager:
 
         self.dice_loss = DL(mode='binary')
         self.iou_loss = JL(mode='binary')
+
 
     def train(self, **train_params: object) -> dict[str, float]:
         """
