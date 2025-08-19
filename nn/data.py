@@ -30,8 +30,6 @@ class SegmentationDataset(Dataset):
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.transform = transform
-        self.num_classes = num_classes
-        self.ignore_index = ignore_index
 
     def __len__(self):
         return len(self.image_paths)

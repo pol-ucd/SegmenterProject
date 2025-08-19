@@ -50,14 +50,12 @@ def main():
     train_ds = SegmentationDataset(
         train_images,
         train_masks,
-        transform=TrainingImageTransforms(size=(512, 512)),
-        num_classes=num_classes, ignore_index=ignore_index
+        transform=TrainingImageTransforms(size=(512, 512))
     )
     val_ds = SegmentationDataset(
         val_images,
         val_masks,
-        transform=ValidationImageTransforms(size=(512, 512)),
-        num_classes=num_classes, ignore_index=ignore_index
+        transform=ValidationImageTransforms(size=(512, 512))
     )
 
     train_loader = DataLoader(train_ds, batch_size=batch_size,
@@ -73,7 +71,7 @@ def main():
     """
 
     model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
-                                         num_classes=1)
+                                         num_classes=num_classes)
     model.to(device)
 
 
