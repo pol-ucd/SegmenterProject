@@ -54,7 +54,6 @@ class SegmentationDataset(Dataset):
             img1, m1 = self.transform(img1, m1)
 
         # img1: FloatTensor [C,H,W] (torch.float32) ; m1: LongTensor [H,W] (torch.int32)
-        print(img1.shape, img1.dtype, m1.shape, m1.dtype)
         return img1, m1.type(torch.LongTensor)  # mask is LongTensor [H,W]
 
 
