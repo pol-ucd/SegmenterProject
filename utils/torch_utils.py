@@ -179,6 +179,7 @@ class TrainingManager:
             total_metrics['loss'] = np.mean(total_loss)
             total_metrics['dice'] = np.mean(total_dice_loss)
             total_metrics['iou'] = np.mean(total_iou_loss)
+            print(total_metrics)
 
         return total_metrics
 
