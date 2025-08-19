@@ -1,6 +1,5 @@
 import json
 import os
-import random
 from glob import glob
 from typing import Any
 
@@ -40,10 +39,11 @@ class SegmentationDataset(Dataset):
         img = cv2.imread(self.image_paths[idx], cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mask = cv2.imread(self.mask_paths[idx], cv2.IMREAD_UNCHANGED)
-        print(mask.dtype)
         if mask.max() > 1:
-            mask = (mask > 127).astype(int) # expect a (0,1) mask .. some masks have more than two values
-        print("mask unique values: ", np.unique(mask))
+            # Expect a (0,1) mask .. some masks have more than two values especially
+            # if saved in a lossy format like jpeg or compressed png. TIFF seems to
+            # ork best for lossless masks
+            mask = (mask > 127).astype(int)
         return img, mask
 
     def __getitem__(self, idx):
@@ -52,37 +52,9 @@ class SegmentationDataset(Dataset):
         if self.transform:
             img1, m1 = self.transform(img1, m1)
 
-        # Albumentations ToTensorV2 will produce:
         # img1: FloatTensor [C,H,W]; m1: LongTensor [H,W]
-
-        # Optional CutMix for segmentation (hard labels): cut & paste both image and mask
-        if self.use_cutmix and random.random() < self.cutmix_prob:
-            j = random.randint(0, len(self.image_paths) - 1)
-            img2, m2 = self._load_pair(j)
-
-            if self.transform:
-                img2, m2 = self.transform(img2, m2)
-
-            C, H, W = img1.shape
-            rx, ry, rw, rh = self._rand_bbox(W, H, lam=random.random())
-            img1 = img1.clone()
-            m1 = m1.clone()
-
-            img1[:, ry:ry + rh, rx:rx + rw] = img2[:, ry:ry + rh, rx:rx + rw]
-            m1[ry:ry + rh, rx:rx + rw] = m2[ry:ry + rh, rx:rx + rw]
-
+        print(img1.shape, img1.dtype, m1.shape, m1.dtype)
         return img1, m1.type(torch.LongTensor)  # mask is LongTensor [H,W]
-
-    @staticmethod
-    def _rand_bbox(W, H, lam):
-        cut_rat = np.sqrt(1.0 - lam)
-        rw = max(1, int(W * cut_rat))
-        rh = max(1, int(H * cut_rat))
-        cx = np.random.randint(W)
-        cy = np.random.randint(H)
-        rx = np.clip(cx - rw // 2, 0, W - rw)
-        ry = np.clip(cy - rh // 2, 0, H - rh)
-        return rx, ry, rw, rh
 
 
 class PolypDataset(Dataset):
