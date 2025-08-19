@@ -1,4 +1,3 @@
-import argparse
 
 import pandas as pd
 import torch
@@ -100,7 +99,8 @@ def main():
     train_params = {}
     eval_params = {}
 
-    early_stopper = EarlyStopping(patience=7, min_delta=0.001, mode='max', verbose=True,
+    early_stopper = EarlyStopping(patience=7, min_delta=0.001,
+                                  mode='min', verbose=True,
                                   save_path=save_model_name)
 
     for epoch in range(n_epochs):
@@ -108,13 +108,13 @@ def main():
         print()
         train_metrics = trainer.train(**train_params)
         val_metrics = trainer.evaluate(**eval_params)
-        
-        train_loss = train_metrics['loss'] / n_train
-        train_miou = train_metrics['dice'] / n_train
-        train_dice = train_metrics['dice'] / n_train
-        val_loss = val_metrics['loss'] / n_val
-        val_miou = val_metrics['dice'] / n_val
-        val_dice = val_metrics['dice'] / n_val
+
+        train_loss = train_metrics['loss']
+        train_miou = train_metrics['iou']
+        train_dice = train_metrics['dice']
+        val_loss = val_metrics['loss']
+        val_miou = val_metrics['iou']
+        val_dice = val_metrics['dice']
 
         print(
             f"Training Losses: | Loss: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
