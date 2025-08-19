@@ -40,8 +40,9 @@ class SegmentationDataset(Dataset):
         img = cv2.imread(self.image_paths[idx], cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mask = cv2.imread(self.mask_paths[idx], cv2.IMREAD_UNCHANGED)
+        if mask.max() > 1:
+            mask /= 255  # expect a (0,1) mask .. some masks have more than two values
         print("mask unique values: ", np.unique(mask))
-        mask = (mask > 127).astype(int)  # expect a (0,1) mask .. some masks have more than two values
         return img, mask
 
     def __getitem__(self, idx):
