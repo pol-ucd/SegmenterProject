@@ -15,20 +15,21 @@ from torch.utils.data import Dataset
 
 from config import IMAGE_PATHS, MASK_PATHS, FILE_TYPES
 
+"""
+PyTorch Dataset implementation 
+Assumes masks are available as images (i.e. already extracted if in RF Archive)
 
+returns (image, mask) pairs 
+"""
 class SegmentationDataset(Dataset):
     def __init__(self, image_paths, mask_paths,
                  transform=None,
-                 use_cutmix=False,
-                 cutmix_prob=0.0,
                  num_classes=None,
                  ignore_index=255):
         assert len(image_paths) == len(mask_paths)
         self.image_paths = image_paths
         self.mask_paths = mask_paths
         self.transform = transform
-        self.use_cutmix = use_cutmix
-        self.cutmix_prob = cutmix_prob
         self.num_classes = num_classes
         self.ignore_index = ignore_index
 
@@ -52,7 +53,7 @@ class SegmentationDataset(Dataset):
         if self.transform:
             img1, m1 = self.transform(img1, m1)
 
-        # img1: FloatTensor [C,H,W]; m1: LongTensor [H,W]
+        # img1: FloatTensor [C,H,W] (torch.float32) ; m1: LongTensor [H,W] (torch.int32)
         print(img1.shape, img1.dtype, m1.shape, m1.dtype)
         return img1, m1.type(torch.LongTensor)  # mask is LongTensor [H,W]
 

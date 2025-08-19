@@ -23,6 +23,8 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     save_model_name = "best_dice_model.pth"
 
+    print(f"Using {device} device for model training.")
+
     """
     Load the list of training and testing images and masks.
     We take the same percentage split from each separate source of images so
@@ -31,29 +33,30 @@ def main():
     """
     train_images, train_masks, val_images, val_masks = split_images_and_masks(split=test_split)
 
+    """
+    Save the names of the files in the validation/test subset for 
+    later use
+    """
     df_file = pd.DataFrame({"val_image": val_images,
                             "val_masks": val_masks, })
     df_file.to_csv("validate_files.csv",
                    index=False)
 
 
-    print(f"Using {device} device for model training.")
-
     """ 
     Data sets and loaders
     """
 
     train_ds = SegmentationDataset(
-        train_images, train_masks,
+        train_images,
+        train_masks,
         transform=TrainingImageTransforms(size=(512, 512)),
-        use_cutmix=True,
-        cutmix_prob=0.2,
         num_classes=num_classes, ignore_index=ignore_index
     )
     val_ds = SegmentationDataset(
-        val_images, val_masks,
+        val_images,
+        val_masks,
         transform=ValidationImageTransforms(size=(512, 512)),
-        # use_cutmix=False,
         num_classes=num_classes, ignore_index=ignore_index
     )
 

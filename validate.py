@@ -34,7 +34,8 @@ def main():
     val_masks = df_files.val_masks.values
 
     val_ds = SegmentationDataset(
-        val_images, val_masks,
+        val_images,
+        val_masks,
         transform=ValidationImageTransforms(size=(512, 512)),
         num_classes=num_classes, ignore_index=ignore_index
     )
