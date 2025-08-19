@@ -26,18 +26,12 @@ class CombinedLoss(nn.Module):
         return self._do_calculation(pred, target)
 
     def _do_calculation(self, pred, target):
-        # print(target.unique())
         bce = self.bce(pred, target.unsqueeze(1).float())
-        # print("BCEwithLogits ", bce)
         pred = pred.transpose(3, 1)
         tversky = self.tversky(pred, target.float())
-        # print("Tversky ", tversky)
         focal = self.focal(pred, target.float())
-        # print("FocalLoss ", focal)
         dice = self.dice(pred, target.float())
-        # print("Dice Loss ", dice)
         jaccard = self.iou(pred, target.float())
-        # print("Jaccard Loss ", jaccard)
         return (self.weights['bce'] * bce + self.weights['tversky'] * tversky
                 + self.weights['focal'] * focal + self.weights['dice'] * dice
                 + self.weights['jaccard'] * jaccard)
