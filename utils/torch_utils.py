@@ -168,13 +168,13 @@ class TrainingManager:
                     logits = self.model(pixel_values=images)
                     loss = self.criterion(logits, masks.float())
 
+                    total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
+                    total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
+                    total_loss += [loss.item()]
+
                 if self.save_preds is True and self.save_preds_path is not None:
                     # TODO: implement saving later
                     print(logits.shape, logits.max(), logits.min())
-
-                total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
-                total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
-                total_loss += [loss.item()]
 
             total_metrics['loss'] = np.mean(total_loss)
             total_metrics['dice'] = np.mean(total_dice_loss)
