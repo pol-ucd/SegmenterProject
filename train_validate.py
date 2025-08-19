@@ -77,7 +77,7 @@ def main():
     model.to(device)
 
 
-    cl_weights = {'bce': 0.5, 'tversky': 0.0, 'focal': 0.25, 'dice': 0.25, 'jaccard': 0.0}
+    # cl_weights = {'bce': 0.5, 'tversky': 0.0, 'focal': 0.25, 'dice': 0.25, 'jaccard': 0.0}
     # loss_fn = CombinedLoss(weights=cl_weights)
     loss_fn = HybridLoss(weight_ce=1.0, weight_dice=1.0, weight_focal=1.0)
 

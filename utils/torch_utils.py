@@ -9,7 +9,6 @@ from torch import autocast
 from tqdm import tqdm
 
 from losses import (JaccardLoss as JL, DiceLoss as DL)
-from nn.modules import CombinedLoss
 
 
 def get_default_device_type() -> str:
@@ -71,13 +70,7 @@ class RunManager:
         self.device = next(self.model.parameters()).device
 
         self.optimizer = optimizer
-        if self.optimizer is None:
-            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4)
-
         self.criterion = criterion
-        if self.criterion is None:
-            self.criterion = CombinedLoss()
-
         self.scaler = scaler
         self.scheduler = scheduler
 
@@ -116,12 +109,12 @@ class RunManager:
 
             if masks.device != self.device:
                 masks = masks.to(self.device)
-                if masks.max().item() != 1:
-                    masks = (masks > 127).long()
+                # if masks.max().item() != 1:
+                #     masks = (masks > 127).long()
 
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images)
-                loss = self.criterion(logits, masks.float())
+                loss = self.criterion(logits, masks)
                 total_loss += [loss.item()]
                 total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
                 total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
@@ -156,18 +149,18 @@ class RunManager:
         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
         with torch.no_grad():
-            for images, masks in self.eval_loader:
+            for images, masks in tqdm(self.eval_loader):
                 if images.device != self.device:
                     images = images.to(self.device)
 
                 if masks.device != self.device:
                     masks = masks.to(self.device)
-                    if masks.max().item() != 1:
-                        masks = (masks > 127).long()
+                    # if masks.max().item() != 1:
+                    #     masks = (masks > 127).long()
 
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     logits = self.model(pixel_values=images)
-                    loss = self.criterion(logits, masks.float())
+                    loss = self.criterion(logits, masks)
 
                     total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
                     total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
