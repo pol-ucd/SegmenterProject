@@ -14,7 +14,7 @@ from utils.torch_utils import RunManager
 def main():
 
     test_split = 0.1
-    num_classes = 2  # Binary classification {'not_lesion': 0, 'lesion': 1}
+    num_classes = 2  # Binary classification - so masks and predictions will have shape [B, num_classes, H, W]
     ignore_index = 255
     batch_size = 4
     num_workers = 0
@@ -39,11 +39,8 @@ def main():
 
     print(f"Using {device} device for model training.")
 
-    """
-    I've implemented a data_load function that
-    can generate a train/test split if needed - but for now I'm just taking 100% 
-    of the training and 100% validation data and using them to train and then to 
-    validate respectively.
+    """ 
+    Data sets and loaders
     """
 
     train_ds = SegmentationDataset(
@@ -65,18 +62,19 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=batch_size,
                             shuffle=False, num_workers=num_workers, pin_memory=True)
 
-    n_val = len(val_loader)
-    n_train = len(train_loader)
-
     print(f"Training batches: {len(train_loader)}")
     print(f"Test batches: {len(val_loader)}")
+
+    """
+    Setup the model 
+    """
 
     model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
                                          num_classes=1)
     model.to(device)
 
-    # loss_fn = DL(mode='binary')
-    cl_weights = {'bce': 0.2, 'tversky': 0.0, 'focal': 0.0, 'dice': 0.8, 'jaccard': 0.0}
+
+    cl_weights = {'bce': 0.2, 'tversky': 0.0, 'focal': 0.4, 'dice': 0.4, 'jaccard': 0.0}
     loss_fn = CombinedLoss(weights=cl_weights)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
