@@ -117,6 +117,7 @@ class TrainingManager:
 
             if masks.device != self.device:
                 masks = masks.to(self.device)
+                masks = (masks > 127).long()
 
             n_batch = images.shape[0]
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
@@ -171,9 +172,10 @@ class TrainingManager:
                     total_dice_loss += [self.dice_loss(logits, masks.float()).item()]
                     total_iou_loss += [self.iou_loss(logits, masks.float()).item()]
                     total_loss += [loss.item()]
+                    print(total_loss)
 
                 if self.save_preds is True and self.save_preds_path is not None:
-                    # TODO: implement saving later
+                    # Not implemented !
                     print(logits.shape, logits.max(), logits.min())
 
             total_metrics['loss'] = np.mean(total_loss)
