@@ -67,10 +67,10 @@ class HybridLoss(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss()
 
     def forward(self, pred, target):
-        loss_ce = self.ce_loss(pred, target)
-        loss_dice = dice_loss(pred, target)
-        loss_focal = focal_loss(pred, target)
-        loss_tversky = tversky_loss(pred, target, alpha=0.2, beta=0.4, smooth=1e-6)
+        loss_ce = self.ce_loss(pred, target.squeeze(1))
+        loss_dice = dice_loss(pred, target.squeeze(1))
+        loss_focal = focal_loss(pred, target.squeeze(1))
+        loss_tversky = tversky_loss(pred, target.squeeze(1), alpha=0.2, beta=0.4, smooth=1e-6)
 
         total_loss = (
             self.weight_ce * loss_ce +

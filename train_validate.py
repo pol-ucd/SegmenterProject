@@ -4,10 +4,10 @@ import torch
 from torch import GradScaler
 from torch.utils.data import DataLoader
 
-from nn.data import SegmentationDataset, split_images_and_masks
+from nn.data import SegmentationDataset, split_images_and_masks, SemanticSegmentationDatasetAugmentor
 from nn.models import SegformerBinarySegmentation4
 from nn.modules import EarlyStopping, HybridLoss
-from transforms.images import ValidationImageTransforms, TrainingImageTransforms
+from transforms.images import ValidationImageTransforms
 from utils.torch_utils import RunManager
 
 
@@ -17,6 +17,8 @@ def main():
     num_classes = 2  # Binary classification - so masks and predictions will have shape [B, num_classes, H, W]
     batch_size = 2
     num_workers = 0
+    n_augments = 5
+    image_size = (512, 512)
     learning_rate = 3e-5 #1e-4
     n_epochs = 100
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
@@ -47,16 +49,31 @@ def main():
     Data sets and loaders
     """
 
-    train_ds = SegmentationDataset(
+    # train_ds = SegmentationDataset(
+    #     train_images,
+    #     train_masks,
+    #     transform=TrainingImageTransforms(size=(512, 512))
+    # )
+    """
+    Only use the SemanticSegmentationDatasetAugmentor class for 
+    training data sine it randomly augments the available data
+    to create more training data - and so is not suitable for 
+    test or validation
+    """
+    train_ds = SemanticSegmentationDatasetAugmentor(
         train_images,
         train_masks,
-        transform=TrainingImageTransforms(size=(512, 512))
+        n_augments=n_augments,
+        image_size=image_size
     )
+
     val_ds = SegmentationDataset(
         val_images,
         val_masks,
         transform=ValidationImageTransforms(size=(512, 512))
     )
+
+
 
     train_loader = DataLoader(train_ds, batch_size=batch_size,
                               shuffle=True, num_workers=num_workers, pin_memory=True)

@@ -1,5 +1,6 @@
 import json
 import os
+import random
 from glob import glob
 from typing import Any
 
@@ -7,13 +8,203 @@ import albumentations as A
 import cv2
 import numpy as np
 import torch
+from PIL import Image
 from albumentations.pytorch import ToTensorV2
 from pycocotools import mask as maskUtils
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+from torchvision.transforms import functional as F
 
 from config import IMAGE_PATHS, MASK_PATHS, FILE_TYPES
+
+
+# --- Custom Paired Augmentation Classes ---
+# These classes ensure the same random transformation is applied to both the image and the mask.
+
+class PairedRandomHorizontalFlip:
+    """
+    Applies a random horizontal flip to both the image and the mask.
+    """
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, img, mask):
+        if random.random() < self.p:
+            img = F.hflip(img)
+            mask = F.hflip(mask)
+        return img, mask
+
+
+class PairedRandomRotation:
+    """
+    Applies a random rotation to both the image and the mask.
+    """
+
+    def __init__(self, degrees):
+        self.degrees = degrees
+
+    def __call__(self, img, mask):
+        # Fix: Removed the extra (1, 1) argument.
+        angle = transforms.RandomRotation.get_params(self.degrees)
+        # Fix: Replaced 'resample' with 'interpolation' argument.
+        img = F.rotate(img, angle, interpolation=Image.BICUBIC)
+        mask = F.rotate(mask, angle, interpolation=Image.NEAREST)
+        return img, mask
+
+
+class PairedColorJitter:
+    """
+    Applies a color jitter transformation to the image only.
+    The mask remains unchanged as it contains segmentation labels.
+    """
+
+    def __init__(self, brightness=0, contrast=0, saturation=0, hue=0):
+        self.transform = transforms.ColorJitter(brightness, contrast, saturation, hue)
+
+    def __call__(self, img, mask):
+        return self.transform(img), mask
+
+
+class PairedRandomCropAndResize:
+    """
+    Applies a random crop to both the image and the mask, then resizes
+    the cropped regions back to the original size.
+    """
+
+    def __init__(self, size, scale=(0.8, 1.0)):
+        self.size = size
+        self.scale = scale
+
+    def __call__(self, img, mask):
+        # Get parameters for the random crop
+        i, j, h, w = transforms.RandomResizedCrop.get_params(
+            img, scale=self.scale, ratio=(0.75, 1.33)
+        )
+        # Apply the crop
+        img = F.crop(img, i, j, h, w)
+        mask = F.crop(mask, i, j, h, w)
+
+        # Resize the cropped regions back to the original size
+        img = F.resize(img, self.size, interpolation=Image.BICUBIC)
+        mask = F.resize(mask, self.size, interpolation=Image.NEAREST)
+
+        return img, mask
+
+
+# --- Custom Dataset Class for Semantic Segmentation Augmentation ---
+
+class SemanticSegmentationDatasetAugmentor(Dataset):
+    """
+    A custom PyTorch Dataset subclass for semantic segmentation
+    that loads image-mask pairs and applies N random augmentations
+    for each original pair, effectively boosting the dataset size.
+    """
+
+    def __init__(self, image_paths, mask_paths, n_augments, image_size=(512, 512)):
+        """
+        Initializes the dataset.
+
+        Args:
+            image_paths (list): A list of paths to the images.
+            mask_paths (list): A list of paths to the masks.
+            n_augments (int): The number of augmented pairs to generate for each original pair.
+            image_size (tuple): The size to which images and masks will be resized.
+        """
+        assert len(image_paths) == len(mask_paths)
+        self.image_files = image_paths
+        self.mask_files = mask_paths
+        self.N = n_augments
+
+        assert len(self.image_files) == len(self.mask_files), "Image and mask lists must have the same number of files."
+
+        # Define base transformations that are always applied
+        self.base_transforms = transforms.Compose([
+            transforms.ToTensor(),  # Converts PIL Image to Tensor
+        ])
+
+        # Define the series of random augmentations
+        self.augmentations = [
+            PairedRandomRotation(degrees=(-45, 45)),
+            PairedRandomHorizontalFlip(p=0.5),
+            PairedColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            PairedRandomCropAndResize(size=image_size)  # Added the new augmentation
+        ]
+
+        # Define a single resize transformation
+        self.resize_transform = transforms.Compose([
+            transforms.Resize(image_size, interpolation=Image.BICUBIC),
+        ])
+
+    def __len__(self):
+        """
+        Returns the total number of samples in the dataset, including augmented ones.
+        Each original pair contributes (N + 1) samples (N augmented + 1 original).
+        """
+        return len(self.image_files) * (self.N + 1)
+
+    def __getitem__(self, idx):
+        """
+        Retrieves a single image-mask pair from the dataset.
+        The index determines if an original or an augmented pair is returned.
+        """
+        # Determine the index of the original file and the augmentation version
+        original_idx = idx // (self.N + 1)
+        version_idx = idx % (self.N + 1)
+
+        # Get the file paths for the original image and mask
+        image_path = self.image_files[original_idx]
+        mask_path = self.mask_files[original_idx]
+
+        # Load the image and mask using Pillow
+        image = Image.open(image_path).convert("RGB")
+        mask = Image.open(mask_path).convert("L")  # L mode for single-channel mask
+
+        # Resize both image and mask consistently
+        image = self.resize_transform(image)
+        mask = self.resize_transform(mask)
+
+        # Apply augmentations if not the original version
+        if version_idx > 0:
+            # Iterate through the list of augmentations and apply them one by one
+            for transform in self.augmentations:
+                image, mask = transform(image, mask)
+
+        # Apply base transformations to both
+        image = self.base_transforms(image)
+        mask = self.base_transforms(mask)
+        if mask.max() > 1:
+            # Expect a (0,1) mask .. some masks have more than two values especially
+            # if saved in a lossy format like jpeg or compressed png. TIFF seems to
+            # ork best for lossless masks
+            mask = (mask > 127).astype(int)
+        return image, mask.long()
+
+
+
+# --- Example Usage ---
+# To run this example, you need to create dummy image and mask directories.
+
+def create_dummy_data(image_dir, mask_dir, num_pairs=5):
+    """
+    Helper function to create dummy image and mask files.
+    """
+    if not os.path.exists(image_dir):
+        os.makedirs(image_dir)
+    if not os.path.exists(mask_dir):
+        os.makedirs(mask_dir)
+
+    dummy_image = Image.new('RGB', (512, 512), color='red')
+    dummy_mask = Image.new('L', (512, 512), color='blue')
+
+    for i in range(num_pairs):
+        dummy_image.save(os.path.join(image_dir, f'image_{i}.png'))
+        dummy_mask.save(os.path.join(mask_dir, f'mask_{i}.png'))
+
+    print(f"Created {num_pairs} dummy image-mask pairs.")
+
+
 
 """
 PyTorch Dataset implementation 
