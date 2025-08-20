@@ -77,7 +77,7 @@ def main():
 
     # cl_weights = {'bce': 0.5, 'tversky': 0.0, 'focal': 0.25, 'dice': 0.25, 'jaccard': 0.0}
     # loss_fn = CombinedLoss(weights=cl_weights)
-    loss_fn = HybridLoss(weight_ce=0.6,
+    loss_fn = HybridLoss(weight_ce=0.5,
                          weight_dice=0.2,
                          weight_focal=0.2)
 

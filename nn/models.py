@@ -296,10 +296,7 @@ class SegformerBinarySegmentation4(SegformerBinaryClassifierBase):
         Returns:
             transformers.modeling_outputs.SemanticSegmenterOutput: An object containing
             the model's output logits and potentially the loss if labels are provided.
-        """
-        # The `SegformerForSemanticSegmentation`'s forward method internally
-        # handles the encoder output and passes it to the `decode_head`.
-        # By replacing `decode_head`, our custom layer will be used automatically.
+        """.
         outputs = self.base_model(pixel_values=pixel_values).logits
         outputs = self.classifier(outputs)
         outputs = F.interpolate(outputs,

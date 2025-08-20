@@ -7,22 +7,26 @@ from losses import TverskyLoss as TL, FocalLoss as FL, DiceLoss, JaccardLoss
 
 
 class HybridLoss(nn.Module):
-    def __init__(self, weight_ce=1.0, weight_dice=1.0, weight_focal=1.0):
+    def __init__(self, weight_ce=1.0, weight_dice=1.0,
+                 weight_focal=1.0, weight_tversky=1.0):
         super(HybridLoss, self).__init__()
         self.weight_ce = weight_ce
         self.weight_dice = weight_dice
         self.weight_focal = weight_focal
+        self.weight.tversky = weight_tversky
         self.ce_loss = nn.CrossEntropyLoss()
 
     def forward(self, pred, target):
         loss_ce = self.ce_loss(pred, target.squeeze())
         loss_dice = dice_loss(pred, target)
         loss_focal = focal_loss(pred, target)
+        loss_tversky = tversky_loss(pred, target)
 
         total_loss = (
             self.weight_ce * loss_ce +
             self.weight_dice * loss_dice +
-            self.weight_focal * loss_focal
+            self.weight_focal * loss_focal +
+            self.weight_tversky * loss_tversky
         )
         return total_loss
 
@@ -44,6 +48,17 @@ def focal_loss(pred, target, alpha=0.25, gamma=2.0):
     bce = -torch.log(pt + 1e-6)
     return (focal_term * bce).mean()
 
+
+def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
+    probs = torch.softmax(pred, dim=1)
+    target_oh = F.one_hot(target.squeeze(), num_classes=probs.shape[1]).permute(0, 3, 1, 2).float()
+    TP = (probs * target_oh).sum(dim=(0, 2, 3))  # [C]
+    FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))  # [C]
+    FN = ((1 - probs) * target_oh).sum(dim=(0, 2, 3))  # [C]
+
+    tversky = (TP + smooth) / (TP + alpha * FP + beta * FN + smooth)
+    loss_tversky = 1.0 - tversky
+    return loss_tversky.mean()
 
 def iou_loss(pred, target, epsilon=1e-6):
     pred = torch.softmax(pred, dim=1)
