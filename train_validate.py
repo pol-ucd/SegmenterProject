@@ -17,7 +17,7 @@ def main():
     num_classes = 2  # Binary classification - so masks and predictions will have shape [B, num_classes, H, W]
     batch_size = 2
     num_workers = 0
-    learning_rate = 1e-4
+    learning_rate = 3e-5 #1e-4
     n_epochs = 100
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -83,8 +83,13 @@ def main():
                          weight_focal=0.2,
                          weight_tversky=0.3)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+    optimizer = torch.optim.AdamW(model.parameters(),
+                                  lr=learning_rate,
+                                  weight_decay = 0.01)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
+        # torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, T_max = 50)
+
 
 
     """

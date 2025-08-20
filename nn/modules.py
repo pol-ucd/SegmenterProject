@@ -1,9 +1,59 @@
+from abc import abstractmethod, ABC
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from losses import TverskyLoss as TL, FocalLoss as FL, DiceLoss, JaccardLoss
+
+# from losses import TverskyLoss as TL, FocalLoss as FL, DiceLoss, JaccardLoss
+
+class BaseLoss(nn.Module, ABC):
+    def __init__(self):
+        super(BaseLoss, self).__init__()
+        self.epsilon = 1e-6
+
+    @abstractmethod
+    def forward(self, pred, target):
+        pass
+
+class DiceLoss(BaseLoss):
+    def __init__(self):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, pred, target):
+        return dice_loss(pred, target, self.epsilon)
+
+
+class FocalLoss(BaseLoss):
+    def __init__(self, alpha=None, gamma=None):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha if alpha is not None else 0.25
+        self.gamma = gamma if gamma is not None else 2.0
+
+    def forward(self, pred, target):
+        return focal_loss(pred, target,
+                          alpha=self.alpha,
+                          gamma=self.gamma,
+                          smooth=self.epsilon)
+
+
+class TverskyLoss(BaseLoss):
+    def __init__(self, alpha=None, beta=None):
+        super(TverskyLoss, self).__init__()
+        self.alpha = alpha if alpha is not None else 0.25
+        self.beta = beta if beta is not None else 0.5
+
+    def forward(self, pred, target):
+        return tversky_loss(pred, target, alpha=self.alpha, beta=self.beta)
+
+
+class IoULoss(BaseLoss):
+    def __init__(self):
+        super(IoULoss, self).__init__()
+
+    def forward(self, pred, target):
+        return iou_loss(pred, target, self.epsilon)
 
 
 class HybridLoss(nn.Module):
@@ -40,12 +90,12 @@ def dice_loss(pred, target, epsilon=1e-6):
     return 1 - dice.mean()
 
 
-def focal_loss(pred, target, alpha=0.25, gamma=2.0):
+def focal_loss(pred, target, alpha=0.25, gamma=2.0, smooth=1e-6):
     pred = torch.softmax(pred, dim=1)
     target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
     pt = torch.where(target_onehot == 1, pred, 1 - pred)
     focal_term = alpha * (1 - pt) ** gamma
-    bce = -torch.log(pt + 1e-6)
+    bce = -torch.log(pt + smooth)
     return (focal_term * bce).mean()
 
 
@@ -82,10 +132,10 @@ class CombinedLoss(nn.Module):
             weights = {'bce': 0.2, 'tversky': 0.4, 'focal': 0.4, 'dice': 0.6, 'jaccard': 0.6}
         self.weights = weights
         self.bce = nn.BCEWithLogitsLoss()
-        self.tversky = TL(alpha=0.2, beta=0.4, mode='binary')
-        self.focal = FL(mode='binary')
+        self.tversky = TverskyLoss(alpha=0.2, beta=0.4)
+        self.focal = FocalLoss()
         self.dice = DiceLoss(mode='binary')
-        self.iou = JaccardLoss(mode='binary')
+        self.iou = IoULoss(mode='binary')
 
     def forward(self, pred, target):
         return self._do_calculation(pred, target)
