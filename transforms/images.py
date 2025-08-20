@@ -24,8 +24,9 @@ class TrainingImageTransforms:
             #                     p=0.5),
             A.Resize(height=size[0], width=size[1]),
             A.HorizontalFlip(p=0.5),
-            A.RandomBrightnessContrast(p=0.4),
+            A.RandomBrightnessContrast(p=0.3),
             A.HorizontalFlip(p=0.5),
+            A.ElasticTransform(p=0.2),
             A.Affine(
                 scale=(0.9, 1.1),  # ±10% zoom
                 translate_percent=((0.05, 0.05)),  # ±5% shift
@@ -36,7 +37,7 @@ class TrainingImageTransforms:
                 fill=(0, 0, 0),  # fill color for image
                 fill_mask=0,  # fill value for mask
                 p=0.5),
-            A.GaussianBlur(p=0.2),
+            # A.GaussianBlur(p=0.2),
             A.Normalize(),
             ToTensorV2(transpose_mask=True),
         ])
