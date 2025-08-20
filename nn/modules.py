@@ -42,7 +42,7 @@ def dice_loss(pred, target, epsilon=1e-6):
 
 def focal_loss(pred, target, alpha=0.25, gamma=2.0):
     pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target.squeeze(), num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
     pt = torch.where(target_onehot == 1, pred, 1 - pred)
     focal_term = alpha * (1 - pt) ** gamma
     bce = -torch.log(pt + 1e-6)
@@ -51,7 +51,7 @@ def focal_loss(pred, target, alpha=0.25, gamma=2.0):
 
 def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
     probs = torch.softmax(pred, dim=1)
-    target_oh = F.one_hot(target.squeeze(), num_classes=probs.shape[1]).permute(0, 3, 1, 2).float()
+    target_oh = F.one_hot(target, num_classes=probs.shape[1]).permute(0, 3, 1, 2).float()
     TP = (probs * target_oh).sum(dim=(0, 2, 3))  # [C]
     FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))  # [C]
     FN = ((1 - probs) * target_oh).sum(dim=(0, 2, 3))  # [C]
@@ -62,7 +62,7 @@ def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
 
 def iou_loss(pred, target, epsilon=1e-6):
     pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target.squeeze(), num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
     intersection = (pred * target_onehot).sum(dim=(2, 3))
     union = pred + target_onehot - (pred * target_onehot)
     union = union.sum(dim=(2, 3))
