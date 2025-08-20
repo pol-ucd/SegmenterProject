@@ -15,7 +15,7 @@ def main():
 
     test_split = 0.1
     num_classes = 2  # Binary classification - so masks and predictions will have shape [B, num_classes, H, W]
-    batch_size = 2
+    batch_size = 4
     num_workers = 0
     n_augments = 5
     image_size = (512, 512)

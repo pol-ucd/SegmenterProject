@@ -226,9 +226,16 @@ class SegmentationDataset(Dataset):
         return len(self.image_paths)
 
     def _load_pair(self, idx):
-        img = cv2.imread(self.image_paths[idx], cv2.IMREAD_COLOR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        mask = cv2.imread(self.mask_paths[idx], cv2.IMREAD_UNCHANGED)
+        # img = cv2.imread(self.image_paths[idx], cv2.IMREAD_COLOR)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # mask = cv2.imread(self.mask_paths[idx], cv2.IMREAD_UNCHANGED)
+        # Load the image and mask using Pillow
+        img = Image.open(self.image_paths[idx]).convert("RGB")
+        mask = Image.open(self.mask_paths[idx]).convert("L")  # L mode for single-channel mask
+
+        img = np.array(img)
+        mask = np.array(mask)
+
         if mask.max() > 1:
             # Expect a (0,1) mask .. some masks have more than two values especially
             # if saved in a lossy format like jpeg or compressed png. TIFF seems to
