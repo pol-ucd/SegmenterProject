@@ -20,7 +20,7 @@ class HybridLoss(nn.Module):
         loss_ce = self.ce_loss(pred, target.squeeze())
         loss_dice = dice_loss(pred, target)
         loss_focal = focal_loss(pred, target)
-        loss_tversky = tversky_loss(pred, target)
+        loss_tversky = tversky_loss(pred, target, alpha=0.2, beta=0.4, smooth=1e-6)
 
         total_loss = (
             self.weight_ce * loss_ce +
