@@ -296,7 +296,7 @@ class SegformerBinarySegmentation4(SegformerBinaryClassifierBase):
         Returns:
             transformers.modeling_outputs.SemanticSegmenterOutput: An object containing
             the model's output logits and potentially the loss if labels are provided.
-        """.
+        """
         outputs = self.base_model(pixel_values=pixel_values).logits
         outputs = self.classifier(outputs)
         outputs = F.interpolate(outputs,
