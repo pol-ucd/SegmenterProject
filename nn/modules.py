@@ -13,7 +13,7 @@ class HybridLoss(nn.Module):
         self.weight_ce = weight_ce
         self.weight_dice = weight_dice
         self.weight_focal = weight_focal
-        self.weight.tversky = weight_tversky
+        self.weight_tversky = weight_tversky
         self.ce_loss = nn.CrossEntropyLoss()
 
     def forward(self, pred, target):
