@@ -17,6 +17,7 @@ class HybridLoss(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss()
 
     def forward(self, pred, target):
+        print("pred and target: ", pred.shape, target.shape)
         loss_ce = self.ce_loss(pred, target.squeeze())
         loss_dice = dice_loss(pred, target)
         loss_focal = focal_loss(pred, target)
