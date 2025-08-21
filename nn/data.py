@@ -42,15 +42,16 @@ class PairedRandomRotation:
     Applies a random rotation to both the image and the mask.
     """
 
-    def __init__(self, degrees):
+    def __init__(self, degrees, p=):
         self.degrees = degrees
+        self.p = p
 
     def __call__(self, img, mask):
-        # Fix: Removed the extra (1, 1) argument.
-        angle = transforms.RandomRotation.get_params(self.degrees)
-        # Fix: Replaced 'resample' with 'interpolation' argument.
-        img = F.rotate(img, angle, interpolation=Image.BICUBIC)
-        mask = F.rotate(mask, angle, interpolation=Image.NEAREST)
+        if random.random() < self.p:
+            angle = transforms.RandomRotation.get_params(self.degrees)
+            # Fix: Replaced 'resample' with 'interpolation' argument.
+            img = F.rotate(img, angle, interpolation=Image.BICUBIC)
+            mask = F.rotate(mask, angle, interpolation=Image.NEAREST)
         return img, mask
 
 
@@ -60,11 +61,14 @@ class PairedColorJitter:
     The mask remains unchanged as it contains segmentation labels.
     """
 
-    def __init__(self, brightness=0, contrast=0, saturation=0, hue=0):
+    def __init__(self, brightness=0, contrast=0, saturation=0, hue=0, p=0.5):
         self.transform = transforms.ColorJitter(brightness, contrast, saturation, hue)
+        self.p = p
 
     def __call__(self, img, mask):
-        return self.transform(img), mask
+        if random.random() < self.p:
+            img = self.transform(img)
+        return img, mask
 
 
 class PairedRandomCropAndResize:
@@ -73,22 +77,25 @@ class PairedRandomCropAndResize:
     the cropped regions back to the original size.
     """
 
-    def __init__(self, size, scale=(0.8, 1.0)):
+    def __init__(self, size, scale=(0.8, 1.0), ratio=(0.75, 1.33), p=0.5):
         self.size = size
         self.scale = scale
+        self.ratio = ratio
+        self.p = p
 
     def __call__(self, img, mask):
-        # Get parameters for the random crop
-        i, j, h, w = transforms.RandomResizedCrop.get_params(
-            img, scale=self.scale, ratio=(0.75, 1.33)
-        )
-        # Apply the crop
-        img = F.crop(img, i, j, h, w)
-        mask = F.crop(mask, i, j, h, w)
+        if random.random() < self.p:
+            # Get parameters for the random crop
+            i, j, h, w = transforms.RandomResizedCrop.get_params(
+                img, scale=self.scale, ratio=self.ratio
+            )
+            # Apply the crop
+            img = F.crop(img, i, j, h, w)
+            mask = F.crop(mask, i, j, h, w)
 
-        # Resize the cropped regions back to the original size
-        img = F.resize(img, self.size, interpolation=Image.BICUBIC)
-        mask = F.resize(mask, self.size, interpolation=Image.NEAREST)
+            # Resize the cropped regions back to the original size
+            img = F.resize(img, self.size, interpolation=Image.BICUBIC)
+            mask = F.resize(mask, self.size, interpolation=Image.NEAREST)
 
         return img, mask
 
@@ -102,7 +109,9 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
     for each original pair, effectively boosting the dataset size.
     """
 
-    def __init__(self, image_paths, mask_paths, n_augments, image_size=(512, 512)):
+    def __init__(self, image_paths, mask_paths, n_augments, image_size=(512, 512),
+                 mean:tuple=(0.485, 0.456, 0.406), #Default is to use ImageNet mean & std
+                 std:tuple=(0.229, 0.224, 0.225)):
         """
         Initializes the dataset.
 
@@ -116,6 +125,8 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
         self.image_files = image_paths
         self.mask_files = mask_paths
         self.N = n_augments
+        self.img_mean = mean
+        self.img_std = std
 
         assert len(self.image_files) == len(self.mask_files), "Image and mask lists must have the same number of files."
 
@@ -126,15 +137,25 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
 
         # Define the series of random augmentations
         self.augmentations = [
-            PairedRandomRotation(degrees=(-45, 45)),
+            PairedRandomRotation(degrees=(-45, 45), p=0.5),
             PairedRandomHorizontalFlip(p=0.5),
-            PairedColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-            PairedRandomCropAndResize(size=image_size)  # Added the new augmentation
+            PairedColorJitter(brightness=0.2,
+                              contrast=0.2,
+                              saturation=0.2,
+                              hue=0.1,
+                              p=0.5),
+            PairedRandomCropAndResize(size=image_size,
+                                      p=0.5)  # Added the new augmentation
         ]
 
         # Define a single resize transformation
         self.resize_transform = transforms.Compose([
             transforms.Resize(image_size, interpolation=Image.BICUBIC),
+        ])
+
+        self.transform_norm = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(self.img_mean, self.img_std)
         ])
 
     def __len__(self):
@@ -179,11 +200,14 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
             # if saved in a lossy format like jpeg or compressed png. TIFF seems to
             # ork best for lossless masks
             mask = (mask > 127).astype(int)
+
+        image = self.transform_norm(image)
+        mask = self.transform_norm(mask)
         return image, mask.long()
 
 
 
-# --- Example Usage ---
+# --- For testing ----
 # To run this example, you need to create dummy image and mask directories.
 
 def create_dummy_data(image_dir, mask_dir, num_pairs=5):

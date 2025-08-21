@@ -48,12 +48,10 @@ class TrainingImageTransforms:
 
 
 class ValidationImageTransforms:
-    def __init__(self, size: tuple[int, int] = (512, 512)):
+    def __init__(self, size: tuple[int, int] = (512, 512), mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
         self.tfm = A.Compose([
             A.Resize(height=size[0], width=size[1]),
-            # A.Normalize(mean=(0.485, 0.456, 0.406),
-            #             std=(0.229, 0.224, 0.225)),
-            A.Normalize(),
+            A.Normalize(mean=mean, std=std),
             ToTensorV2(transpose_mask=True),
         ])
 
