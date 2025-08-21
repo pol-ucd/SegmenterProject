@@ -102,9 +102,23 @@ def main():
                          weight_focal=0.2/1.5,
                          weight_tversky=0.3/1.5)
 
-    optimizer = torch.optim.AdamW(model.parameters(),
-                                  lr=learning_rate,
-                                  weight_decay = 0.01)
+    # Initial freeze all parameters of the model
+    print("Freezing encoder layers...")
+    for param in model.parameters():
+        param.requires_grad = False
+
+    # Unfreeze the decoder head and segmentation head
+    print("Unfreezing decoder and segmentation head...")
+    for param in model.decode_head.parameters():
+        param.requires_grad = True
+
+    # Only pass the parameters that require gradients to the optimizer
+    optimizer = torch.optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=learning_rate,
+        weight_decay=1e-4  # L2 regularization to prevent large weights
+    )
+
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
         # torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, T_max = 50)
