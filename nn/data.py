@@ -205,15 +205,19 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
         return image, mask.long()
 
 
-class SemanticSegmentationValidationTransforms:
-    """
-    A drop-in replacement for the Albumentations-based transform class,
-    using torchvision for validation-time transformations.
-    """
-
-    def __init__(self, size: Tuple[int, int] = (512, 512), mean: Tuple = (0.485, 0.456, 0.406),
+class SemanticSegmentationDatasetBasic(Dataset):
+    def __init__(self, image_paths, mask_paths, image_size=(512, 512),
+                 mean: Tuple = (0.485, 0.456, 0.406),  # Default is to use ImageNet mean & std
                  std: Tuple = (0.229, 0.224, 0.225)):
-        self.size = size
+
+        self.image_files = image_paths
+        self.mask_files = mask_paths
+        self.size = image_size
+        self.img_mean = mean
+        self.img_std = std
+
+        assert len(image_paths) == len(mask_paths)
+
         # This transform is for the image, applying resizing, conversion to tensor, and normalization
         self.image_transform = transforms.Compose([
             transforms.Resize(self.size),
@@ -227,99 +231,29 @@ class SemanticSegmentationValidationTransforms:
             transforms.ToTensor(),
         ])
 
-    def __call__(self, image: np.ndarray, mask: np.ndarray):
-        """
-        Applies the transformations to the image and mask.
-
-        Args:
-            image (np.ndarray): The input image as a NumPy array.
-            mask (np.ndarray): The segmentation mask as a NumPy array.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: The transformed image and mask as PyTorch tensors.
-        """
-        # Convert NumPy arrays to PIL Images for torchvision compatibility
-        # image_pil = Image.fromarray(image)
-        # mask_pil = Image.fromarray(mask)
-        image_pil = Image.open(image).convert("RGB")
-        mask_pil = Image.open(mask).convert("L")  # L mode for single-channel mask
-
-        # Apply transformations
-        transformed_image = self.image_transform(image_pil)
-        transformed_mask = self.mask_transform(mask_pil).squeeze(0).long()
-
-        return transformed_image, transformed_mask
-
-
-# --- For testing ----
-# To run this example, you need to create dummy image and mask directories.
-
-def create_dummy_data(image_dir, mask_dir, num_pairs=5):
-    """
-    Helper function to create dummy image and mask files.
-    """
-    if not os.path.exists(image_dir):
-        os.makedirs(image_dir)
-    if not os.path.exists(mask_dir):
-        os.makedirs(mask_dir)
-
-    dummy_image = Image.new('RGB', (512, 512), color='red')
-    dummy_mask = Image.new('L', (512, 512), color='blue')
-
-    for i in range(num_pairs):
-        dummy_image.save(os.path.join(image_dir, f'image_{i}.png'))
-        dummy_mask.save(os.path.join(mask_dir, f'mask_{i}.png'))
-
-    print(f"Created {num_pairs} dummy image-mask pairs.")
-
-
-"""
-PyTorch Dataset implementation 
-Assumes masks are available as images (i.e. already extracted if in RF Archive)
-
-returns (image, mask) pairs 
-"""
-
-
-class SegmentationDataset(Dataset):
-    def __init__(self, image_paths, mask_paths,
-                 transform=None,
-                 num_classes=None,
-                 ignore_index=255):
-        assert len(image_paths) == len(mask_paths)
-        self.image_paths = image_paths
-        self.mask_paths = mask_paths
-        self.transform = transform
-
     def __len__(self):
-        return len(self.image_paths)
+        return len(self.image_files)
 
-    def _load_pair(self, idx):
-        # img = cv2.imread(self.image_paths[idx], cv2.IMREAD_COLOR)
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # mask = cv2.imread(self.mask_paths[idx], cv2.IMREAD_UNCHANGED)
+    def __getitem__(self, idx):
+        # Get the file paths for the original image and mask
+        image_path = self.image_files[idx]
+        mask_path = self.mask_files[idx]
+
         # Load the image and mask using Pillow
-        img = Image.open(self.image_paths[idx]).convert("RGB")
-        mask = Image.open(self.mask_paths[idx]).convert("L")  # L mode for single-channel mask
+        image = Image.open(image_path).convert("RGB")
+        mask = Image.open(mask_path).convert("L")  # L mode for single-channel mask
 
-        img = np.array(img)
-        mask = np.array(mask)
+        image = self.image_transform(image)
+        mask = self.mask_transform(mask)
 
         if mask.max() > 1:
             # Expect a (0,1) mask .. some masks have more than two values especially
             # if saved in a lossy format like jpeg or compressed png. TIFF seems to
             # ork best for lossless masks
             mask = (mask > 127).astype(int)
-        return img, mask
-
-    def __getitem__(self, idx):
-        img1, m1 = self._load_pair(idx)
-
-        if self.transform:
-            img1, m1 = self.transform(img1, m1)
 
         # img1: FloatTensor [C,H,W] (torch.float32) ; m1: LongTensor [H,W] (torch.int32)
-        return img1, m1.type(torch.LongTensor)  # mask is LongTensor [H,W]
+        return image, mask.long()  # mask is LongTensor [H,W]
 
 
 class PolypDataset(Dataset):
