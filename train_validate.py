@@ -17,9 +17,9 @@ def main():
     num_classes = 2  # Binary classification - so masks and predictions will have shape [B, num_classes, H, W]
     batch_size = 4
     num_workers = 0
-    n_augments = 5
+    n_augments = 2
     image_size = (512, 512)
-    learning_rate = 3e-5 #1e-4
+    learning_rate = 1e-5 #1e-4
     n_epochs = 100
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
