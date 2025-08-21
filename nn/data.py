@@ -205,7 +205,7 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
         return image, mask.long()
 
 
-class SemanticSegmentationImageTransforms:
+class SemanticSegmentationValidationTransforms:
     """
     A drop-in replacement for the Albumentations-based transform class,
     using torchvision for validation-time transformations.

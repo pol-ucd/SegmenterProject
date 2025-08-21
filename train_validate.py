@@ -4,10 +4,10 @@ import torch
 from torch import GradScaler
 from torch.utils.data import DataLoader
 
-from nn.data import SegmentationDataset, split_images_and_masks, SemanticSegmentationDatasetAugmentor
+from nn.data import SegmentationDataset, split_images_and_masks, SemanticSegmentationDatasetAugmentor, \
+    SemanticSegmentationValidationTransforms
 from nn.models import SegformerBinarySegmentation4
 from nn.modules import EarlyStopping, HybridLoss
-from transforms.images import ValidationImageTransforms
 from utils.torch_utils import RunManager
 
 
@@ -71,7 +71,8 @@ def main():
     val_ds = SegmentationDataset(
         val_images,
         val_masks,
-        transform=ValidationImageTransforms(size=(512, 512))
+        # transform=ValidationImageTransforms(size=(512, 512))
+        transform=SemanticSegmentationValidationTransforms(size=image_size)
     )
 
 
