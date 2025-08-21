@@ -3,10 +3,9 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from nn.data import SegmentationDataset
+from nn.data import SemanticSegmentationDatasetBasic
 from nn.models import SegformerBinarySegmentation4
-from nn.modules import CombinedLoss
-from transforms.images import ValidationImageTransforms
+from nn.modules import HybridLoss
 from utils.torch_utils import RunManager
 
 
@@ -14,6 +13,7 @@ def main():
 
     num_classes = 2  # Binary classification {'not_lesion': 0, 'lesion': 1}
     ignore_index = 255
+    image_size = (512, 512)
     batch_size = 4
     num_workers = 0
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
@@ -33,11 +33,10 @@ def main():
     val_images = df_files.val_image.values
     val_masks = df_files.val_masks.values
 
-    val_ds = SegmentationDataset(
+    val_ds = SemanticSegmentationDatasetBasic(
         val_images,
         val_masks,
-        transform=ValidationImageTransforms(size=(512, 512)),
-        num_classes=num_classes, ignore_index=ignore_index
+        image_size=image_size
     )
 
     val_loader = DataLoader(val_ds, batch_size=batch_size,
@@ -52,8 +51,12 @@ def main():
     model.to(device)
 
     # loss_fn = DL(mode='binary')
-    cl_weights = {'bce': 0.2, 'tversky': 0.4, 'focal': 0.4, 'dice': 0.6, 'jaccard': 0.6}
-    loss_fn = CombinedLoss(weights=cl_weights)
+    # cl_weights = {'bce': 0.2, 'tversky': 0.4, 'focal': 0.4, 'dice': 0.6, 'jaccard': 0.6}
+    # loss_fn = CombinedLoss(weights=cl_weights)
+    loss_fn = HybridLoss(weight_ce=0.5,
+                         weight_dice=0.0,
+                         weight_focal=0.2,
+                         weight_tversky=0.3)
 
     trainer = RunManager(model,
                          optimizer=None,
