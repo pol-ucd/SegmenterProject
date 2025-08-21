@@ -118,6 +118,11 @@ def main():
     for param in model.base_model.decode_head.parameters():
         param.requires_grad = True
 
+
+    # Unfreeze the final classifier layer:
+    for param in model.base_model.segmentation_head.parameters():
+        param.requires_grad = True
+
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
