@@ -154,7 +154,6 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
         ])
 
         self.transform_norm = transforms.Compose([
-            transforms.ToTensor(),
             transforms.Normalize(self.img_mean, self.img_std)
         ])
 
