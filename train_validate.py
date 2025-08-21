@@ -21,7 +21,7 @@ def main():
     n_augments = 2
     image_size = (512, 512)
     learning_rate = 1e-5 # Low learning rate for Segformer models
-    l2_decay_penalty = 5e-4  # L2 regularization to prevent large weights
+    l2_decay_penalty = 8e-4  # L2 regularization to prevent large weights
     n_epochs = 100
     stopper_patience = 5
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
@@ -99,11 +99,11 @@ def main():
     # cl_weights = {'bce': 0.5, 'tversky': 0.0, 'focal': 0.25, 'dice': 0.25, 'jaccard': 0.0}
     # loss_fn = CombinedLoss(weights=cl_weights)
 
-    loss_fn = HybridLoss(weight_ce=0.5/1.8,
-                         weight_dice=0.5/1.8,
-                         weight_focal=0.2/1.8,
-                         weight_tversky=0.3/1.8,
-                         weight_iou=0.3/1.8,)
+    loss_fn = HybridLoss(weight_ce=0.5/1.9,
+                         weight_dice=0.5/1.9,
+                         weight_focal=0.2/1.9,
+                         weight_tversky=0.2/1.9,
+                         weight_iou=0.5/1.9,)
 
     # Initial freeze all parameters of the model
     print("Freezing encoder layers...")
