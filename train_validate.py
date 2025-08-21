@@ -134,12 +134,13 @@ def main():
     for param in model.base_model.parameters():
         param.requires_grad = False
 
-    # Unfreeze the decoder head and segmentation head
-    logger.info("Unfreezing decoder and segmentation head...")
-    for param in model.base_model.decode_head.parameters():
-        param.requires_grad = True
+    # # Unfreeze the decoder head and segmentation head
+    # logger.info("Unfreezing decoder and segmentation head...")
+    # for param in model.base_model.decode_head.parameters():
+    #     param.requires_grad = True
 
     # Unfreeze the final classifier layer:
+    logger.info("Unfreezing the final classifier layer...")
     for param in model.base_model.decode_head.classifier.parameters():
         param.requires_grad = True
 
