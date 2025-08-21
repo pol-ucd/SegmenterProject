@@ -239,9 +239,10 @@ class SemanticSegmentationValidationTransforms:
             Tuple[torch.Tensor, torch.Tensor]: The transformed image and mask as PyTorch tensors.
         """
         # Convert NumPy arrays to PIL Images for torchvision compatibility
-        from PIL import Image
-        image_pil = Image.fromarray(image)
-        mask_pil = Image.fromarray(mask)
+        # image_pil = Image.fromarray(image)
+        # mask_pil = Image.fromarray(mask)
+        image_pil = Image.open(image).convert("RGB")
+        mask_pil = Image.open(mask).convert("L")  # L mode for single-channel mask
 
         # Apply transformations
         transformed_image = self.image_transform(image_pil)
