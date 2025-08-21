@@ -227,6 +227,28 @@ class SemanticSegmentationValidationTransforms:
             transforms.ToTensor(),
         ])
 
+    def __call__(self, image: np.ndarray, mask: np.ndarray):
+        """
+        Applies the transformations to the image and mask.
+
+        Args:
+            image (np.ndarray): The input image as a NumPy array.
+            mask (np.ndarray): The segmentation mask as a NumPy array.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: The transformed image and mask as PyTorch tensors.
+        """
+        # Convert NumPy arrays to PIL Images for torchvision compatibility
+        from PIL import Image
+        image_pil = Image.fromarray(image)
+        mask_pil = Image.fromarray(mask)
+
+        # Apply transformations
+        transformed_image = self.image_transform(image_pil)
+        transformed_mask = self.mask_transform(mask_pil).squeeze(0).long()
+
+        return transformed_image, transformed_mask
+
 
 # --- For testing ----
 # To run this example, you need to create dummy image and mask directories.
