@@ -201,7 +201,7 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
             mask = (mask > 127).astype(int)
 
         image = self.transform_norm(image)
-        mask = self.transform_norm(mask)
+        # mask = self.transform_norm(mask)
         return image, mask.long()
 
 
