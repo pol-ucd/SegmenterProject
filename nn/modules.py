@@ -58,12 +58,13 @@ class IoULoss(BaseLoss):
 
 class HybridLoss(nn.Module):
     def __init__(self, weight_ce=1.0, weight_dice=1.0,
-                 weight_focal=1.0, weight_tversky=1.0):
+                 weight_focal=1.0, weight_tversky=1.0, weight_iou=1.0):
         super(HybridLoss, self).__init__()
         self.weight_ce = weight_ce
         self.weight_dice = weight_dice
         self.weight_focal = weight_focal
         self.weight_tversky = weight_tversky
+        self.weight_iou = weight_iou
         self.ce_loss = nn.CrossEntropyLoss()
 
     def forward(self, pred, target):
@@ -71,12 +72,14 @@ class HybridLoss(nn.Module):
         loss_dice = dice_loss(pred, target.squeeze(1))
         loss_focal = focal_loss(pred, target.squeeze(1))
         loss_tversky = tversky_loss(pred, target.squeeze(1), alpha=0.2, beta=0.4, smooth=1e-6)
+        loss_iou = iou_loss(pred, target.squeeze(1))
 
         total_loss = (
             self.weight_ce * loss_ce +
             self.weight_dice * loss_dice +
             self.weight_focal * loss_focal +
-            self.weight_tversky * loss_tversky
+            self.weight_tversky * loss_tversky +
+            self.weight_iou * loss_iou
         )
         return total_loss
 
