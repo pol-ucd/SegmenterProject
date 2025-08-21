@@ -50,9 +50,6 @@ def main():
     model.load_state_dict(torch.load("best_dice_model.pth", map_location=device))
     model.to(device)
 
-    # loss_fn = DL(mode='binary')
-    # cl_weights = {'bce': 0.2, 'tversky': 0.4, 'focal': 0.4, 'dice': 0.6, 'jaccard': 0.6}
-    # loss_fn = CombinedLoss(weights=cl_weights)
     loss_fn = HybridLoss(weight_ce=0.5,
                          weight_dice=0.0,
                          weight_focal=0.2,

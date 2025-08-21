@@ -20,7 +20,8 @@ def main():
     num_workers = 0
     n_augments = 2
     image_size = (512, 512)
-    learning_rate = 1e-5 #1e-4
+    learning_rate = 1e-5 # Low learnign rate for Segformer models
+    l2_decay_penalty = 5e-4  # L2 regularization to prevent large weights
     n_epochs = 100
     stopper_patience = 5
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
@@ -50,12 +51,6 @@ def main():
     """ 
     Data sets and loaders
     """
-
-    # train_ds = SegmentationDataset(
-    #     train_images,
-    #     train_masks,
-    #     transform=TrainingImageTransforms(size=(512, 512))
-    # )
     """
     Only use the SemanticSegmentationDatasetAugmentor class for 
     training data sine it randomly augments the available data
@@ -69,6 +64,12 @@ def main():
         image_size=image_size
     )
 
+    """
+    Use the SemanticSegmentationDatasetBasic class for 
+    validation or test. It does not perform any augmentations
+    other than resizing and standard normalisation of the 
+    images. Masks are not normalised.
+    """
     val_ds = SemanticSegmentationDatasetBasic(
         val_images,
         val_masks,
@@ -116,7 +117,7 @@ def main():
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=learning_rate,
-        weight_decay=1e-4  # L2 regularization to prevent large weights
+        weight_decay=l2_decay_penalty # L2 regularization to prevent large weights
     )
 
 
