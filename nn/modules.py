@@ -190,7 +190,7 @@ class EarlyStopping:
             self.counter = 0
             self.best_epoch = epoch
             if self.verbose:
-                print(f"New best score: {current_score:.4f} at epoch {epoch}")
+                print(f"New best score: {current_score:.4f} at epoch {epoch+1}")
             if self.save_path and model is not None:
                 torch.save(model.state_dict(), self.save_path)
                 if self.verbose:

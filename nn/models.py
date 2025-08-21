@@ -41,8 +41,8 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
         """
         Initialise the custom Segformer model.
         Args:
-            pretrained_model_name_or_path (str): The name or path of the pretrained
-                                                 Segformer model to load from Hugging Face.
+            pretrained_model (str): The name or path of the pretrained
+                                    Segformer model to load from Hugging Face.
         """
         super().__init__(pretrained_model, num_classes)
 
@@ -253,7 +253,7 @@ class SegformerBinarySegmentation4(SegformerBinaryClassifierBase):
         Initializes the Segformer model with a custom classification head.
 
         Args:
-            model_id (str): The ID of the pre-trained Segformer model to load
+            pretrained_model (str): The ID of the pre-trained Segformer model to load
                             (e.g., "nvidia/segformer-b4-finetuned-ade-512-512").
             num_classes (int): The number of output classes for semantic segmentation.
         """

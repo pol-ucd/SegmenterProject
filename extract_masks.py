@@ -7,11 +7,10 @@ import argparse
 import json
 import os
 from glob import glob
-from pycocotools import mask as maskUtils
 
 import cv2
 import numpy as np
-from PIL import Image
+from pycocotools import mask as maskUtils
 
 TRAIN_DIR = 'data/Polyp Segmentation/train'
 VALID_DIR = 'data/Polyp Segmentation/valid'

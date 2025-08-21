@@ -1,25 +1,18 @@
 # -*- coding: utf-8 -*-
 
 
-import os, cv2, json
-import numpy as np
 from glob import glob
-from tqdm import tqdm
-import matplotlib.pyplot as plt
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-from torch.cuda.amp import autocast, GradScaler
-from sklearn.model_selection import train_test_split
 
 import albumentations as A
+import torch
+import torch.nn as nn
 from albumentations.pytorch import ToTensorV2
-from pycocotools import mask as maskUtils
-
-from transformers import SegformerForSemanticSegmentation, SegformerFeatureExtractor
 from segmentation_models_pytorch.losses import TverskyLoss, FocalLoss
+from sklearn.model_selection import train_test_split
+from torch.cuda.amp import GradScaler
+from torch.utils.data import Dataset, DataLoader
+from transformers import SegformerForSemanticSegmentation
+
 
 # 1. Dataset Class
 class PolypDataset(Dataset):
@@ -218,11 +211,9 @@ print(f"Test Recall: {test_metrics['recall']:.4f}")
 
 """# **GRAD-CAM**"""
 
-import os, cv2, json
-import numpy as np
+import json
 from glob import glob
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -453,7 +444,6 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from torchvision import transforms
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 import torch.nn as nn
 from albumentations import Compose, Resize, Normalize
