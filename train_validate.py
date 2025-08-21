@@ -120,7 +120,7 @@ def main():
 
 
     # Unfreeze the final classifier layer:
-    for param in model.base_model.segmentation_head.parameters():
+    for param in model.base_model.decode_head.classifier.parameters():
         param.requires_grad = True
 
     # Only pass the parameters that require gradients to the optimizer
