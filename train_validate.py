@@ -104,12 +104,12 @@ def main():
 
     # Initial freeze all parameters of the model
     print("Freezing encoder layers...")
-    for param in model.parameters():
+    for param in model.base_model.parameters():
         param.requires_grad = False
 
     # Unfreeze the decoder head and segmentation head
     print("Unfreezing decoder and segmentation head...")
-    for param in model.decode_head.parameters():
+    for param in model.base_model.decode_head.parameters():
         param.requires_grad = True
 
     # Only pass the parameters that require gradients to the optimizer
