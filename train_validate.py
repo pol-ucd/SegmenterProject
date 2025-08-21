@@ -23,7 +23,7 @@ def main():
 
     """ Optimiser settings """
     learning_rate = 1e-5 # Low learning rate for Segformer models
-    l2_decay_penalty = 5e-3  # L2 regularization to prevent large weights
+    l2_decay_penalty = 1e-3  # L2 regularization to prevent large weights
 
     n_epochs = 100
     stopper_patience = 5
@@ -104,9 +104,9 @@ def main():
 
     loss_fn = HybridLoss(weight_ce=0.5/2.1,
                          weight_dice=0.7/2.1,
-                         weight_focal=0.2/2.1,
-                         weight_tversky=0.2/2.1,
-                         weight_iou=0.5/2.1)
+                         weight_focal=0.1/2.1,
+                         weight_tversky=0.1/2.1,
+                         weight_iou=0.7/2.1)
 
     # Initial freeze all parameters of the model
     print("Freezing encoder layers...")
