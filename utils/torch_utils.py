@@ -102,7 +102,7 @@ class RunManager:
         total_iou_loss = []
         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
-        for images, masks in tqdm(self.train_loader):
+        for images, masks in tqdm(self.train_loader, colour='green'):
 
             if images.device != self.device:
                 images = images.to(self.device)
@@ -149,7 +149,7 @@ class RunManager:
         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
         with torch.no_grad():
-            for images, masks in tqdm(self.eval_loader):
+            for images, masks in tqdm(self.eval_loader, colour='yellow'):
                 if images.device != self.device:
                     images = images.to(self.device)
 

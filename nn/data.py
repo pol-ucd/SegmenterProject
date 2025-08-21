@@ -2,7 +2,7 @@ import json
 import os
 import random
 from glob import glob
-from typing import Any
+from typing import Any, Tuple
 
 import albumentations as A
 import cv2
@@ -110,8 +110,8 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
     """
 
     def __init__(self, image_paths, mask_paths, n_augments, image_size=(512, 512),
-                 mean:tuple=(0.485, 0.456, 0.406), #Default is to use ImageNet mean & std
-                 std:tuple=(0.229, 0.224, 0.225)):
+                 mean: Tuple = (0.485, 0.456, 0.406),  #Default is to use ImageNet mean & std
+                 std: Tuple = (0.229, 0.224, 0.225)):
         """
         Initializes the dataset.
 
@@ -205,6 +205,28 @@ class SemanticSegmentationDatasetAugmentor(Dataset):
         return image, mask.long()
 
 
+class SemanticSegmentationImageTransforms:
+    """
+    A drop-in replacement for the Albumentations-based transform class,
+    using torchvision for validation-time transformations.
+    """
+
+    def __init__(self, size: Tuple[int, int] = (512, 512), mean: Tuple = (0.485, 0.456, 0.406),
+                 std: Tuple = (0.229, 0.224, 0.225)):
+        self.size = size
+        # This transform is for the image, applying resizing, conversion to tensor, and normalization
+        self.image_transform = transforms.Compose([
+            transforms.Resize(self.size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std),
+        ])
+        # This transform is only for the mask, to resize and convert to a long tensor
+        # We use a separate transform because masks should not be normalized
+        self.mask_transform = transforms.Compose([
+            transforms.Resize(self.size, interpolation=transforms.InterpolationMode.NEAREST),
+            transforms.ToTensor(),
+        ])
+
 
 # --- For testing ----
 # To run this example, you need to create dummy image and mask directories.
@@ -228,13 +250,14 @@ def create_dummy_data(image_dir, mask_dir, num_pairs=5):
     print(f"Created {num_pairs} dummy image-mask pairs.")
 
 
-
 """
 PyTorch Dataset implementation 
 Assumes masks are available as images (i.e. already extracted if in RF Archive)
 
 returns (image, mask) pairs 
 """
+
+
 class SegmentationDataset(Dataset):
     def __init__(self, image_paths, mask_paths,
                  transform=None,

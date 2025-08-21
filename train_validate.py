@@ -21,6 +21,7 @@ def main():
     image_size = (512, 512)
     learning_rate = 1e-5 #1e-4
     n_epochs = 100
+    stopper_patience = 5
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     save_model_name = "best_dice_model.pth"
@@ -128,7 +129,7 @@ def main():
     train_params = {}
     eval_params = {}
 
-    early_stopper = EarlyStopping(patience=10, min_delta=0.0001,
+    early_stopper = EarlyStopping(patience=stopper_patience, min_delta=0.0001,
                                   mode='min', verbose=True,
                                   save_path=save_model_name)
 
@@ -146,9 +147,9 @@ def main():
         val_dice = val_metrics['dice']
 
         print(
-            f"Training Losses  : | Compound Loss: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
+            f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
         print(
-            f"Evaluation Losses: | Compound Loss: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
+            f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
         print()
 
         scheduler.step(epoch + 1)
