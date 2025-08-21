@@ -42,7 +42,7 @@ class PairedRandomRotation:
     Applies a random rotation to both the image and the mask.
     """
 
-    def __init__(self, degrees, p=):
+    def __init__(self, degrees, p=0.5):
         self.degrees = degrees
         self.p = p
 
