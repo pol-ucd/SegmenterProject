@@ -20,8 +20,11 @@ def main():
     num_workers = 0
     n_augments = 2
     image_size = (512, 512)
+
+    """ Optimiser settings """
     learning_rate = 1e-5 # Low learning rate for Segformer models
-    l2_decay_penalty = 1e-3  # L2 regularization to prevent large weights
+    l2_decay_penalty = 5e-3  # L2 regularization to prevent large weights
+
     n_epochs = 100
     stopper_patience = 5
     pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
