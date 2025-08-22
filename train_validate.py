@@ -19,6 +19,7 @@ def main():
     # --- Logging Setup ---
     logging.basicConfig(
         level=logging.INFO,
+        force=True,  # Resets any previous configuration - in Colab for example
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
@@ -126,11 +127,15 @@ def main():
     model = SegformerBinarySegmentation(num_classes=num_classes).to(device)
     logger.info(f"Instantiated model with {model.num_classes} classes.")
 
-    loss_fn = HybridLoss(weight_ce=params['loss_weights']['weight_ce'] / 2.1,
-                         weight_dice=params['loss_weights']['weight_dice'] / 2.1,
-                         weight_focal=params['loss_weights']['weight_focal'] / 2.1,
-                         weight_tversky=params['loss_weights']['weight_tversky'] / 2.1,
-                         weight_iou=params['loss_weights']['weight_iou'] / 2.1)
+    denom = 0.0
+    for weight in params['loss_weights']:
+        denom += weight
+
+    loss_fn = HybridLoss(weight_ce=params['loss_weights']['weight_ce'] / denom,
+                         weight_dice=params['loss_weights']['weight_dice'] / denom,
+                         weight_focal=params['loss_weights']['weight_focal'] / denom,
+                         weight_tversky=params['loss_weights']['weight_tversky'] / denom,
+                         weight_iou=params['loss_weights']['weight_iou'] / denom)
 
     # Initial freeze all parameters of the model
     logger.info("Freezing encoder layers...")
@@ -191,8 +196,8 @@ def main():
 
         logger.info(f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
         logger.info(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
-        print(f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
-        print(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
+        # print(f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
+        # print(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
 
         scheduler.step(epoch + 1)
 
