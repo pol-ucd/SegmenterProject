@@ -18,7 +18,7 @@
         "weight_dice": 0.7,
         "weight_focal": 0.1,
         "weight_tversky": 0.1,
-        "weight_iou": 0.7
+        "weight_iou": 1.0
     },
     "scheduler": {
         "name": "CosineAnnealingLR",
