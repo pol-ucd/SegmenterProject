@@ -20,8 +20,8 @@ def main():
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.StreamHandler()
-            # logging.FileHandler("training.log") # Uncomment to also log to a file
+            logging.StreamHandler(),
+            logging.FileHandler("training.log") # Uncomment to also log to a file
         ]
     )
     logger = logging.getLogger(__name__)
@@ -135,14 +135,14 @@ def main():
         param.requires_grad = False
 
     # # Unfreeze the decoder head and segmentation head
-    # logger.info("Unfreezing decoder and segmentation head...")
-    # for param in model.base_model.decode_head.parameters():
-    #     param.requires_grad = True
+    logger.info("Unfreezing decoder and segmentation head...")
+    for param in model.base_model.decode_head.parameters():
+        param.requires_grad = True
 
     # Unfreeze the final classifier layer:
-    logger.info("Unfreezing the final classifier layer...")
-    for param in model.base_model.decode_head.classifier.parameters():
-        param.requires_grad = True
+    # logger.info("Unfreezing the final classifier layer...")
+    # for param in model.base_model.decode_head.classifier.parameters():
+    #     param.requires_grad = True
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
