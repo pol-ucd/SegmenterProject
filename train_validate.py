@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 
 import pandas as pd
 import torch
@@ -21,7 +22,7 @@ def main():
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler("training.log") # Uncomment to also log to a file
+            # logging.FileHandler("training.log")
         ]
     )
     logger = logging.getLogger(__name__)
@@ -203,6 +204,15 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        logging.info("KeyboardInterrupt detected. Shutting down gracefully.")
+        sys.exit(0)
     finally:
-        logging.info("Processing completed. Exiting.")
+        # This block will always be executed, allowing you to clean up resources
+        # ensure log handlers are flushed.
+        for handler in logging.handlers:
+            handler.flush()
+            handler.close()
+        logging.info("Logger handlers flushed and closed. Exiting now.")
+
 
