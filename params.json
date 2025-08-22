@@ -1,7 +1,7 @@
 {
     "test_split": 0.05,
     "num_classes": 2,
-    "batch_size": 8,
+    "batch_size": 16,
     "num_workers": 0,
     "n_augments": 2,
     "image_size": [512, 512],
@@ -12,7 +12,7 @@
     "n_epochs": 100,
     "stopper_patience": 5,
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
-    "save_model_name": "best_dice_model.pth",
+    "save_model_name": "best_dice_model_all_sources.pth",
     "loss_weights": {
         "weight_ce": 0.5,
         "weight_dice": 1.0,
