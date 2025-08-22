@@ -8,8 +8,6 @@ from transformers import SegformerConfig, SegformerForSemanticSegmentation
 """
 Base class for the Segformer models
 """
-
-
 class SegformerBinaryClassifierBase(nn.Module):
     default_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
 
@@ -60,19 +58,16 @@ class CustomSegformerDecodeHead(nn.Module):
 
 
 """
-A refactored, single-class implementation for binary semantic segmentation.
+A single-class implementation for semantic segmentation.
 This class is the recommended approach for its correctness and efficiency.
 """
-
-
 class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
     def __init__(self, pretrained_model: str = None, num_classes: int = None):
         super().__init__(pretrained_model, num_classes)
 
         # Load the full SegformerForSemanticSegmentation model.
-        # We set `ignore_mismatched_sizes=True` because we will replace the
-        # final classification layer, which will have a different output size
-        # for our binary task.
+        # Set `ignore_mismatched_sizes=True` because we will replace the
+        # final classification layer, which will have a different output size.
         self.base_model = SegformerForSemanticSegmentation.from_pretrained(
             self.pretrained_model,
             config=self.config,
@@ -120,13 +115,13 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
         return logits
 
 
-class SegformerBinarySegmentation2(SegformerBinarySegmentation):
-    pass
-
-
-class SegformerBinarySegmentation3(SegformerBinarySegmentation):
-    pass
-
-
-class SegformerBinarySegmentation4(SegformerBinarySegmentation):
-    pass
+# class SegformerBinarySegmentation2(SegformerBinarySegmentation):
+#     pass
+#
+#
+# class SegformerBinarySegmentation3(SegformerBinarySegmentation):
+#     pass
+#
+#
+# class SegformerBinarySegmentation4(SegformerBinarySegmentation):
+#     pass

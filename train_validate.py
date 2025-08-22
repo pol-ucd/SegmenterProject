@@ -40,7 +40,6 @@ def main():
     l2_decay_penalty = params['optimizer_settings']['l2_decay_penalty']
     n_epochs = params['n_epochs']
     stopper_patience = params['stopper_patience']
-    pretained_model = params['pretrained_model']
     save_model_name = params['save_model_name']
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

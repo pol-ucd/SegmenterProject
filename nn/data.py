@@ -14,20 +14,6 @@ from torchvision.transforms import functional as F
 import config
 
 
-# --- Configuration Constants (Placeholders) ---
-# Assuming these are defined in a 'config.py' file.
-# # We'll use placeholder values to make the code runnable.
-# IMAGE_PATHS = [
-#     "data/Polyp Segmentation/train",
-#     "data/Polyp Segmentation/valid"
-# ]
-# MASK_PATHS = [
-#     "data/Polyp Segmentation/train_masks",
-#     "data/Polyp Segmentation/valid_masks"
-# ]
-# FILE_TYPES = ["*.jpg", "*.png", "*.jpeg"]
-
-
 # --- Custom Paired Augmentation Classes ---
 # These classes ensure the same random transformation is applied to both the image and the mask.
 

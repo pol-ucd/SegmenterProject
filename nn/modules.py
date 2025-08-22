@@ -60,8 +60,11 @@ def iou_loss(pred, target, epsilon=1e-6):
     return 1 - iou.mean()
 
 
-# --- Loss Classes (for encapsulation) ---
+
 class BaseLoss(nn.Module, ABC):
+    """
+    Abstract base class for all losses.
+    """
     def __init__(self):
         super(BaseLoss, self).__init__()
         self.epsilon = 1e-6
@@ -180,10 +183,10 @@ class CombinedLoss(nn.Module):
                 + self.weights['jaccard'] * jaccard)
 
 
-# --- Early Stopping Implementation ---
 class EarlyStopping:
     def __init__(self, patience=5, min_delta=0.0, mode='min', verbose=False, save_path=None):
         """
+        Early Stopping Implementation
         Args:
             patience (int): Number of epochs to wait after last improvement.
             min_delta (float): Minimum change to qualify as improvement.
@@ -239,4 +242,3 @@ class EarlyStopping:
         self.early_stop = False
         self.best_score = np.inf if self.mode == 'min' else -np.inf
         self.best_epoch = None
-

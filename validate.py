@@ -1,22 +1,34 @@
+import json
+import logging
+import sys
 
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
 from nn.data import SemanticSegmentationDatasetBasic
-from nn.models import SegformerBinarySegmentation4
+from nn.models import SegformerBinarySegmentation
 from nn.modules import HybridLoss
 from utils.torch_utils import RunManager
 
 
 def main():
+    # --- Load parameters from JSON file ---
+    try:
+        with open('params.json', 'r') as f:
+            params = json.load(f)
+    except FileNotFoundError:
+        logger.error("Error: 'params.json' file not found. Please ensure it is in the same directory.")
+        return
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding JSON from 'params.json': {e}")
+        return
 
-    num_classes = 2  # Binary classification {'not_lesion': 0, 'lesion': 1}
-    ignore_index = 255
-    image_size = (512, 512)
-    batch_size = 4
-    num_workers = 0
-    pretained_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
+    num_classes = params['num_classes']
+    batch_size = params['batch_size']
+    num_workers = params['num_workers']
+    image_size = tuple(params['image_size'])
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     """
@@ -29,7 +41,7 @@ def main():
 
     df_files = pd.read_csv("validate_files.csv")
 
-    print(f"Using {device} device for model training.")
+    logger.info(f"Using {device} device for model training.")
     val_images = df_files.val_image.values
     val_masks = df_files.val_masks.values
 
@@ -43,10 +55,9 @@ def main():
                             shuffle=False, num_workers=num_workers, pin_memory=True)
 
 
-    print(f"Validation batches: {len(val_loader)}")
+    logger.info(f"Validation batches: {len(val_loader)}")
 
-    model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
-                                         num_classes=1)
+    model = SegformerBinarySegmentation(num_classes=num_classes)
     model.load_state_dict(torch.load("best_dice_model.pth", map_location=device))
     model.to(device)
 
@@ -73,12 +84,31 @@ def main():
     val_miou = val_metrics['iou']
     val_dice = val_metrics['dice']
 
-    print(
+    logger.info(
         f"Evaluation Losses: | Combined Loss: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
-    print()
-
-
-
 
 if __name__ == "__main__":
-   main()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        force=True,  # Resets any previous configuration - in Colab for example
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("training.log")
+        ]
+    )
+    logger = logging.getLogger()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("KeyboardInterrupt detected. Shutting down gracefully.")
+        sys.exit(0)
+    finally:
+        # This block will always be executed, allowing you to clean up resources
+        # ensure log handlers are flushed.
+        for handler in logger.handlers:
+            handler.flush()
+            handler.close()
+        logger.info("Logger handlers flushed and closed. Exiting now.")
+
