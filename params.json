@@ -7,7 +7,7 @@
     "image_size": [512, 512],
     "optimizer_settings": {
         "learning_rate": 1e-5,
-        "l2_decay_penalty": 1e-3
+        "l2_decay_penalty": 1e-2
     },
     "n_epochs": 100,
     "stopper_patience": 5,
