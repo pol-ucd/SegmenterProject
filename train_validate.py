@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from nn.data import (split_images_and_masks,
                      SemanticSegmentationDatasetAugmentor,
                      SemanticSegmentationDatasetBasic)
-from nn.models import SegformerBinarySegmentation4
+from nn.models import SegformerBinarySegmentation
 from nn.modules import EarlyStopping, HybridLoss
 from utils.torch_utils import RunManager
 
@@ -119,9 +119,11 @@ def main():
     Setup the model 
 
     """
-    model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
-                                         num_classes=num_classes)  # [B, num_classes, H, W]
-    model.to(device)
+    # model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
+    #                                      num_classes=num_classes)  # [B, num_classes, H, W]
+    # model.to(device)
+    model = SegformerBinarySegmentation(num_classes=num_classes).to(device)
+    logger.info(f"Instantiated model with {model.num_classes} classes.")
 
     loss_fn = HybridLoss(weight_ce=params['loss_weights']['weight_ce'] / 2.1,
                          weight_dice=params['loss_weights']['weight_dice'] / 2.1,
