@@ -16,17 +16,8 @@ from utils.torch_utils import RunManager
 
 
 def main():
-    # --- Logging Setup ---
-    logging.basicConfig(
-        level=logging.INFO,
-        force=True,  # Resets any previous configuration - in Colab for example
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler("training.log")
-        ]
-    )
-    logger = logging.getLogger(__name__)
+    # logger = logging.getLogger(__name__)
+    logger = logging.getLogger()
 
     # --- Load parameters from JSON file ---
     try:
@@ -129,7 +120,7 @@ def main():
 
     denom = 0.0
     for weight in params['loss_weights']:
-        denom += weight
+        denom += params['loss_weights'][weight]
 
     loss_fn = HybridLoss(weight_ce=params['loss_weights']['weight_ce'] / denom,
                          weight_dice=params['loss_weights']['weight_dice'] / denom,
@@ -181,7 +172,6 @@ def main():
                                   save_path=save_model_name)
 
     for epoch in range(n_epochs):
-        logger.info("-" * 20)
         logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
         train_metrics = trainer.train(**train_params)
@@ -209,17 +199,28 @@ def main():
 
 
 if __name__ == "__main__":
+    # --- Logging Setup ---
+    logging.basicConfig(
+        level=logging.INFO,
+        force=True,  # Resets any previous configuration - in Colab for example
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("training.log")
+        ]
+    )
+    logger = logging.getLogger()
     try:
         main()
     except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt detected. Shutting down gracefully.")
+        logger.info("KeyboardInterrupt detected. Shutting down gracefully.")
         sys.exit(0)
     finally:
         # This block will always be executed, allowing you to clean up resources
         # ensure log handlers are flushed.
-        for handler in logging.getLogger().handlers:
+        for handler in logger.handlers:
             handler.flush()
             handler.close()
-        logging.info("Logger handlers flushed and closed. Exiting now.")
+        logger.info("Logger handlers flushed and closed. Exiting now.")
 
 
