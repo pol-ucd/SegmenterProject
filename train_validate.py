@@ -217,7 +217,7 @@ if __name__ == "__main__":
     finally:
         # This block will always be executed, allowing you to clean up resources
         # ensure log handlers are flushed.
-        for handler in logging.handlers:
+        for handler in logging.getLogger().handlers:
             handler.flush()
             handler.close()
         logging.info("Logger handlers flushed and closed. Exiting now.")
