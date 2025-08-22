@@ -1,3 +1,4 @@
+import logging
 from abc import abstractmethod, ABC
 
 import numpy as np
@@ -6,8 +7,60 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# from losses import TverskyLoss as TL, FocalLoss as FL, DiceLoss, JaccardLoss
+# --- Loss Function Implementations ---
+def dice_loss(pred, target, epsilon=1e-6):
+    """
+    Computes the Dice Loss.
+    """
+    pred = torch.softmax(pred, dim=1)
+    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    intersection = (pred * target_onehot).sum(dim=(2, 3))
+    union = pred.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))
+    dice = (2. * intersection + epsilon) / (union + epsilon)
+    return 1 - dice.mean()
 
+
+def focal_loss(pred, target, alpha=0.25, gamma=2.0, smooth=1e-6):
+    """
+    Computes the Focal Loss.
+    """
+    pred = torch.softmax(pred, dim=1)
+    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    pt = torch.where(target_onehot == 1, pred, 1 - pred)
+    focal_term = alpha * (1 - pt) ** gamma
+    bce = -torch.log(pt + smooth)
+    return (focal_term * bce).mean()
+
+
+def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
+    """
+    Computes the Tversky Loss.
+    """
+    probs = torch.softmax(pred, dim=1)
+    target_oh = F.one_hot(target, num_classes=probs.shape[1]).permute(0, 3, 1, 2).float()
+    TP = (probs * target_oh).sum(dim=(0, 2, 3))
+    FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))
+    FN = ((1 - probs) * target_oh).sum(dim=(0, 2, 3))
+
+    tversky = (TP + smooth) / (TP + alpha * FP + beta * FN + smooth)
+    loss_tversky = 1.0 - tversky
+    return loss_tversky.mean()
+
+
+def iou_loss(pred, target, epsilon=1e-6):
+    """
+    Computes the IoU Loss.
+    """
+    pred = torch.softmax(pred, dim=1)
+    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    intersection = (pred * target_onehot).sum(dim=(2, 3))
+    union = pred + target_onehot - (pred * target_onehot)
+    union = union.sum(dim=(2, 3))
+    iou = (intersection + epsilon) / (union + epsilon)
+    return 1 - iou.mean()
+
+
+# --- Loss Classes (for encapsulation) ---
 class BaseLoss(nn.Module, ABC):
     def __init__(self):
         super(BaseLoss, self).__init__()
@@ -16,6 +69,7 @@ class BaseLoss(nn.Module, ABC):
     @abstractmethod
     def forward(self, pred, target):
         pass
+
 
 class DiceLoss(BaseLoss):
     def __init__(self):
@@ -41,7 +95,7 @@ class FocalLoss(BaseLoss):
 class TverskyLoss(BaseLoss):
     def __init__(self, alpha=None, beta=None):
         super(TverskyLoss, self).__init__()
-        self.alpha = alpha if alpha is not None else 0.25
+        self.alpha = alpha if alpha is not None else 0.5
         self.beta = beta if beta is not None else 0.5
 
     def forward(self, pred, target):
@@ -66,67 +120,34 @@ class HybridLoss(nn.Module):
         self.weight_tversky = weight_tversky
         self.weight_iou = weight_iou
         self.ce_loss = nn.CrossEntropyLoss()
+        self.dice_loss = DiceLoss()
+        self.focal_loss = FocalLoss()
+        self.tversky_loss = TverskyLoss(alpha=0.2, beta=0.4)
+        self.iou_loss = IoULoss()
 
     def forward(self, pred, target):
-        loss_ce = self.ce_loss(pred, target.squeeze(1))
-        loss_dice = dice_loss(pred, target.squeeze(1))
-        loss_focal = focal_loss(pred, target.squeeze(1))
-        loss_tversky = tversky_loss(pred, target.squeeze(1), alpha=0.2, beta=0.4, smooth=1e-6)
-        loss_iou = iou_loss(pred, target.squeeze(1))
+        target_squeezed = target.squeeze(1)
+        loss_ce = self.ce_loss(pred, target_squeezed)
+        loss_dice = self.dice_loss(pred, target_squeezed)
+        loss_focal = self.focal_loss(pred, target_squeezed)
+        loss_tversky = self.tversky_loss(pred, target_squeezed)
+        loss_iou = self.iou_loss(pred, target_squeezed)
 
         total_loss = (
-            self.weight_ce * loss_ce +
-            self.weight_dice * loss_dice +
-            self.weight_focal * loss_focal +
-            self.weight_tversky * loss_tversky +
-            self.weight_iou * loss_iou
+                self.weight_ce * loss_ce +
+                self.weight_dice * loss_dice +
+                self.weight_focal * loss_focal +
+                self.weight_tversky * loss_tversky +
+                self.weight_iou * loss_iou
         )
         return total_loss
-
-
-def dice_loss(pred, target, epsilon=1e-6):
-    pred = torch.softmax(pred, dim=1)  # [B, C, H, W]
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
-    intersection = (pred * target_onehot).sum(dim=(2, 3))
-    union = pred.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))
-    dice = (2. * intersection + epsilon) / (union + epsilon)
-    return 1 - dice.mean()
-
-
-def focal_loss(pred, target, alpha=0.25, gamma=2.0, smooth=1e-6):
-    pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
-    pt = torch.where(target_onehot == 1, pred, 1 - pred)
-    focal_term = alpha * (1 - pt) ** gamma
-    bce = -torch.log(pt + smooth)
-    return (focal_term * bce).mean()
-
-
-def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
-    probs = torch.softmax(pred, dim=1)
-    target_oh = F.one_hot(target, num_classes=probs.shape[1]).permute(0, 3, 1, 2).float()
-    TP = (probs * target_oh).sum(dim=(0, 2, 3))  # [C]
-    FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))  # [C]
-    FN = ((1 - probs) * target_oh).sum(dim=(0, 2, 3))  # [C]
-
-    tversky = (TP + smooth) / (TP + alpha * FP + beta * FN + smooth)
-    loss_tversky = 1.0 - tversky
-    return loss_tversky.mean()
-
-def iou_loss(pred, target, epsilon=1e-6):
-    pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
-    intersection = (pred * target_onehot).sum(dim=(2, 3))
-    union = pred + target_onehot - (pred * target_onehot)
-    union = union.sum(dim=(2, 3))
-    iou = (intersection + epsilon) / (union + epsilon)
-    return 1 - iou.mean()
 
 
 """
 Implements Hanija's Combined Loss for Binary image classification.
 Is also callable so it can be used to evaluate loss with no_grad()
 """
+
 
 class CombinedLoss(nn.Module):
     def __init__(self, weights=None):
@@ -137,24 +158,29 @@ class CombinedLoss(nn.Module):
         self.bce = nn.BCEWithLogitsLoss()
         self.tversky = TverskyLoss(alpha=0.2, beta=0.4)
         self.focal = FocalLoss()
-        self.dice = DiceLoss(mode='binary')
-        self.iou = IoULoss(mode='binary')
+        # Note: 'mode' is not a valid argument for the DiceLoss and IoULoss classes here,
+        # they are designed for multi-class and handle binary via one-hot encoding.
+        self.dice = DiceLoss()
+        self.iou = IoULoss()
 
     def forward(self, pred, target):
-        return self._do_calculation(pred, target)
-
-    def _do_calculation(self, pred, target):
         bce = self.bce(pred, target.unsqueeze(1).float())
-        pred = pred.transpose(3, 1)
-        tversky = self.tversky(pred, target.float())
-        focal = self.focal(pred, target.float())
-        dice = self.dice(pred, target.float())
-        jaccard = self.iou(pred, target.float())
+
+        # The following losses require the target to be handled differently, as they
+        # were written to expect integer labels for one-hot encoding.
+        # We assume the input 'pred' is logits and 'target' is the integer label mask.
+        target_squeezed = target.squeeze(1)
+        tversky = self.tversky(pred, target_squeezed)
+        focal = self.focal(pred, target_squeezed)
+        dice = self.dice(pred, target_squeezed)
+        jaccard = self.iou(pred, target_squeezed)
+
         return (self.weights['bce'] * bce + self.weights['tversky'] * tversky
                 + self.weights['focal'] * focal + self.weights['dice'] * dice
                 + self.weights['jaccard'] * jaccard)
 
 
+# --- Early Stopping Implementation ---
 class EarlyStopping:
     def __init__(self, patience=5, min_delta=0.0, mode='min', verbose=False, save_path=None):
         """
@@ -162,7 +188,7 @@ class EarlyStopping:
             patience (int): Number of epochs to wait after last improvement.
             min_delta (float): Minimum change to qualify as improvement.
             mode (str): 'min' for loss, 'max' for accuracy or IoU.
-            verbose (bool): If True, prints updates.
+            verbose (bool): If True, logs updates.
             save_path (str): If set, saves best model to this path.
         """
         assert mode in ['min', 'max'], "mode must be 'min' or 'max'"
@@ -171,6 +197,7 @@ class EarlyStopping:
         self.mode = mode
         self.verbose = verbose
         self.save_path = save_path
+        self.logger = logging.getLogger(self.__class__.__name__)
 
         self.best_score = None
         self.counter = 0
@@ -193,22 +220,23 @@ class EarlyStopping:
             self.counter = 0
             self.best_epoch = epoch
             if self.verbose:
-                print(f"New best score: {current_score:.4f} at epoch {epoch+1}")
+                self.logger.info(f"New best score: {current_score:.4f} at epoch {epoch + 1}")
             if self.save_path and model is not None:
                 torch.save(model.state_dict(), self.save_path)
                 if self.verbose:
-                    print(f"Model saved to {self.save_path}")
+                    self.logger.info(f"Model saved to {self.save_path}")
         else:
             self.counter += 1
             if self.verbose:
-                print(f"No improvement. Patience: {self.counter}/{self.patience}")
+                self.logger.info(f"No improvement. Patience: {self.counter}/{self.patience}")
             if self.counter >= self.patience:
                 self.early_stop = True
                 if self.verbose:
-                    print(f"Early stopping triggered at epoch {epoch}")
+                    self.logger.info(f"Early stopping triggered at epoch {epoch}")
 
     def reset(self):
         self.counter = 0
         self.early_stop = False
         self.best_score = np.inf if self.mode == 'min' else -np.inf
         self.best_epoch = None
+

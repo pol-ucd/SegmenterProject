@@ -136,15 +136,10 @@ def main():
     for param in model.base_model.parameters():
         param.requires_grad = False
 
-    # # Unfreeze the decoder head and segmentation head
+    # Unfreeze the decoder head and segmentation head because we replaced these
     logger.info("Unfreezing decoder and segmentation head...")
     for param in model.base_model.decode_head.parameters():
         param.requires_grad = True
-
-    # Unfreeze the final classifier layer:
-    # logger.info("Unfreezing the final classifier layer...")
-    # for param in model.base_model.decode_head.classifier.parameters():
-    #     param.requires_grad = True
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(

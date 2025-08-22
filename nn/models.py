@@ -1,16 +1,9 @@
-import logging
 from abc import abstractmethod
 
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
-
-from utils.torch_utils import get_default_device, get_default_device_type
-
-# Setup basic logging configuration
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 """
 Base class for the Segformer models
@@ -137,38 +130,3 @@ class SegformerBinarySegmentation3(SegformerBinarySegmentation):
 
 class SegformerBinarySegmentation4(SegformerBinarySegmentation):
     pass
-
-
-if __name__ == '__main__':
-    # --- Example Usage for the Refactored Class ---
-    device = get_default_device()
-    device_type = get_default_device_type()
-
-    dummy_input = torch.randn(1, 3, 512, 512).to(device)
-    logger.info(f"\nDummy input tensor shape: {dummy_input.shape}")
-
-    # Create dummy labels for loss calculation (binary mask)
-    dummy_labels = torch.randint(0, 2, (1, 512, 512)).long().to(device)
-    logger.info(f"Dummy labels tensor shape: {dummy_labels.shape}")
-
-    # Instantiate the single, refactored model class.
-    model = SegformerBinarySegmentation(num_classes=2).to(device)
-    logger.info(f"Instantiated model with {model.num_classes} classes.")
-
-    # Perform a forward pass with autocast for performance.
-    logger.info("Performing forward pass with dummy input using autocast...")
-    with torch.autocast(device_type=device_type, dtype=torch.float16):
-        output = model(pixel_values=dummy_input, labels=dummy_labels)
-
-    # Print the shape of the output logits.
-    logger.info(f"Output logits shape: {output.shape}")
-
-    # Verify output properties.
-    if output.shape == torch.Size([1, 2, 512, 512]):
-        logger.info("Output shape is as expected for semantic segmentation.")
-        logger.info("\nTest Passed! ✅")
-    else:
-        logger.error("Output shape is NOT as expected. Please check the implementation.")
-        logger.error("\nTest Failed! ❌")
-
-    logger.info("\nExample complete.")
