@@ -329,6 +329,7 @@ TSWLatexianTemp*
 # option is specified. Footnotes are the stored in a file with suffix Notes.bib.
 # Uncomment the next line to have this generated file ignored.
 #*Notes.bib
-*.pth
 /data/Arctur/Initial_frames_v2.7z
 /data/Classica/Initial_frames_v2.7z
+/data/PolypGen2021/test_segmentation.txt
+/data/PolypGen2021/train_segmentation.txt
