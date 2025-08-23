@@ -14,7 +14,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "save_model_name": "best_dice_model_all_sources.pth",
     "loss_weights": {
-        "weight_ce": 0.1,
+        "weight_ce": 0.0,
         "weight_dice": 1.0,
         "weight_focal": 0.0,
         "weight_tversky": 0.0,
