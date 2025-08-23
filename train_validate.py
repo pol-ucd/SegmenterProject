@@ -42,6 +42,10 @@ def main():
     stopper_patience = params['stopper_patience']
     save_model_name = params['save_model_name']
 
+    image_paths = params["datasets"]["image_paths"]
+    mask_paths = params["datasets"]["mask_paths"]
+    file_types = params["datasets"]["file_types"]
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     logger.info(f"Using {device} device for model training.")
@@ -54,7 +58,13 @@ def main():
     training and testing sets.
     """
     try:
-        train_images, train_masks, val_images, val_masks = split_images_and_masks(split=test_split)
+        (train_images,
+         train_masks,
+         val_images,
+         val_masks) = split_images_and_masks(image_paths=image_paths,
+                                             mask_paths=mask_paths,
+                                             file_types=file_types,
+                                             split=test_split)
     except FileNotFoundError as e:
         logger.error(f"Error loading data: {e}. Please ensure the data directories are correctly set up.")
         return  # Exit if data cannot be loaded

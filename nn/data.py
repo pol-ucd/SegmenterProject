@@ -11,8 +11,6 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision.transforms import functional as F
 
-import config
-
 
 # --- Custom Paired Augmentation Classes ---
 # These classes ensure the same random transformation is applied to both the image and the mask.
@@ -244,10 +242,14 @@ def split_images_and_masks(image_paths: list = None,
             (train_images, train_masks, test_images, test_masks)
     """
     split_size = split if split is not None else 0.1
-    image_paths = config.IMAGE_PATHS if image_paths is None else image_paths
-    mask_paths = config.MASK_PATHS if mask_paths is None else mask_paths
-    file_types = config.FILE_TYPES if file_types is None else file_types
+    image_paths = image_paths
+    mask_paths = mask_paths
+    file_types = file_types
+
     logger = logging.getLogger(__name__)
+    if file_types is None or image_paths is None or mask_paths is None:
+        logger.error(f"Error loading data: {file_types}, {image_paths} and {mask_paths} cannot be None")
+        raise ValueError(f"Either image_paths or mask_paths must be provided.")
 
     all_images, all_masks = [], []
     train_idx, test_idx = [], []
