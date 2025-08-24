@@ -186,7 +186,7 @@ class HybridLoss(nn.Module):
         loss_focal = self.focal_loss(pred, target_squeezed)
         loss_tversky = self.tversky_loss(pred, target_squeezed)
         loss_iou = self.iou_loss(pred, target_squeezed)
-        loss_hausdorff = self.hausdorff_loss(pred, target
+        loss_hausdorff = self.hausdorff_loss(pred, target)
 
         total_loss = (
                 self.weight_ce * loss_ce +
