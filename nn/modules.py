@@ -40,11 +40,13 @@ def hausdorff_distance_loss(pred, target):
         # We compare the predicted probability map for class i against its ground truth one-hot mask
         # binary_hausdorff_distance expects binary inputs (0 or 1), so we use a threshold.
         # A threshold of 0.5 is a common choice for converting probabilities to binary masks.
-        pred_binary = (pred_prob[:, i, :, :] > 0.5).long()
-        target_binary = target_onehot[:, i, :, :].long()
+        pred_binary = (pred_prob[:, i, :, :] > 0.5).long().unsqueeze(1)
+        target_binary = target_onehot[:, i, :, :].long().unsqueeze(1)
 
         # Calculate the distance for the current class and add it to the total
-        total_hausdorff_distance[i] = hausdorff_distance(pred_binary, target_binary, num_classes=2)
+        total_hausdorff_distance[i] = hausdorff_distance(preds=pred_binary,
+                                                         target=target_binary,
+                                                         num_classes=2)
 
     # The final loss is the mean of the Hausdorff distances over all classes
     return total_hausdorff_distance.mean()
