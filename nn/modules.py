@@ -5,13 +5,62 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchmetrics.functional.segmentation import hausdorff_distance
+from scipy.spatial.distance import directed_hausdorff
+
+
+# from torchmetrics.functional.segmentation import hausdorff_distance
 
 
 # --- Loss Function Implementations ---
+# def hausdorff_distance_loss(pred, target):
+#     """
+#     Computes the Hausdorff Distance Loss for multi-class segmentation.
+#
+#     Args:
+#         pred (torch.Tensor): The predicted logits from the model,
+#                              of shape (N, C, H, W) where N is batch size,
+#                              C is number of classes, and H, W are dimensions.
+#         target (torch.Tensor): The ground truth segmentation masks,
+#                                of shape (N, H, W) with integer class labels.
+#
+#     Returns:
+#         torch.Tensor: The mean Hausdorff distance loss across all classes.
+#     """
+#     # Get the number of classes from the prediction tensor
+#     num_classes = pred.shape[1]
+#
+#     # One-hot encode the target mask to match the prediction tensor shape
+#     target_onehot = F.one_hot(target, num_classes=num_classes).permute(0, 3, 1, 2).float()
+#
+#     # The loss will be the sum of Hausdorff distances for each class
+#     total_hausdorff_distance = torch.zeros(num_classes, device=pred.device)
+#
+#     # Convert logits to probabilities (not strictly necessary for distance, but good practice)
+#     pred_prob = F.softmax(pred, dim=1)
+#
+#     for i in range(num_classes):
+#         # Calculate the Hausdorff distance for the current class
+#         # We compare the predicted probability map for class i against its ground truth one-hot mask
+#         # binary_hausdorff_distance expects binary inputs (0 or 1), so we use a threshold.
+#         # A threshold of 0.5 is a common choice for converting probabilities to binary masks.
+#         pred_binary = (pred_prob[:, i, :, :] > 0.5).unsqueeze(1).long()
+#         target_binary = target_onehot[:, i, :, :].unsqueeze(1).long()
+#
+#         # Calculate the distance for the current class and add it to the total
+#         total_hausdorff_distance[i] = hausdorff_distance(preds=pred_binary,
+#                                                          target=target_binary,
+#                                                          num_classes=2)
+#
+#     # The final loss is the mean of the Hausdorff distances over all classes
+#     return total_hausdorff_distance.mean()
+
+
 def hausdorff_distance_loss(pred, target):
     """
-    Computes the Hausdorff Distance Loss for multi-class segmentation.
+    Computes the Hausdorff Distance Loss for multi-class segmentation using SciPy.
+
+    This function calculates the Hausdorff distance, which is the maximum of the
+    directed distances between the two sets of points (predicted and ground truth).
 
     Args:
         pred (torch.Tensor): The predicted logits from the model,
@@ -23,30 +72,46 @@ def hausdorff_distance_loss(pred, target):
     Returns:
         torch.Tensor: The mean Hausdorff distance loss across all classes.
     """
-    # Get the number of classes from the prediction tensor
     num_classes = pred.shape[1]
+    batch_size = pred.shape[0]
 
     # One-hot encode the target mask to match the prediction tensor shape
     target_onehot = F.one_hot(target, num_classes=num_classes).permute(0, 3, 1, 2).float()
 
-    # The loss will be the sum of Hausdorff distances for each class
     total_hausdorff_distance = torch.zeros(num_classes, device=pred.device)
 
-    # Convert logits to probabilities (not strictly necessary for distance, but good practice)
+    # Convert logits to probabilities
     pred_prob = F.softmax(pred, dim=1)
 
     for i in range(num_classes):
-        # Calculate the Hausdorff distance for the current class
-        # We compare the predicted probability map for class i against its ground truth one-hot mask
-        # binary_hausdorff_distance expects binary inputs (0 or 1), so we use a threshold.
-        # A threshold of 0.5 is a common choice for converting probabilities to binary masks.
-        pred_binary = (pred_prob[:, i, :, :] > 0.5).unsqueeze(1).long()
-        target_binary = target_onehot[:, i, :, :].unsqueeze(1).long()
+        # Convert tensors to binary masks and then to NumPy arrays for SciPy
+        pred_binary = (pred_prob[:, i, :, :] > 0.5).detach().cpu().numpy()
+        target_binary = target_onehot[:, i, :, :].detach().cpu().numpy()
 
-        # Calculate the distance for the current class and add it to the total
-        total_hausdorff_distance[i] = hausdorff_distance(preds=pred_binary,
-                                                         target=target_binary,
-                                                         num_classes=2)
+        class_hausdorff_distance = 0
+        for b in range(batch_size):
+            # Get the coordinates of the foreground pixels
+            pred_coords = np.argwhere(pred_binary[b] == 1)
+            target_coords = np.argwhere(target_binary[b] == 1)
+
+            # Handle cases where one or both masks are empty
+            if len(pred_coords) == 0 and len(target_coords) == 0:
+                batch_distance = 0.0
+            elif len(pred_coords) == 0 or len(target_coords) == 0:
+                # If one mask is empty and the other is not, the distance is undefined/infinite.
+                # Returning a large value handles this case.
+                batch_distance = 1e6  # A very large number
+            else:
+                # Calculate the directed Hausdorff distance from pred to target
+                dist_pt = directed_hausdorff(pred_coords, target_coords)[0]
+                # Calculate the directed Hausdorff distance from target to pred
+                dist_tp = directed_hausdorff(target_coords, pred_coords)[0]
+                # The final Hausdorff distance is the maximum of the two directed distances
+                batch_distance = max(dist_pt, dist_tp)
+
+            class_hausdorff_distance += batch_distance
+
+        total_hausdorff_distance[i] = class_hausdorff_distance / batch_size
 
     # The final loss is the mean of the Hausdorff distances over all classes
     return total_hausdorff_distance.mean()
@@ -174,6 +239,7 @@ class HybridLoss(nn.Module):
         self.weight_focal = weight_focal
         self.weight_tversky = weight_tversky
         self.weight_iou = weight_iou
+        self.weight_hausdorff = weight_hausdorff
         self.ce_loss = nn.CrossEntropyLoss()
         self.dice_loss = DiceLoss()
         self.focal_loss = FocalLoss()
