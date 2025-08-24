@@ -121,10 +121,10 @@ def main():
     Setup the model 
 
     """
-    # model = SegformerBinarySegmentation4(pretrained_model=pretained_model,
-    #                                      num_classes=num_classes)  # [B, num_classes, H, W]
-    # model.to(device)
-    model = SegformerBinarySegmentation(num_classes=num_classes).to(device)
+
+    model = SegformerBinarySegmentation(num_classes=num_classes)
+    model.load_state_dict(torch.load("/content/drive/MyDrive/SegmenterProject/best_dice_model_all_sources.pth", map_location=device))
+    model.to(device)
     logger.info(f"Instantiated model with {model.num_classes} classes.")
 
     denom = 0.0
