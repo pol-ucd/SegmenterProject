@@ -12,13 +12,15 @@
     "n_epochs": 100,
     "stopper_patience": 5,
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
+    "checkpoint_path": null,
     "save_model_name": "best_dice_model_all_sources.pth",
     "loss_weights": {
         "weight_ce": 0.0,
         "weight_dice": 1.0,
         "weight_focal": 0.0,
         "weight_tversky": 0.0,
-        "weight_iou": 1.0
+        "weight_iou": 1.0,
+        "weight_hausdorff": 1.0
     },
     "scheduler": {
         "name": "CosineAnnealingLR",

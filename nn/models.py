@@ -5,13 +5,28 @@ from torch import nn as nn
 from torch.nn import functional as F
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
+
+# A custom exception class to handle errors specific to a Segformer-based model.
+class SegformerModelError(Exception):
+    """
+    Custom exception for errors related to the Segformer model or its
+    base classes, such as invalid model configurations or unexpected
+    behavior during loading.
+    """
+    def __init__(self, message="An error occurred with the Segformer model."):
+        self.message = message
+        super().__init__(self.message)
+
+
+
 """
 Base class for the Segformer models
 """
 class SegformerBinaryClassifierBase(nn.Module):
     default_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
 
-    def __init__(self, pretrained_model: str = None, num_classes: int = None):
+    def __init__(self, pretrained_model: str = None, num_classes: int = None,
+                 checkpoint_path: str = None):
         """
         Initializes the base class for Segformer-based binary classifiers.
 
@@ -19,12 +34,16 @@ class SegformerBinaryClassifierBase(nn.Module):
             pretrained_model (str): The name or path of the pretrained
                                     Segformer model.
             num_classes (int): The number of output classes.
+            checkpoint_path (str): The path of the checkpoint to be loaded.
         """
         super().__init__()
-        self.pretrained_model = pretrained_model or SegformerBinaryClassifierBase.default_model
-        self.config = SegformerConfig.from_pretrained(self.pretrained_model)
+        self.pretrained_model = pretrained_model
+        self.checkpoint_path = checkpoint_path
         self.num_classes = num_classes or 1
+        self.config = SegformerConfig.from_pretrained(self.pretrained_model)
         self.base_model = None
+        if checkpoint_path:
+            self.load_model(checkpoint_path)
 
     @abstractmethod
     def forward(self, pixel_values):
@@ -62,8 +81,9 @@ A single-class implementation for semantic segmentation.
 This class is the recommended approach for its correctness and efficiency.
 """
 class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
-    def __init__(self, pretrained_model: str = None, num_classes: int = None):
-        super().__init__(pretrained_model, num_classes)
+    def __init__(self, pretrained_model: str = None, num_classes: int = None,
+                 checkpoint_path:str=None):
+        super().__init__(pretrained_model, num_classes, checkpoint_path)
 
         # Load the full SegformerForSemanticSegmentation model.
         # Set `ignore_mismatched_sizes=True` because we will replace the
@@ -90,6 +110,19 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
             nn.Conv2d(256, self.num_classes, kernel_size=1)
         )
 
+        # --- Checkpoint Loading Logic ---
+        if self.checkpoint_path:
+            try:
+                # Load the state dictionary from the .pt file
+                state_dict = torch.load(self.checkpoint_path, map_location=torch.device('cpu'))
+                self.base_model.load_state_dict(state_dict)
+            except FileNotFoundError:
+                # Raise exception for consistent error handling
+                raise SegformerModelError(f"Checkpoint file not found at: {self.checkpoint_path}")
+            except Exception as e:
+                # Catch any other loading errors
+                raise SegformerModelError(f"Failed to load checkpoint: {e}")
+
     def forward(self, pixel_values: torch.FloatTensor, labels: torch.LongTensor = None):
         """
         Forward pass for the custom Segformer model.
@@ -113,6 +146,7 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
                                align_corners=False)
 
         return logits
+
 
 
 # class SegformerBinarySegmentation2(SegformerBinarySegmentation):

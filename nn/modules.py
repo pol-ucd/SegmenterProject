@@ -5,9 +5,51 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchmetrics.functional.segmentation import hausdorff_distance
 
 
 # --- Loss Function Implementations ---
+def hausdorff_distance_loss(pred, target):
+    """
+    Computes the Hausdorff Distance Loss for multi-class segmentation.
+
+    Args:
+        pred (torch.Tensor): The predicted logits from the model,
+                             of shape (N, C, H, W) where N is batch size,
+                             C is number of classes, and H, W are dimensions.
+        target (torch.Tensor): The ground truth segmentation masks,
+                               of shape (N, H, W) with integer class labels.
+
+    Returns:
+        torch.Tensor: The mean Hausdorff distance loss across all classes.
+    """
+    # Get the number of classes from the prediction tensor
+    num_classes = pred.shape[1]
+
+    # One-hot encode the target mask to match the prediction tensor shape
+    target_onehot = F.one_hot(target, num_classes=num_classes).permute(0, 3, 1, 2).float()
+
+    # The loss will be the sum of Hausdorff distances for each class
+    total_hausdorff_distance = torch.zeros(num_classes, device=pred.device)
+
+    # Convert logits to probabilities (not strictly necessary for distance, but good practice)
+    pred_prob = F.softmax(pred, dim=1)
+
+    for i in range(num_classes):
+        # Calculate the Hausdorff distance for the current class
+        # We compare the predicted probability map for class i against its ground truth one-hot mask
+        # binary_hausdorff_distance expects binary inputs (0 or 1), so we use a threshold.
+        # A threshold of 0.5 is a common choice for converting probabilities to binary masks.
+        pred_binary = (pred_prob[:, i, :, :] > 0.5).long()
+        target_binary = target_onehot[:, i, :, :].long()
+
+        # Calculate the distance for the current class and add it to the total
+        total_hausdorff_distance[i] = hausdorff_distance(pred_binary, target_binary, num_classes=2)
+
+    # The final loss is the mean of the Hausdorff distances over all classes
+    return total_hausdorff_distance.mean()
+
+
 def dice_loss(pred, target, epsilon=1e-6):
     """
     Computes the Dice Loss.
@@ -74,6 +116,14 @@ class BaseLoss(nn.Module, ABC):
         pass
 
 
+class HausdorffDistanceLoss(BaseLoss):
+    def __init__(self):
+        super(HausdorffDistanceLoss, self).__init__()
+
+    def forward(self, pred, target):
+        return hausdorff_distance_loss(pred, target)
+
+
 class DiceLoss(BaseLoss):
     def __init__(self):
         super(DiceLoss, self).__init__()
@@ -115,7 +165,7 @@ class IoULoss(BaseLoss):
 
 class HybridLoss(nn.Module):
     def __init__(self, weight_ce=1.0, weight_dice=1.0,
-                 weight_focal=1.0, weight_tversky=1.0, weight_iou=1.0):
+                 weight_focal=1.0, weight_tversky=1.0, weight_iou=1.0, weight_hausdorff=1.0):
         super(HybridLoss, self).__init__()
         self.weight_ce = weight_ce
         self.weight_dice = weight_dice
@@ -127,6 +177,7 @@ class HybridLoss(nn.Module):
         self.focal_loss = FocalLoss()
         self.tversky_loss = TverskyLoss(alpha=0.2, beta=0.4)
         self.iou_loss = IoULoss()
+        self.hausdorff_loss = HausdorffDistanceLoss()
 
     def forward(self, pred, target):
         target_squeezed = target.squeeze(1)
@@ -135,13 +186,15 @@ class HybridLoss(nn.Module):
         loss_focal = self.focal_loss(pred, target_squeezed)
         loss_tversky = self.tversky_loss(pred, target_squeezed)
         loss_iou = self.iou_loss(pred, target_squeezed)
+        loss_hausdorff = self.hausdorff_loss(pred, target_squeezed)
 
         total_loss = (
                 self.weight_ce * loss_ce +
                 self.weight_dice * loss_dice +
                 self.weight_focal * loss_focal +
                 self.weight_tversky * loss_tversky +
-                self.weight_iou * loss_iou
+                self.weight_iou * loss_iou +
+                self.weight_hausdorff * loss_hausdorff
         )
         return total_loss
 

@@ -30,6 +30,9 @@ def main():
         logger.error(f"Error decoding JSON from 'params.json': {e}")
         return
 
+    pretrained_model = params['pretrained_model']
+    checkpoint_path = params['checkpoint_path']
+
     test_split = params['test_split']
     num_classes = params['num_classes']
     batch_size = params['batch_size']
@@ -73,13 +76,13 @@ def main():
         return
 
     """
-    Save the names of the files in the validation/test subset for 
+    Save the names of the files in the validation & training subset for 
     later use
     """
-    df_file = pd.DataFrame({"val_image": val_images,
-                            "val_masks": val_masks, })
-    df_file.to_csv("validate_files.csv",
-                   index=False)
+    df_dict = {"image": train_images + val_images, "mask": train_masks + val_masks,
+               "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
+    df_file = pd.DataFrame(df_dict).to_csv("training_validation_files.csv",
+                                           index=False)
 
     """ 
     Data sets and loaders
@@ -121,10 +124,9 @@ def main():
     Setup the model 
 
     """
-
-    model = SegformerBinarySegmentation(num_classes=num_classes)
-    model.load_state_dict(torch.load("/content/drive/MyDrive/SegmenterProject/best_dice_model_all_sources.pth", map_location=device))
-    model.to(device)
+    model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
+                                        num_classes=num_classes,
+                                        checkpoint_path=checkpoint_path).to(device)
     logger.info(f"Instantiated model with {model.num_classes} classes.")
 
     denom = 0.0
@@ -231,5 +233,3 @@ if __name__ == "__main__":
             handler.flush()
             handler.close()
         logger.info("Logger handlers flushed and closed. Exiting now.")
-
-
