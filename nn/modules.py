@@ -245,7 +245,7 @@ class HybridLoss(nn.Module):
         self.focal_loss = FocalLoss()
         self.tversky_loss = TverskyLoss(alpha=0.2, beta=0.4)
         self.iou_loss = IoULoss()
-        self.hausdorff_loss = HausdorffDistanceLoss()
+        # self.hausdorff_loss = HausdorffDistanceLoss()
 
     def forward(self, pred, target):
         target_squeezed = target.squeeze(1)
@@ -254,15 +254,15 @@ class HybridLoss(nn.Module):
         loss_focal = self.focal_loss(pred, target_squeezed)
         loss_tversky = self.tversky_loss(pred, target_squeezed)
         loss_iou = self.iou_loss(pred, target_squeezed)
-        loss_hausdorff = self.hausdorff_loss(pred, target_squeezed)
+        # loss_hausdorff = self.hausdorff_loss(pred, target_squeezed)
 
         total_loss = (
                 self.weight_ce * loss_ce +
                 self.weight_dice * loss_dice +
                 self.weight_focal * loss_focal +
                 self.weight_tversky * loss_tversky +
-                self.weight_iou * loss_iou +
-                self.weight_hausdorff * loss_hausdorff
+                self.weight_iou * loss_iou
+                # self.weight_hausdorff * loss_hausdorff
         )
         return total_loss
 
