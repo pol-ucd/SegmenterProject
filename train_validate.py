@@ -2,6 +2,7 @@ import json
 import logging
 import sys
 
+import numpy as np
 import pandas as pd
 import torch
 from torch import GradScaler
@@ -79,7 +80,8 @@ def main():
     Save the names of the files in the validation & training subset for 
     later use
     """
-    df_dict = {"image": train_images + val_images, "mask": train_masks + val_masks,
+    df_dict = {"image": np.concatenate([train_images, val_images]),
+               "mask": np.concatenate([train_masks, val_masks]),
                "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
     df_file = pd.DataFrame(df_dict).to_csv("training_validation_files.csv",
                                            index=False)
