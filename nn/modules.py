@@ -96,7 +96,7 @@ def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
     return loss_tversky.mean()
 
 
-def dice_loss(pred, true_mask):
+def dice_loss(pred, true_mask, epsilon=1e-6):
     """
     Calculates the multi-class Dice Loss.
 
@@ -114,7 +114,6 @@ def dice_loss(pred, true_mask):
         torch.Tensor: The calculated multi-class Dice Loss.
     """
     # A small constant to prevent division by zero.
-    epsilon = 1e-6
 
     # Get the device and number of classes
     device = pred.device
@@ -166,7 +165,7 @@ class BaseLoss(nn.Module, ABC):
     """
     Abstract base class for all losses.
     """
-    def __init__(self):
+    def __init__(self, epsilon=1e-6):
         super(BaseLoss, self).__init__()
         self.epsilon = 1e-6
 
@@ -184,7 +183,7 @@ class BoundaryLoss(BaseLoss):
 
 
 class DiceLoss(BaseLoss):
-    def __init__(self):
+    def __init__(self, epsilon=1e-6):
         super(DiceLoss, self).__init__()
 
     def forward(self, pred, target):
