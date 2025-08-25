@@ -1,10 +1,13 @@
 import logging
 import os
 import random
+from datetime import datetime
 from glob import glob
 from typing import Any, Tuple
 
 import numpy as np
+import pandas as pd
+import torch
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
@@ -288,4 +291,115 @@ def split_images_and_masks(image_paths: list = None,
 
     return (all_images[train_idx], all_masks[train_idx],
             all_images[test_idx], all_masks[test_idx])
+
+
+class CheckpointError(Exception):
+    """
+    Custom exception for errors related to loading or saving CSV files
+    within the CSVHandler class.
+    """
+
+    def __init__(self, message="An error occurred with the CSV file operation."):
+        self.message = message
+        super().__init__(self.message)
+
+
+class CheckpointHandler:
+    """
+    A class to handle loading and saving pandas DataFrames from CSV files.
+
+    This class provides methods to load a CSV file, save the DataFrame to a
+    CSV file, and includes error handling using a custom exception class.
+    """
+
+    def __init__(self, save_file_path: str=None, load_file_path: str=None,
+                 suffix: str = None, prefix: str=None):
+        """
+        Initializes the CheckpointHandler with an option
+        al file path.
+
+        Args:
+            save_file_path (str, optional): The path to the checkpoint file to be loaded.
+                                       If provided, it will attempt to load the data.
+            load_file_path (str, optional): The path to the checkpoint file to be loaded.
+            suffix (str, optional): The optional datetime suffix appended to the filename
+                                      If provided it is appended at save time and used as
+                                      a suffix to search for a checkpoint at load time.
+                                      Defaults to None in which case a system generated
+                                      datetime suffix is used for load and save.
+        """
+
+        self.prefix = prefix if prefix is not None else "model_checkpoint"
+        self.suffix = suffix
+        if suffix is None:
+            # Get the current date and time
+            now = datetime.now()
+            # YYYY-MM-DD_HH-MM-SS
+            self.suffix = now.strftime("%Y-%m-%d_%H-%M-%S")
+
+        self.df = pd.DataFrame()  # Initialize an empty DataFrame
+        self.pt = None
+        self.train_images, self.train_masks, self.test_images, self.test_masks = None, None, None, None
+
+        self.save_file_path = save_file_path
+        self.load_file_path = load_file_path
+        if load_file_path:
+            self.load()
+
+    def load(self):
+        """
+        Loads a CSV file into the class's DataFrame attribute.
+
+        Args:
+            file_path (str, optional): The path to the CSV file. If not provided,
+                                       it uses the file_path from initialization.
+        """
+        file_name = self.prefix + "_" + self.suffix
+        pt_name = os.path.join(self.load_file_path, file_name + ".pt")
+        csv_name = os.path.join(self.load_file_path, file_name + ".csv")
+        if not os.path.isfile(pt_name) or not os.path.isfile(csv_name):
+            raise CheckpointError(f"Checkpoint not found or path is invalid: {self.load_file_path}")
+
+        try:
+            self.df = pd.read_csv(csv_name)
+            self.pt = torch.load(pt_name)
+        except pd.errors.EmptyDataError:
+            self.df = pd.DataFrame()  # Reset DataFrame
+            raise CheckpointError(f"The file {self.load_file_path} is empty.")
+        except pd.errors.ParserError as e:
+            self.df = pd.DataFrame()
+            raise CheckpointError(f"Unable to parse the file {self.load_file_path}. Check its format. Original error: {e}")
+        except Exception as e:
+            self.df = pd.DataFrame()
+            raise CheckpointError(f"An unexpected error occurred during loading: {e}")
+        self.train_images = self.df[self.df.phase == "T"]["image"].values
+        self.train_masks = self.df[self.df.phase == "T"]["mask"].values
+        self.val_images = self.df[self.df.phase == "V"]["image"].values
+        self.val_masks = self.df[self.df.phase == "V"]["mask"].values
+
+    def save(self, index: bool=False):
+        """
+        Saves the current DataFrame to a CSV file.
+
+        Args:
+            index (bool): Whether to write the DataFrame index to the CSV.
+                          Defaults to False.
+        """
+        file_name = self.prefix + "_" + self.suffix
+        pt_name = os.path.join(self.save_file_path, file_name + ".pt")
+        csv_name = os.path.join(self.save_file_path, file_name + ".csv")
+
+        # Ensure the directory exists before saving
+        directory = os.path.dirname(self.save_file_path)
+        if directory and not os.path.exists(directory):
+            try:
+                os.makedirs(directory)
+            except OSError as e:
+                raise CheckpointError(f"Error creating directory {directory}: {e}")
+
+        try:
+            self.df.to_csv(csv_name, index=index)
+            torch.save(self.pt, pt_name)
+        except Exception as e:
+            raise CheckpointError(f"An error occurred while saving the Checkpoint: {e}")
 

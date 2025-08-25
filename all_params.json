@@ -1,0 +1,46 @@
+{
+    "test_split": 0.05,
+    "num_classes": 2,
+    "batch_size": 8,
+    "num_workers": 0,
+    "n_augments": 2,
+    "image_size": [512, 512],
+    "optimizer_settings": {
+        "learning_rate": 1e-5,
+        "l2_decay_penalty": 1e-5
+    },
+    "n_epochs": 100,
+    "stopper_patience": 5,
+    "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
+    "checkpoint_path": null,
+    "save_model_name": "best_dice_model_all_sources.pt",
+    "loss_weights": {
+        "weight_ce": 0.0,
+        "weight_dice": 0.0,
+        "weight_focal": 0.0,
+        "weight_tversky": 0.0,
+        "weight_iou": 1.0,
+        "weight_hausdorff": 0.0
+    },
+    "scheduler": {
+        "name": "CosineAnnealingLR",
+        "T_max": 50
+    },
+    "datasets": {
+        "image_paths": [
+            "data/Classica/images",
+            "data/Polyp Segmentation/train",
+            "data/Polyp Segmentation/valid"
+        ],
+        "mask_paths": [
+            "data/Classica/masks",
+            "data/Polyp Segmentation/train_masks",
+            "data/Polyp Segmentation/valid_masks"
+        ],
+        "file_types": [
+            "*.jpg",
+            "*.png",
+            "*.jpeg"
+        ]
+    }
+}

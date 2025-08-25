@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from nn.data import (split_images_and_masks,
                      SemanticSegmentationDatasetAugmentor,
-                     SemanticSegmentationDatasetBasic)
+                     SemanticSegmentationDatasetBasic, CheckpointHandler)
 from nn.models import SegformerBinarySegmentation
 from nn.modules import EarlyStopping, HybridLoss
 from utils.torch_utils import RunManager
@@ -19,6 +19,10 @@ from utils.torch_utils import RunManager
 def main():
     # logger = logging.getLogger(__name__)
     logger = logging.getLogger()
+    save_file_path = "/content/drive/MyDrive/SegmenterProject/checkpoint"
+    load_file_path = None
+    checkpointer = CheckpointHandler(save_file_path=save_file_path,
+                                     load_file_path=load_file_path)
 
     # --- Load parameters from JSON file ---
     try:
@@ -199,8 +203,6 @@ def main():
 
         logger.info(f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
         logger.info(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
-        # print(f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
-        # print(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
 
         scheduler.step(epoch + 1)
 
