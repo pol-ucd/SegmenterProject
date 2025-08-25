@@ -502,6 +502,6 @@ class CheckpointManager:
             raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
 
         # Load the state dictionary and apply it to the model
-        model.load_state_dict(torch.load(filepath, map_location=device))
+        model.load_state_dict(torch.load(filepath, map_location=device, weights_only=False))
         self.logger.log(f"Checkpoint loaded successfully from: {filepath}")
         return model
