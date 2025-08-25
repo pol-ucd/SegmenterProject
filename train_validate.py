@@ -74,7 +74,7 @@ def main():
                                         num_classes=num_classes)
     try:
         # Get the list of saved checkpoints
-        checkpoints = sorted(glob.glob(checkpoint_path, *.pt""))
+        checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, "*.pt")))
         if checkpoints:
             latest_checkpoint = checkpoints[-1]
             cp_manager.load(model, latest_checkpoint, device=device)
