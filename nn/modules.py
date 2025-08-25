@@ -96,6 +96,58 @@ def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
     return loss_tversky.mean()
 
 
+def dice_loss(pred, true_mask):
+    """
+    Calculates the multi-class Dice Loss.
+
+    This implementation is fully vectorized for efficiency and follows the
+    standard Dice Loss formula. It's designed to be used with the same
+    inputs as the boundary loss function.
+
+    Args:
+        pred (torch.Tensor): The model's raw output prediction tensor.
+                             Expected shape: (N, C, H, W).
+        true_mask (torch.Tensor): The ground truth mask tensor with class indices.
+                                  Expected shape: (N, H, W).
+
+    Returns:
+        torch.Tensor: The calculated multi-class Dice Loss.
+    """
+    # A small constant to prevent division by zero.
+    epsilon = 1e-6
+
+    # Get the device and number of classes
+    device = pred.device
+    num_classes = pred.shape[1]
+
+    # Apply softmax to the predictions to get probabilities per class
+    # Alternatively, you could use sigmoid if your model doesn't use softmax
+    # on the output layer. For multi-class, softmax is more common.
+    pred_prob = F.softmax(pred, dim=1)
+
+    # Convert true_mask from class indices to a one-hot encoded tensor
+    # Shape changes from (N, H, W) to (N, C, H, W)
+    true_mask_one_hot = F.one_hot(true_mask.long(), num_classes=num_classes).permute(0, 3, 1, 2).float()
+
+    # Flatten the tensors for easier element-wise operations and summation
+    # Shape changes from (N, C, H, W) to (N*C, H*W)
+    pred_flat = pred_prob.view(-1, pred.shape[2] * pred.shape[3])
+    true_flat = true_mask_one_hot.view(-1, true_mask_one_hot.shape[2] * true_mask_one_hot.shape[3])
+
+    # Calculate the intersection (true positives)
+    intersection = (pred_flat * true_flat).sum(dim=1)
+
+    # Calculate the union (predicted positives + true positives)
+    union = pred_flat.sum(dim=1) + true_flat.sum(dim=1)
+
+    # Calculate the Dice score and loss
+    dice_score = (2. * intersection + epsilon) / (union + epsilon)
+    dice_loss_val = 1.0 - dice_score
+
+    # Average the loss across all samples and classes
+    return dice_loss_val.mean()
+
+
 def iou_loss(pred, target, epsilon=1e-6):
     """
     Computes the IoU Loss.
