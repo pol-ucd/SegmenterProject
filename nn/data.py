@@ -431,14 +431,15 @@ class CheckpointManager:
         min_delta (float): The minimum change in accuracy to qualify as an improvement.
     """
 
-    def __init__(self, checkpoint_dir,
-                 prefix="model_checkpoint",
-                 patience=5,
-                 min_delta=0.0):
+    def __init__(self, checkpoint_dir: str,
+                 prefix: str ="model_checkpoint",
+                 patience: int =5,
+                 min_delta: float =0.0):
         # Ensure the checkpoint directory exists
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         self.checkpoint_dir = checkpoint_dir
         self.prefix = prefix
@@ -448,7 +449,7 @@ class CheckpointManager:
         self.epochs_without_improvement = 0
         self.stop_training = False
 
-    def save(self, model, current_accuracy):
+    def save(self, model, current_accuracy) -> bool:
         """
         Saves the model checkpoint if the current accuracy is the best seen so far.
 
@@ -467,8 +468,7 @@ class CheckpointManager:
             self.epochs_without_improvement = 0
 
             # Generate a timestamp for the filename
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{self.prefix}_{timestamp}.pt"
+            filename = f"{self.prefix}_{self.timestamp}.pt"
             filepath = os.path.join(self.checkpoint_dir, filename)
 
             # Save the model's state dictionary
@@ -486,14 +486,15 @@ class CheckpointManager:
 
         return self.stop_training
 
-    def load(self, model, filename, device=torch.device("cpu")):
+    def load(self, model:torch.nn.Module, filename: str,
+             device: torch.device =torch.device("cpu")) -> torch.nn.Module:
         """
         Loads a model's state from a checkpoint file.
 
         Args:
             model (torch.nn.Module): The PyTorch model instance to load the state into.
             filename (str): The name of the checkpoint file to load.
-
+            device (torch.device): The device on which to load the checkpoint file.
         Returns:
             torch.nn.Module: The model with the loaded state.
         """

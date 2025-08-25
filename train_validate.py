@@ -75,10 +75,11 @@ def main():
                                         num_classes=num_classes)
     try:
         # Get the list of saved checkpoints
-        checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, "*.pt")))
+        checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
         if checkpoints:
             latest_checkpoint = checkpoints[-1]
             cp_manager.load(model, latest_checkpoint, device=device)
+            logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
         else:
             logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
     except FileNotFoundError as e:
@@ -221,9 +222,9 @@ def main():
 
         scheduler.step(epoch + 1)
 
-        stop_training = cp_manager.save(model, val_miou)
+        stop_training = cp_manager.save(model, 1 - val_miou)
         if stop_training:
-            logger.info(f"Training stopped early at epoch {epoch}")
+            logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
             break
 
 
