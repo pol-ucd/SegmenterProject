@@ -14,6 +14,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision.transforms import functional as F
 
+from nn.modules import EarlyStopping
+
 
 # --- Custom Paired Augmentation Classes ---
 # These classes ensure the same random transformation is applied to both the image and the mask.
@@ -312,16 +314,16 @@ class CheckpointHandler:
     CSV file, and includes error handling using a custom exception class.
     """
 
-    def __init__(self, save_file_path: str=None, load_file_path: str=None,
-                 suffix: str = None, prefix: str=None):
+    def __init__(self, save_path: str = None, load_path: str = None,
+                 suffix: str = None, prefix: str = None, stopper_patience: int = 7):
         """
         Initializes the CheckpointHandler with an option
         al file path.
 
         Args:
-            save_file_path (str, optional): The path to the checkpoint file to be loaded.
+            save_path (str, optional): The path to the checkpoint file to be loaded.
                                        If provided, it will attempt to load the data.
-            load_file_path (str, optional): The path to the checkpoint file to be loaded.
+            load_path (str, optional): The path to the checkpoint file to be loaded.
             suffix (str, optional): The optional datetime suffix appended to the filename
                                       If provided it is appended at save time and used as
                                       a suffix to search for a checkpoint at load time.
@@ -341,9 +343,27 @@ class CheckpointHandler:
         self.pt = None
         self.train_images, self.train_masks, self.test_images, self.test_masks = None, None, None, None
 
-        self.save_file_path = save_file_path
-        self.load_file_path = load_file_path
-        if load_file_path:
+        self.save_file_path = save_path
+        self.load_file_path = load_path
+        file_name = self.prefix + "_" + self.suffix
+        if load_path is not None:
+            self.load_pt_name = os.path.join(self.load_file_path, file_name + ".pt")
+            self.load_csv_name = os.path.join(self.load_file_path, file_name + ".csv")
+        else:
+            self.load_pt_name = None
+            self.load_csv_name = None
+        if save_path is not None:
+            self.save_pt_name = os.path.join(self.save_file_path, file_name + ".pt")
+            self.save_csv_name = os.path.join(self.save_file_path, file_name + ".csv")
+        else:
+            self.save_pt_name = None
+            self.save_csv_name = None
+
+        self.criterion = EarlyStopping(patience=stopper_patience, min_delta=0.0001,
+                                       mode='min', verbose=True,
+                                       save_path=self.save_pt_name)
+
+        if load_path:
             self.load()
 
     def load(self):
@@ -354,41 +374,34 @@ class CheckpointHandler:
             file_path (str, optional): The path to the CSV file. If not provided,
                                        it uses the file_path from initialization.
         """
-        file_name = self.prefix + "_" + self.suffix
-        pt_name = os.path.join(self.load_file_path, file_name + ".pt")
-        csv_name = os.path.join(self.load_file_path, file_name + ".csv")
-        if not os.path.isfile(pt_name) or not os.path.isfile(csv_name):
-            raise CheckpointError(f"Checkpoint not found or path is invalid: {self.load_file_path}")
 
         try:
-            self.df = pd.read_csv(csv_name)
-            self.pt = torch.load(pt_name)
+            self.df = pd.read_csv(self.load_csv_name)
+            self.pt = torch.load(self.load_pt_name)
         except pd.errors.EmptyDataError:
             self.df = pd.DataFrame()  # Reset DataFrame
             raise CheckpointError(f"The file {self.load_file_path} is empty.")
         except pd.errors.ParserError as e:
             self.df = pd.DataFrame()
-            raise CheckpointError(f"Unable to parse the file {self.load_file_path}. Check its format. Original error: {e}")
+            raise CheckpointError(
+                f"Unable to parse the file {self.load_file_path}. Check its format. Original error: {e}")
         except Exception as e:
             self.df = pd.DataFrame()
             raise CheckpointError(f"An unexpected error occurred during loading: {e}")
-        self.train_images = self.df[self.df.phase == "T"]["image"].values
-        self.train_masks = self.df[self.df.phase == "T"]["mask"].values
-        self.val_images = self.df[self.df.phase == "V"]["image"].values
-        self.val_masks = self.df[self.df.phase == "V"]["mask"].values
 
-    def save(self, index: bool=False):
+        return self.df, self.pt
+
+    def save(self, df: pd.DataFrame,
+             obj: Any, index: bool = False):
         """
         Saves the current DataFrame to a CSV file.
 
         Args:
+            df (pd.DataFrame): The DataFrame to be saved.
+            obj (Any): The object to be saved (usually model weights)
             index (bool): Whether to write the DataFrame index to the CSV.
                           Defaults to False.
         """
-        file_name = self.prefix + "_" + self.suffix
-        pt_name = os.path.join(self.save_file_path, file_name + ".pt")
-        csv_name = os.path.join(self.save_file_path, file_name + ".csv")
-
         # Ensure the directory exists before saving
         directory = os.path.dirname(self.save_file_path)
         if directory and not os.path.exists(directory):
@@ -398,8 +411,97 @@ class CheckpointHandler:
                 raise CheckpointError(f"Error creating directory {directory}: {e}")
 
         try:
-            self.df.to_csv(csv_name, index=index)
-            torch.save(self.pt, pt_name)
+            df.to_csv(self.save_csv_name, index=index)
+            torch.save(obj, self.save_pt_name)
         except Exception as e:
             raise CheckpointError(f"An error occurred while saving the Checkpoint: {e}")
 
+
+class CheckpointManager:
+    """
+    A class to manage PyTorch model checkpoints with built-in early stopping.
+
+    This class handles saving the model state when validation accuracy improves and
+    provides a mechanism to stop training if performance plateaus.
+
+    Args:
+        checkpoint_dir (str): The directory where checkpoints will be saved.
+        prefix (str): A string prefix for checkpoint filenames.
+        patience (int): The number of epochs to wait for improvement before stopping.
+        min_delta (float): The minimum change in accuracy to qualify as an improvement.
+    """
+
+    def __init__(self, checkpoint_dir,
+                 prefix="model_checkpoint",
+                 patience=5,
+                 min_delta=0.0):
+        # Ensure the checkpoint directory exists
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+        self.checkpoint_dir = checkpoint_dir
+        self.prefix = prefix
+        self.patience = patience
+        self.min_delta = min_delta
+        self.best_accuracy = float('-inf')  # Initialize with a very low value
+        self.epochs_without_improvement = 0
+        self.stop_training = False
+
+    def save(self, model, current_accuracy):
+        """
+        Saves the model checkpoint if the current accuracy is the best seen so far.
+
+        This method also updates the internal state for early stopping.
+
+        Args:
+            model (torch.nn.Module): The PyTorch model to save.
+            current_accuracy (float): The current validation accuracy.
+
+        Returns:
+            bool: True if training should stop, False otherwise.
+        """
+        if current_accuracy > self.best_accuracy + self.min_delta:
+            # New best accuracy found, save the model and reset the counter
+            self.best_accuracy = current_accuracy
+            self.epochs_without_improvement = 0
+
+            # Generate a timestamp for the filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{self.prefix}_{timestamp}.pt"
+            filepath = os.path.join(self.checkpoint_dir, filename)
+
+            # Save the model's state dictionary
+            torch.save(model.state_dict(), filepath)
+            self.logger.log(f"Checkpoint saved: {filepath} with accuracy: {current_accuracy:.4f}")
+        else:
+            # No significant improvement, increment the counter
+            self.epochs_without_improvement += 1
+            self.logger.log(f"No improvement. Epochs without improvement: {self.epochs_without_improvement}")
+
+        # Check if the patience limit has been reached
+        if self.epochs_without_improvement >= self.patience:
+            self.stop_training = True
+            self.logger.log(f"Early stopping triggered. Training will be stopped after this epoch.")
+
+        return self.stop_training
+
+    def load(self, model, filename):
+        """
+        Loads a model's state from a checkpoint file.
+
+        Args:
+            model (torch.nn.Module): The PyTorch model instance to load the state into.
+            filename (str): The name of the checkpoint file to load.
+
+        Returns:
+            torch.nn.Module: The model with the loaded state.
+        """
+        filepath = os.path.join(self.checkpoint_dir, filename)
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
+
+        # Load the state dictionary and apply it to the model
+        model.load_state_dict(torch.load(filepath))
+        self.logger.log(f"Checkpoint loaded successfully from: {filepath}")
+        return model

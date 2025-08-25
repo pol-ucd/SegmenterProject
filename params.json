@@ -10,10 +10,13 @@
         "l2_decay_penalty": 1e-5
     },
     "n_epochs": 100,
-    "stopper_patience": 5,
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
-    "checkpoint_path": null,
-    "save_model_name": "best_dice_model_classica_augur.pt",
+    "checkpoints": {
+        "path": "/content/drive/MyDrive/SegmenterProject/checkpoint",
+        "prefix": "model_classica_augur",
+        "patience": 5,
+        "min_delta": 0.001
+    },
     "loss_weights": {
         "weight_ce": 1.0,
         "weight_dice": 0.0,

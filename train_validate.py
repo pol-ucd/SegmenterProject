@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import sys
 
 import numpy as np
@@ -10,19 +11,15 @@ from torch.utils.data import DataLoader
 
 from nn.data import (split_images_and_masks,
                      SemanticSegmentationDatasetAugmentor,
-                     SemanticSegmentationDatasetBasic, CheckpointHandler)
+                     SemanticSegmentationDatasetBasic, CheckpointManager)
 from nn.models import SegformerBinarySegmentation
-from nn.modules import EarlyStopping, HybridLoss
+from nn.modules import HybridLoss
 from utils.torch_utils import RunManager
 
 
 def main():
     # logger = logging.getLogger(__name__)
     logger = logging.getLogger()
-    save_file_path = "/content/drive/MyDrive/SegmenterProject/checkpoint"
-    load_file_path = None
-    checkpointer = CheckpointHandler(save_file_path=save_file_path,
-                                     load_file_path=load_file_path)
 
     # --- Load parameters from JSON file ---
     try:
@@ -36,7 +33,10 @@ def main():
         return
 
     pretrained_model = params['pretrained_model']
-    checkpoint_path = params['checkpoint_path']
+    checkpoint_path = params['checkpoints']['path']
+    checkpoint_prefix = params['checkpoints']['prefix']
+    checkpoint_patience = params['checkpoints']['patience']
+    checkpoint_min_delta = params['checkpoints']['min_delta']
 
     test_split = params['test_split']
     num_classes = params['num_classes']
@@ -47,8 +47,6 @@ def main():
     learning_rate = params['optimizer_settings']['learning_rate']
     l2_decay_penalty = params['optimizer_settings']['l2_decay_penalty']
     n_epochs = params['n_epochs']
-    stopper_patience = params['stopper_patience']
-    save_model_name = params['save_model_name']
 
     image_paths = params["datasets"]["image_paths"]
     mask_paths = params["datasets"]["mask_paths"]
@@ -58,6 +56,35 @@ def main():
 
     logger.info(f"Using {device} device for model training.")
     logger.info(f"Loaded parameters: {params}")
+
+    # cph = CheckpointHandler(save_path=checkpoint_save_path,
+    #                         load_path=checkpoint_load_path,
+    #                         prefix=checkpoint_prefix,
+    #                         suffix=checkpoint_suffix)
+    #
+    cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
+                                   prefix=checkpoint_prefix,
+                                   patience=checkpoint_patience,
+                                   min_delta=checkpoint_min_delta)
+
+    """
+    Setup the model 
+    """
+    model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
+                                        num_classes=num_classes)
+    try:
+        # Get the list of saved checkpoints
+        checkpoints = sorted(os.listdir(checkpoint_path))
+        if checkpoints:
+            latest_checkpoint = checkpoints[-1]
+            cp_manager.load(model, latest_checkpoint)
+        else:
+            logger.log("No checkpoints were saved to load.")
+    except FileNotFoundError as e:
+        logger.log(f"Unable to load checkpoint {e}")
+
+    model.to(device)
+    logger.info(f"Instantiated model with {model.num_classes} classes.")
 
     """
     Load the list of training and testing images and masks.
@@ -87,8 +114,8 @@ def main():
     df_dict = {"image": np.concatenate([train_images, val_images]),
                "mask": np.concatenate([train_masks, val_masks]),
                "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
-    df_file = pd.DataFrame(df_dict).to_csv("training_validation_files.csv",
-                                           index=False)
+    pd.DataFrame(df_dict).to_csv("training_validation_files.csv",
+                                 index=False)
 
     """ 
     Data sets and loaders
@@ -125,15 +152,6 @@ def main():
 
     logger.info(f"Training batches: {len(train_loader)}")
     logger.info(f"Test batches: {len(val_loader)}")
-
-    """
-    Setup the model 
-
-    """
-    model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
-                                        num_classes=num_classes,
-                                        checkpoint_path=checkpoint_path).to(device)
-    logger.info(f"Instantiated model with {model.num_classes} classes.")
 
     denom = 0.0
     for weight in params['loss_weights']:
@@ -184,10 +202,6 @@ def main():
     train_params = {}
     eval_params = {}
 
-    early_stopper = EarlyStopping(patience=stopper_patience, min_delta=0.0001,
-                                  mode='min', verbose=True,
-                                  save_path=save_model_name)
-
     for epoch in range(n_epochs):
         logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
@@ -206,9 +220,8 @@ def main():
 
         scheduler.step(epoch + 1)
 
-        early_stopper(val_miou, model, epoch)
-
-        if early_stopper.early_stop:
+        stop_training = cp_manager.save(model, val_miou)
+        if stop_training:
             logger.info(f"Training stopped early at epoch {epoch}")
             break
 
