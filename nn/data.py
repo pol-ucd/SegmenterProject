@@ -486,7 +486,7 @@ class CheckpointManager:
 
         return self.stop_training
 
-    def load(self, model, filename):
+    def load(self, model, filename, device=torch.device("cpu")):
         """
         Loads a model's state from a checkpoint file.
 
@@ -502,6 +502,6 @@ class CheckpointManager:
             raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
 
         # Load the state dictionary and apply it to the model
-        model.load_state_dict(torch.load(filepath))
+        model.load_state_dict(torch.load(filepath, map_location=device))
         self.logger.log(f"Checkpoint loaded successfully from: {filepath}")
         return model

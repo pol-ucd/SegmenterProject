@@ -77,7 +77,7 @@ def main():
         checkpoints = sorted(os.listdir(checkpoint_path))
         if checkpoints:
             latest_checkpoint = checkpoints[-1]
-            cp_manager.load(model, latest_checkpoint)
+            cp_manager.load(model, latest_checkpoint, device=device)
         else:
             logger.log("No checkpoints were saved to load.")
     except FileNotFoundError as e:
