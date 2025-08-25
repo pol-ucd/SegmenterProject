@@ -5,128 +5,68 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from scipy.spatial.distance import directed_hausdorff
+from scipy.ndimage import distance_transform_edt
 
 
-# from torchmetrics.functional.segmentation import hausdorff_distance
-
-
-# --- Loss Function Implementations ---
-# def hausdorff_distance_loss(pred, target):
-#     """
-#     Computes the Hausdorff Distance Loss for multi-class segmentation.
-#
-#     Args:
-#         pred (torch.Tensor): The predicted logits from the model,
-#                              of shape (N, C, H, W) where N is batch size,
-#                              C is number of classes, and H, W are dimensions.
-#         target (torch.Tensor): The ground truth segmentation masks,
-#                                of shape (N, H, W) with integer class labels.
-#
-#     Returns:
-#         torch.Tensor: The mean Hausdorff distance loss across all classes.
-#     """
-#     # Get the number of classes from the prediction tensor
-#     num_classes = pred.shape[1]
-#
-#     # One-hot encode the target mask to match the prediction tensor shape
-#     target_onehot = F.one_hot(target, num_classes=num_classes).permute(0, 3, 1, 2).float()
-#
-#     # The loss will be the sum of Hausdorff distances for each class
-#     total_hausdorff_distance = torch.zeros(num_classes, device=pred.device)
-#
-#     # Convert logits to probabilities (not strictly necessary for distance, but good practice)
-#     pred_prob = F.softmax(pred, dim=1)
-#
-#     for i in range(num_classes):
-#         # Calculate the Hausdorff distance for the current class
-#         # We compare the predicted probability map for class i against its ground truth one-hot mask
-#         # binary_hausdorff_distance expects binary inputs (0 or 1), so we use a threshold.
-#         # A threshold of 0.5 is a common choice for converting probabilities to binary masks.
-#         pred_binary = (pred_prob[:, i, :, :] > 0.5).unsqueeze(1).long()
-#         target_binary = target_onehot[:, i, :, :].unsqueeze(1).long()
-#
-#         # Calculate the distance for the current class and add it to the total
-#         total_hausdorff_distance[i] = hausdorff_distance(preds=pred_binary,
-#                                                          target=target_binary,
-#                                                          num_classes=2)
-#
-#     # The final loss is the mean of the Hausdorff distances over all classes
-#     return total_hausdorff_distance.mean()
-
-
-def hausdorff_distance_loss(pred, target):
+def boundary_loss(pred, target):
     """
-    Computes the Hausdorff Distance Loss for multi-class segmentation using SciPy.
+    Calculates the multi-class boundary loss.
 
-    This function calculates the Hausdorff distance, which is the maximum of the
-    directed distances between the two sets of points (predicted and ground truth).
+    This refactored version calculates a signed distance map for each class
+    individually and sums their contributions to the final loss.
 
     Args:
-        pred (torch.Tensor): The predicted logits from the model,
-                             of shape (N, C, H, W) where N is batch size,
+        pred (torch.Tensor): The model's raw output prediction tensor.
+                             Expected shape: (N, C, H, W) where N is batch size,
                              C is number of classes, and H, W are dimensions.
-        target (torch.Tensor): The ground truth segmentation masks,
-                               of shape (N, H, W) with integer class labels.
+        target (torch.Tensor): The ground truth mask tensor with class indices.
+                                  Expected shape: (N, H, W).
 
     Returns:
-        torch.Tensor: The mean Hausdorff distance loss across all classes.
+        torch.Tensor: The calculated multi-class boundary loss.
     """
+    # Ensure inputs are on the same device
+    device = pred.device
     num_classes = pred.shape[1]
-    batch_size = pred.shape[0]
 
-    # One-hot encode the target mask to match the prediction tensor shape
-    target_onehot = F.one_hot(target, num_classes=num_classes).permute(0, 3, 1, 2).float()
+    # Convert true_mask from class indices to a one-hot encoded tensor
+    # Shape changes from (N, H, W) to (N, C, H, W)
+    target_one_hot = F.one_hot(target.long(), num_classes=num_classes).permute(0, 3, 1, 2).float()
 
-    total_hausdorff_distance = torch.zeros(num_classes, device=pred.device)
+    total_loss = 0.0
 
-    # Convert logits to probabilities
-    pred_prob = F.softmax(pred, dim=1)
+    # Iterate through each sample in the batch
+    for i in range(pred.shape[0]):
+        # Iterate through each class to calculate its contribution to the loss
+        for c in range(num_classes):
+            # Extract the single-channel prediction and true mask for the current class
+            pred_c = pred[i, c, :, :]
+            target_c = target_one_hot[i, c, :, :]
 
-    for i in range(num_classes):
-        # Convert tensors to binary masks and then to NumPy arrays for SciPy
-        pred_binary = (pred_prob[:, i, :, :] > 0.5).detach().cpu().numpy()
-        target_binary = target_onehot[:, i, :, :].detach().cpu().numpy()
+            # Move the true_mask to CPU and convert to a NumPy array for scipy
+            target_np = target_c.cpu().numpy()
 
-        class_hausdorff_distance = 0
-        for b in range(batch_size):
-            # Get the coordinates of the foreground pixels
-            pred_coords = np.argwhere(pred_binary[b] == 1)
-            target_coords = np.argwhere(target_binary[b] == 1)
+            # Calculate the signed distance map
+            # This is a CPU-only operation, which can be a bottleneck.
+            # For production, it's recommended to pre-calculate this during data loading.
+            dist_map_positive = distance_transform_edt(target_np)
+            dist_map_negative = distance_transform_edt(1 - target_np)
+            dist_map_np = dist_map_positive - dist_map_negative
 
-            # Handle cases where one or both masks are empty
-            if len(pred_coords) == 0 and len(target_coords) == 0:
-                batch_distance = 0.0
-            elif len(pred_coords) == 0 or len(target_coords) == 0:
-                # If one mask is empty and the other is not, the distance is undefined/infinite.
-                # Returning a large value handles this case.
-                batch_distance = 1e6  # A very large number
-            else:
-                # Calculate the directed Hausdorff distance from pred to target
-                dist_pt = directed_hausdorff(pred_coords, target_coords)[0]
-                # Calculate the directed Hausdorff distance from target to pred
-                dist_tp = directed_hausdorff(target_coords, pred_coords)[0]
-                # The final Hausdorff distance is the maximum of the two directed distances
-                batch_distance = max(dist_pt, dist_tp)
+            # Convert the distance map back to a PyTorch tensor and move to the original device
+            dist_map = torch.from_numpy(dist_map_np).float().to(device)
 
-            class_hausdorff_distance += batch_distance
+            # Apply sigmoid to the prediction to get a probability map
+            pred_sig = torch.sigmoid(pred_c)
 
-        total_hausdorff_distance[i] = class_hausdorff_distance / batch_size
+            # Calculate the per-class loss and add to the total
+            loss_c = (pred_sig * dist_map).mean()
+            total_loss += loss_c
 
-    # The final loss is the mean of the Hausdorff distances over all classes
-    return total_hausdorff_distance.mean()
+    # Calculate the mean loss over all samples and classes
+    final_loss = total_loss / (pred.shape[0] * num_classes)
 
-
-def dice_loss(pred, target, epsilon=1e-6):
-    """
-    Computes the Dice Loss.
-    """
-    pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
-    intersection = (pred * target_onehot).sum(dim=(2, 3))
-    union = pred.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))
-    dice = (2. * intersection + epsilon) / (union + epsilon)
-    return 1 - dice.mean()
+    return final_loss
 
 
 def focal_loss(pred, target, alpha=0.25, gamma=2.0, smooth=1e-6):
@@ -183,12 +123,12 @@ class BaseLoss(nn.Module, ABC):
         pass
 
 
-class HausdorffDistanceLoss(BaseLoss):
+class BoundaryLoss(BaseLoss):
     def __init__(self):
-        super(HausdorffDistanceLoss, self).__init__()
+        super(BoundaryLoss, self).__init__()
 
     def forward(self, pred, target):
-        return hausdorff_distance_loss(pred, target)
+        return boundary_loss(pred, target)
 
 
 class DiceLoss(BaseLoss):
@@ -232,20 +172,20 @@ class IoULoss(BaseLoss):
 
 class HybridLoss(nn.Module):
     def __init__(self, weight_ce=1.0, weight_dice=1.0,
-                 weight_focal=1.0, weight_tversky=1.0, weight_iou=1.0, weight_hausdorff=1.0):
+                 weight_focal=1.0, weight_tversky=1.0, weight_iou=1.0, weight_boundary=1.0):
         super(HybridLoss, self).__init__()
         self.weight_ce = weight_ce
         self.weight_dice = weight_dice
         self.weight_focal = weight_focal
         self.weight_tversky = weight_tversky
         self.weight_iou = weight_iou
-        self.weight_hausdorff = weight_hausdorff
+        self.weight_boundary = weight_boundary
         self.ce_loss = nn.CrossEntropyLoss()
         self.dice_loss = DiceLoss()
         self.focal_loss = FocalLoss()
         self.tversky_loss = TverskyLoss(alpha=0.2, beta=0.4)
         self.iou_loss = IoULoss()
-        # self.hausdorff_loss = HausdorffDistanceLoss()
+        self.boundary_loss = BoundaryLoss()
 
     def forward(self, pred, target):
         target_squeezed = target.squeeze(1)
@@ -254,15 +194,15 @@ class HybridLoss(nn.Module):
         loss_focal = self.focal_loss(pred, target_squeezed)
         loss_tversky = self.tversky_loss(pred, target_squeezed)
         loss_iou = self.iou_loss(pred, target_squeezed)
-        # loss_hausdorff = self.hausdorff_loss(pred, target_squeezed)
+        loss_boundary = self.boundary_loss(pred, target_squeezed)
 
         total_loss = (
                 self.weight_ce * loss_ce +
                 self.weight_dice * loss_dice +
                 self.weight_focal * loss_focal +
                 self.weight_tversky * loss_tversky +
-                self.weight_iou * loss_iou
-                # self.weight_hausdorff * loss_hausdorff
+                self.weight_iou * loss_iou +
+                self.weight_boundary * loss_boundary
         )
         return total_loss
 

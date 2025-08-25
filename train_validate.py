@@ -163,7 +163,8 @@ def main():
                          weight_dice=params['loss_weights']['weight_dice'] / denom,
                          weight_focal=params['loss_weights']['weight_focal'] / denom,
                          weight_tversky=params['loss_weights']['weight_tversky'] / denom,
-                         weight_iou=params['loss_weights']['weight_iou'] / denom)
+                         weight_iou=params['loss_weights']['weight_iou'] / denom,
+                         weight_boundary=params['loss_weights']['weight_boundary'] / denom)
 
     # Initial freeze all parameters of the model
     logger.info("Freezing encoder layers...")

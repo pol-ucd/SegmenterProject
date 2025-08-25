@@ -18,12 +18,12 @@
         "min_delta": 0.001
     },
     "loss_weights": {
-        "weight_ce": 1.0,
-        "weight_dice": 0.0,
+        "weight_ce": 0.0,
+        "weight_dice": 1.0,
         "weight_focal": 0.0,
         "weight_tversky": 0.0,
         "weight_iou": 1.0,
-        "weight_hausdorff": 0.0
+        "weight_boundary": 1.0
     },
     "scheduler": {
         "name": "CosineAnnealingLR",
