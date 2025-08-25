@@ -80,9 +80,9 @@ def main():
             latest_checkpoint = checkpoints[-1]
             cp_manager.load(model, latest_checkpoint, device=device)
         else:
-            logger.log("No checkpoints were saved to load.")
+            logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
     except FileNotFoundError as e:
-        logger.log(f"Unable to load checkpoint {e}")
+        logger.info(f"Unable to load checkpoint {e}")
 
     model.to(device)
     logger.info(f"Instantiated model with {model.num_classes} classes.")

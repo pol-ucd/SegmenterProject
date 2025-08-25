@@ -473,16 +473,16 @@ class CheckpointManager:
 
             # Save the model's state dictionary
             torch.save(model.state_dict(), filepath)
-            self.logger.log(f"Checkpoint saved: {filepath} with accuracy: {current_accuracy:.4f}")
+            self.logger.info(f"Checkpoint saved: {filepath} with accuracy: {current_accuracy:.4f}")
         else:
             # No significant improvement, increment the counter
             self.epochs_without_improvement += 1
-            self.logger.log(f"No improvement. Epochs without improvement: {self.epochs_without_improvement}")
+            self.logger.info(f"No improvement. Epochs without improvement: {self.epochs_without_improvement}")
 
         # Check if the patience limit has been reached
         if self.epochs_without_improvement >= self.patience:
             self.stop_training = True
-            self.logger.log(f"Early stopping triggered. Training will be stopped after this epoch.")
+            self.logger.info(f"Early stopping triggered. Training will be stopped after this epoch.")
 
         return self.stop_training
 
@@ -503,5 +503,5 @@ class CheckpointManager:
 
         # Load the state dictionary and apply it to the model
         model.load_state_dict(torch.load(filepath, map_location=device, weights_only=False))
-        self.logger.log(f"Checkpoint loaded successfully from: {filepath}")
+        self.logger.info(f"Checkpoint loaded successfully from: {filepath}")
         return model
