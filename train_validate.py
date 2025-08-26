@@ -38,6 +38,9 @@ def main():
     checkpoint_prefix = params['checkpoints']['prefix']
     checkpoint_patience = params['checkpoints']['patience']
     checkpoint_min_delta = params['checkpoints']['min_delta']
+    if not os.path.isdir(checkpoint_path):
+        logger.info(f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
+        checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
 
     test_split = params['test_split']
     num_classes = params['num_classes']
@@ -95,15 +98,21 @@ def main():
     that we are guaranteed to have a representation from each source in the
     training and testing sets.
     """
-
+    found_existing_data = False
     if latest_checkpoint is not None:
         latest_csv = latest_checkpoint.split(".pt")[0] + ".csv"
-        df_data = pd.read_csv(latest_csv)
-        train_images = df_data[df_data.phase == "T"]["image"].values
-        train_masks = df_data[df_data.phase == "T"]["mask"].values
-        val_images = df_data[df_data.phase == "V"]["image"].values
-        val_masks = df_data[df_data.phase == "V"]["mask"].values
-    else:
+        try:
+            df_data = pd.read_csv(latest_csv)
+            train_images = df_data[df_data.phase == "T"]["image"].values
+            train_masks = df_data[df_data.phase == "T"]["mask"].values
+            val_images = df_data[df_data.phase == "V"]["image"].values
+            val_masks = df_data[df_data.phase == "V"]["mask"].values
+            found_existing_data = True
+        except FileNotFoundError as e:
+            logger.info(f"No existing list of test and training data found for  {latest_csv}.")
+            found_existing_data = False
+
+    if not found_existing_data:
 
         try:
             (train_images,
