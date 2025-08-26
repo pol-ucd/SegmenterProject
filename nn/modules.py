@@ -96,7 +96,7 @@ def tversky_loss(pred, target, alpha=0.5, beta=0.5, smooth=1e-6):
     return loss_tversky.mean()
 
 
-def dice_loss(pred, true_mask, epsilon=1e-6):
+def dice_loss(pred, true_mask, epsilon = 1e-6):
     """
     Calculates the multi-class Dice Loss.
 
@@ -109,11 +109,11 @@ def dice_loss(pred, true_mask, epsilon=1e-6):
                              Expected shape: (N, C, H, W).
         true_mask (torch.Tensor): The ground truth mask tensor with class indices.
                                   Expected shape: (N, H, W).
+        epsilon (float, optional): The small value to avoid division.
 
     Returns:
         torch.Tensor: The calculated multi-class Dice Loss.
     """
-    # A small constant to prevent division by zero.
 
     # Get the device and number of classes
     device = pred.device
@@ -131,7 +131,7 @@ def dice_loss(pred, true_mask, epsilon=1e-6):
     # Flatten the tensors for easier element-wise operations and summation
     # Shape changes from (N, C, H, W) to (N*C, H*W)
     pred_flat = pred_prob.view(-1, pred.shape[2] * pred.shape[3])
-    true_flat = true_mask_one_hot.view(-1, true_mask_one_hot.shape[2] * true_mask_one_hot.shape[3])
+    true_flat = true_mask_one_hot.reshape(-1, true_mask_one_hot.shape[2] * true_mask_one_hot.shape[3])
 
     # Calculate the intersection (true positives)
     intersection = (pred_flat * true_flat).sum(dim=1)

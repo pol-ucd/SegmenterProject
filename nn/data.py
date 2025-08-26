@@ -435,13 +435,18 @@ class CheckpointManager:
                  prefix: str ="model_checkpoint",
                  patience: int =5,
                  min_delta: float =0.0):
-        # Ensure the checkpoint directory exists
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
+        # Ensure the checkpoint directory exists and if not, revert to local
         self.checkpoint_dir = checkpoint_dir
+        if not os.path.exists(checkpoint_dir):
+            try:
+                os.makedirs(checkpoint_dir)
+            except OSError as e:
+                self.logger.error(f"Error creating checkpoint directory {checkpoint_dir}: {e}")
+                self.checkpoint_dir = os.getcwd()
+                self.logger.info(f"Reverting to current working directory for checkpoint: {self.checkpoint_dir}")
+
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.prefix = prefix
         self.patience = patience
         self.min_delta = min_delta
