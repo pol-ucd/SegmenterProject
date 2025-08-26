@@ -61,11 +61,6 @@ def main():
     logger.info(f"Using {device} device for model training.")
     logger.info(f"Loaded parameters: {params}")
 
-    # cph = CheckpointHandler(save_path=checkpoint_save_path,
-    #                         load_path=checkpoint_load_path,
-    #                         prefix=checkpoint_prefix,
-    #                         suffix=checkpoint_suffix)
-    #
     cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
                                    prefix=checkpoint_prefix,
                                    patience=checkpoint_patience,
@@ -113,7 +108,7 @@ def main():
             found_existing_data = False
 
     if not found_existing_data:
-
+        logger.info(f"Loading new training and testing images and masks.")
         try:
             (train_images,
              train_masks,
