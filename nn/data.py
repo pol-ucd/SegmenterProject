@@ -199,7 +199,7 @@ class SemanticSegmentationDatasetBasic(Dataset):
         assert len(image_paths) == len(mask_paths)
 
         self.image_transform = transforms.Compose([
-            transforms.Resize(self.size),
+            transforms.Resize(self.size, interpolation=Image.BICUBIC),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std),
         ])

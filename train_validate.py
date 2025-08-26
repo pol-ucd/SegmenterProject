@@ -133,7 +133,7 @@ def main():
         df_dict = {"image": np.concatenate([train_images, val_images]),
                    "mask": np.concatenate([train_masks, val_masks]),
                    "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
-        print(csv_path)
+
         pd.DataFrame(df_dict).to_csv(csv_path, index=False)
 
     """ 

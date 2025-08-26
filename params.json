@@ -23,13 +23,14 @@
         "weight_focal": 0.0,
         "weight_tversky": 0.0,
         "weight_iou": 0.0,
-        "weight_boundary": 0.25
+        "weight_boundary": 0.5
     },
     "scheduler": {
         "name": "CosineAnnealingLR",
         "T_max": 50
     },
     "datasets": {
+        "hdf5": "data/all_images.hdf5",
         "image_paths": [
             "data/Classica/images",
             "data/Polyp Segmentation/train",
