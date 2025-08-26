@@ -7,16 +7,28 @@ import sys
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.model_selection import train_test_split
 from torch import GradScaler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 
-from nn.data import (split_images_and_masks,
-                     SemanticSegmentationDatasetAugmentor,
-                     SemanticSegmentationDatasetBasic, CheckpointManager)
+from nn.data import (SemanticSegmentationDatasetAugmentor,
+                     SemanticSegmentationDatasetBasic, CheckpointManager, HDF5Dataset,
+                     SemanticSegmentationDatasetBasicHDF5)
 from nn.models import SegformerBinarySegmentation
 from nn.modules import HybridLoss
 from utils.torch_utils import RunManager
 
+
+def train_transform(image):
+    # Example of a simple transform
+    # For real augmentation, you would need to apply the same transform
+    # parameters (e.g., rotation angle) to all three tensors.
+
+    # Simulating a simple operation for demonstration
+    image = transforms.ColorJitter(brightness=0.2)(image)
+    # Assuming you've created a custom transform that handles all three
+
+    return image, mask, dist_map
 
 def main():
     # logger = logging.getLogger(__name__)
@@ -39,7 +51,8 @@ def main():
     checkpoint_patience = params['checkpoints']['patience']
     checkpoint_min_delta = params['checkpoints']['min_delta']
     if not os.path.isdir(checkpoint_path):
-        logger.info(f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
+        logger.info(
+            f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
 
     test_split = params['test_split']
@@ -55,6 +68,7 @@ def main():
     image_paths = params["datasets"]["image_paths"]
     mask_paths = params["datasets"]["mask_paths"]
     file_types = params["datasets"]["file_types"]
+    hdf5_path = params["datasets"]["hdf5"]
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -94,48 +108,47 @@ def main():
     training and testing sets.
     """
 
-    found_existing_data = False
+    full_dataset = HDF5Dataset(hdf5_path=hdf5_path)
+    test_size = int(len(full_dataset) * test_split)
+    train_size = len(full_dataset) - test_size
+
+    logger.info(f"Splitting dataset into {train_size} (train) and {test_size} (test) samples.")
+
+    train_dataset, val_dataset = random_split(full_dataset, [train_size, test_size])
     if latest_checkpoint is not None:
         latest_csv = latest_checkpoint.split(".pt")[0] + ".csv"
-        try:
-            df_data = pd.read_csv(latest_csv)
-            train_images = df_data[df_data.phase == "T"]["image"].values
-            train_masks = df_data[df_data.phase == "T"]["mask"].values
-            val_images = df_data[df_data.phase == "V"]["image"].values
-            val_masks = df_data[df_data.phase == "V"]["mask"].values
-            found_existing_data = True
-        except FileNotFoundError as e:
-            logger.info(f"No existing list of test and training data found for  {latest_csv}.")
-            found_existing_data = False
-
-    if not found_existing_data:
+        df_data = pd.read_csv(latest_csv)
+        train_images = df_data[df_data.phase == "T"]["image"].values
+        val_images = df_data[df_data.phase == "V"]["image"].values
+        train_indices = full_dataset.get_indices_from_paths(train_images)
+        val_indices = full_dataset.get_indices_from_paths(val_images)
+        logger.info(f"Loading training and test data from {latest_checkpoint}.")
+    else:
+        indices = np.arange(len(full_dataset))
+        _, _, train_indices, val_indices = train_test_split(indices[:, np.newaxis], indices,
+                                                             test_size=test_split,
+                                                             shuffle=False)
         logger.info(f"Loading new training and testing images and masks.")
-        try:
-            (train_images,
-             train_masks,
-             val_images,
-             val_masks) = split_images_and_masks(image_paths=image_paths,
-                                                 mask_paths=mask_paths,
-                                                 file_types=file_types,
-                                                 split=test_split)
-        except FileNotFoundError as e:
-            logger.error(f"Error loading data: {e}. Please ensure the data directories are correctly set up.")
-            return  # Exit if data cannot be loaded
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during data splitting: {e}")
-            return
 
-        """
-        Save the names of the files in the validation & training subset for 
-        later use
-        """
-        csv_path = os.path.join(checkpoint_path,
-                                cp_manager.get_prefix() + "_" + cp_manager.get_timestamp() + ".csv")
-        df_dict = {"image": np.concatenate([train_images, val_images]),
-                   "mask": np.concatenate([train_masks, val_masks]),
-                   "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
+    train_dataset = full_dataset.create_subset_from_indices(train_indices)
+    val_dataset = full_dataset.create_subset_from_indices(val_indices)
 
-        pd.DataFrame(df_dict).to_csv(csv_path, index=False)
+    all_images = np.array(full_dataset.get_all_image_paths(), dtype='str')
+    print(train_indices.dtype, all_images.dtype)
+    print(train_indices[:10])
+    train_images = all_images[train_indices.astype(int)]
+    val_images = all_images[val_indices.astype(int)]
+    """
+    Save the names of the files in the validation & training subset for 
+    later use
+    """
+    csv_path = os.path.join(checkpoint_path,
+                            cp_manager.get_prefix() + "_" + cp_manager.get_timestamp() + ".csv")
+    df_dict = {"image": np.concatenate([train_images, val_images]),
+               "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
+
+    pd.DataFrame(df_dict).to_csv(csv_path,
+                                 index=False)
 
     """ 
     Data sets and loaders

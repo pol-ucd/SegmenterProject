@@ -34,12 +34,14 @@
         "image_paths": [
             "data/Classica/images",
             "data/Polyp Segmentation/train",
-            "data/Polyp Segmentation/valid"
+            "data/Polyp Segmentation/valid",
+            "data/Kvasir-SEG/images"
         ],
         "mask_paths": [
             "data/Classica/masks",
             "data/Polyp Segmentation/train_masks",
-            "data/Polyp Segmentation/valid_masks"
+            "data/Polyp Segmentation/valid_masks",
+            "data/Kvasir-SEG/masks"
         ],
         "file_types": [
             "*.jpg",

@@ -5,12 +5,13 @@ from datetime import datetime
 from glob import glob
 from typing import Any, Tuple
 
+import h5py
 import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 from torchvision.transforms import functional as F
 
@@ -293,6 +294,149 @@ def split_images_and_masks(image_paths: list = None,
 
     return (all_images[train_idx], all_masks[train_idx],
             all_images[test_idx], all_masks[test_idx])
+
+
+class HDF5Dataset(Dataset):
+    """
+    A custom PyTorch Dataset class to efficiently load data from an HDF5 file.
+
+    This class enables fast training by reading pre-computed data, avoiding
+    expensive on-the-fly calculations and CPU-GPU data transfers.
+    """
+
+    def __init__(self, hdf5_path, transform=None):
+        """
+        Initializes the dataset by opening the HDF5 file and creating a
+        lookup map for image paths to indices.
+
+        Args:
+            hdf5_path (str): Path to the HDF5 data file.
+            transform (callable, optional): Optional transform to be applied
+                                            on a sample.
+        """
+        super().__init__()
+        self.hdf5_path = hdf5_path
+        self.transform = transform
+
+        # Open the file once during initialization to get paths and length
+        with h5py.File(self.hdf5_path, 'r') as f:
+            # Load all image paths into a list for quick access
+            self.image_paths_list = [path.decode('utf-8') for path in f['image_paths']]
+            self.dataset_length = len(self.image_paths_list)
+
+        # Create a dictionary for efficient lookup from path to index
+        self.path_to_index = {path: i for i, path in enumerate(self.image_paths_list)}
+
+    def __len__(self):
+        """Returns the total number of samples in the dataset."""
+        return self.dataset_length
+
+    def __getitem__(self, idx):
+        """
+        Retrieves one sample from the dataset.
+
+        Args:
+            idx (int): The index of the sample to retrieve.
+
+        Returns:
+            tuple: A tuple containing (image, mask, distance_map).
+        """
+        # Open the file inside __getitem__ to handle multiple workers
+        with h5py.File(self.hdf5_path, 'r') as f:
+            image = f['images'][idx]
+            mask = f['masks'][idx]
+            dist_map = f['dist_maps'][idx]
+
+            # --- Retrieve metadata ---
+            image_path = self.image_paths_list[idx]  # Use the pre-loaded list
+            mask_path = f['mask_paths'][idx].decode('utf-8')
+            image_name = f['image_names'][idx].decode('utf-8')
+            image_size = f['image_sizes'][idx]
+
+        # Convert numpy arrays to PyTorch tensors and permute dimensions
+        # to match PyTorch's (C, H, W) format for images
+        image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0  # Normalize to [0, 1]
+        mask = torch.from_numpy(mask).long()
+        dist_map = torch.from_numpy(dist_map).float()
+
+        # You might need to add a channel dimension to the mask and dist_map
+        # depending on your model's input expectations.
+        # mask = mask.unsqueeze(0)
+        # dist_map = dist_map.unsqueeze(0)
+
+        # --- Apply transform if provided ---
+        if self.transform:
+            image, mask, dist_map = self.transform(image, mask, dist_map)
+
+        # --- Return the metadata with the data tensors ---
+        return image, mask, dist_map, image_path, mask_path, image_name, image_size
+
+    def get_indices_from_paths(self, paths_list):
+        """
+        Finds the indices of a list of image paths within the dataset.
+
+        Args:
+            paths_list (list): A list of image file paths.
+
+        Returns:
+            list: A list of corresponding indices. If a path is not found,
+                  its index will be None.
+        """
+        indices = [self.path_to_index.get(path, None) for path in paths_list]
+        return indices
+
+    def get_all_image_paths(self):
+        """
+        Returns a list of all image paths in the dataset.
+
+        Returns:
+            list: A list of all image paths.
+        """
+        return self.image_paths_list
+
+    def create_subset_from_indices(self, indices, transform=None):
+        """
+        Creates a new Subset dataset from a given list of indices.
+
+        This is an efficient way to create a smaller dataset without
+        copying the HDF5 data.
+
+        Args:
+            indices (list or tuple): A list or tuple of integer indices.
+            transform (callable, optional): Optional transform to be applied
+                                            to the subset.
+
+        Returns:
+            torch.utils.data.Subset: A new dataset containing only the
+                                     samples at the specified indices.
+        """
+        return TransformedSubset(self, indices, transform)
+
+
+# Helper class to apply transforms to a Subset ---
+class TransformedSubset(Dataset):
+    """
+    A wrapper class to apply transforms to a PyTorch Subset dataset.
+    This is necessary because the built-in Subset class does not
+    natively support transforms.
+    """
+
+    def __init__(self, dataset, indices, transform=None):
+        self.dataset = Subset(dataset, indices)
+        self.transform = transform
+
+    def __getitem__(self, idx):
+        # Get the item from the underlying subset
+        image, mask, dist_map, image_path, mask_path, image_name, image_size = self.dataset[idx]
+
+        # Apply the transform if it exists
+        if self.transform:
+            image = self.transform(image)
+
+        return image, mask, dist_map, image_path, mask_path, image_name, image_size
+
+    def __len__(self):
+        return len(self.dataset)
 
 
 class CheckpointError(Exception):
