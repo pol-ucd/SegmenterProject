@@ -51,7 +51,7 @@ def boundary_loss(pred, target):
             # For production, it's recommended to pre-calculate this during data loading.
             dist_map_positive = distance_transform_edt(target_np)
             dist_map_negative = distance_transform_edt(1 - target_np)
-            dist_map_np = dist_map_positive - dist_map_negative
+            dist_map_np = dist_map_positive + dist_map_negative
 
             # Convert the distance map back to a PyTorch tensor and move to the original device
             dist_map = torch.from_numpy(dist_map_np).float().to(device)

@@ -73,6 +73,7 @@ def main():
     """
     model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
                                         num_classes=num_classes)
+    latest_checkpoint = None
     try:
         # Get the list of saved checkpoints
         checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
@@ -94,30 +95,42 @@ def main():
     that we are guaranteed to have a representation from each source in the
     training and testing sets.
     """
-    try:
-        (train_images,
-         train_masks,
-         val_images,
-         val_masks) = split_images_and_masks(image_paths=image_paths,
-                                             mask_paths=mask_paths,
-                                             file_types=file_types,
-                                             split=test_split)
-    except FileNotFoundError as e:
-        logger.error(f"Error loading data: {e}. Please ensure the data directories are correctly set up.")
-        return  # Exit if data cannot be loaded
-    except Exception as e:
-        logger.error(f"An unexpected error occurred during data splitting: {e}")
-        return
 
-    """
-    Save the names of the files in the validation & training subset for 
-    later use
-    """
-    df_dict = {"image": np.concatenate([train_images, val_images]),
-               "mask": np.concatenate([train_masks, val_masks]),
-               "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
-    pd.DataFrame(df_dict).to_csv("training_validation_files.csv",
-                                 index=False)
+    if latest_checkpoint is not None:
+        latest_csv = latest_checkpoint.split(".pt")[0] + ".csv"
+        df_data = pd.read_csv(latest_csv)
+        train_images = df_data[df_data.phase == "T"]["image"].values
+        train_masks = df_data[df_data.phase == "T"]["mask"].values
+        val_images = df_data[df_data.phase == "V"]["image"].values
+        val_masks = df_data[df_data.phase == "V"]["mask"].values
+    else:
+
+        try:
+            (train_images,
+             train_masks,
+             val_images,
+             val_masks) = split_images_and_masks(image_paths=image_paths,
+                                                 mask_paths=mask_paths,
+                                                 file_types=file_types,
+                                                 split=test_split)
+        except FileNotFoundError as e:
+            logger.error(f"Error loading data: {e}. Please ensure the data directories are correctly set up.")
+            return  # Exit if data cannot be loaded
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during data splitting: {e}")
+            return
+
+        """
+        Save the names of the files in the validation & training subset for 
+        later use
+        """
+        csv_path = os.path.join(checkpoint_path,
+                                cp_manager.get_prefix() + "_" + cp_manager.get_timestamp() + ".csv")
+        df_dict = {"image": np.concatenate([train_images, val_images]),
+                   "mask": np.concatenate([train_masks, val_masks]),
+                   "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
+        print(csv_path)
+        pd.DataFrame(df_dict).to_csv(csv_path, index=False)
 
     """ 
     Data sets and loaders

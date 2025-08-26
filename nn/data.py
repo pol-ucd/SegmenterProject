@@ -511,3 +511,25 @@ class CheckpointManager:
         model.load_state_dict(torch.load(filepath, map_location=device, weights_only=False))
         self.logger.info(f"Checkpoint loaded successfully from: {filepath}")
         return model
+
+    """ Getters and Setters """
+    def get_checkpoint_dir(self):
+        return self.checkpoint_dir
+
+    def get_timestamp(self):
+        return self.timestamp
+
+    def get_prefix(self):
+        return self.prefix
+
+    def get_patience(self):
+        return self.patience
+
+    def get_min_delta(self):
+        return self.min_delta
+
+    def set_patience(self, patience):
+        self.patience = patience
+
+    def set_min_delta(self, min_delta):
+        self.min_delta = min_delta
