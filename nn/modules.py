@@ -203,6 +203,8 @@ def boundary_loss(pred, mask):
     max_dist = ((H - 1) ** 2 + (W - 1) ** 2) ** 0.5
     eps = 1e-8
 
+    prob = F.softmax(pred, dim=1)
+
     one_hot_mask = one_hot(mask, num_classes)
     dist_maps = torch.zeros_like(one_hot_mask)
     dt = DistanceTransform2D()
@@ -218,7 +220,7 @@ def boundary_loss(pred, mask):
             dist_maps[b, c, :, :] = dist_map
 
 
-    loss = (pred * dist_maps).sum(dim=(2, 3)).mean()
+    loss = (prob * dist_maps).sum(dim=(2, 3)).mean()
     print(loss)
     return loss
 
