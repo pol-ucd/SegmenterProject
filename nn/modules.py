@@ -322,12 +322,11 @@ def dice_loss(pred: torch.Tensor,
     target_one_hot = one_hot(target, num_classes=num_classes)
 
     intersection = (pred_prob * target_one_hot).sum(dim=(2, 3))
-    union = pred_prob + target_one_hot - (pred_prob * target_one_hot)
-    union = union.sum(dim=(2, 3))
+    denom = pred_prob + target_one_hot
+    denom = denom.sum(dim=(2, 3))
 
-    dice_score = (2. * intersection + epsilon) / (union + epsilon)
+    dice_score = (2. * intersection + epsilon) / (denom + epsilon)
     return 1 - dice_score.mean()
-
 
 def iou_loss(pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
     """
