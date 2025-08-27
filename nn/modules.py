@@ -190,7 +190,6 @@ def boundary_loss(pred, mask):
 
     :param pred:
     :param mask:
-    :param num_classes:
     :return:
     """
     num_batch = pred.shape[0]
@@ -298,6 +297,17 @@ def tversky_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.5, b
     loss_tversky = 1.0 - tversky
     return loss_tversky.mean()
 
+def union_intersection(pred: torch.Tensor,
+              target: torch.Tensor):
+    num_classes = pred.shape[1]
+    pred_prob = torch.softmax(pred, dim=1)
+    target_onehot = one_hot(target, num_classes=num_classes)
+
+    intersection = (pred_prob * target_onehot).sum(dim=(2, 3))
+    union = pred_prob.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3)) - intersection
+
+    return union, intersection
+
 
 def dice_loss(pred: torch.Tensor,
               target: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
@@ -317,15 +327,9 @@ def dice_loss(pred: torch.Tensor,
     Returns:
         torch.Tensor: The calculated multi-class Dice Loss.
     """
-    num_classes = pred.shape[1]
-    pred_prob = F.softmax(pred, dim=1)
-    target_one_hot = one_hot(target, num_classes=num_classes)
+    union, intersection = union_intersection(pred, target)
 
-    intersection = (pred_prob * target_one_hot).sum(dim=(2, 3))
-    denom = pred_prob + target_one_hot
-    denom = denom.sum(dim=(2, 3))
-
-    dice_score = (2. * intersection + epsilon) / (denom + epsilon)
+    dice_score = (2. * intersection + epsilon) / (union + intersection + epsilon)
     return 1 - dice_score.mean()
 
 def iou_loss(pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
@@ -333,19 +337,14 @@ def iou_loss(pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-6) ->
     Computes the IoU Loss.
 
     Args:
-        pred_probs (torch.Tensor): The model's raw output prediction tensor.
+        pred (torch.Tensor): The model's raw output prediction tensor.
         target (torch.Tensor): The ground truth mask tensor with class indices.
         epsilon (float, optional): A small value to avoid division by zero.
 
     Returns:
         torch.Tensor: The calculated IoU loss.
     """
-    pred_prob = torch.softmax(pred, dim=1)
-    target_onehot = one_hot(target, num_classes=pred_prob.shape[1])
-
-    intersection = (pred_prob * target_onehot).sum(dim=(2, 3))
-    union = pred_prob + target_onehot - (pred_prob * target_onehot)
-    union = union.sum(dim=(2, 3))
+    union, intersection = union_intersection(pred, target)
 
     iou = (intersection + epsilon) / (union + epsilon)
     return 1 - iou.mean()
