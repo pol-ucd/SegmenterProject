@@ -217,8 +217,9 @@ def boundary_loss(pred, mask):
 
             dist_maps[b, c, :, :] = dist_map
 
-    print(dist_maps.max(), dist_maps.min(), dist_maps.mean())
+
     loss = (pred * dist_maps).sum(dim=(2, 3)).mean()
+    print(loss)
     return loss
 
 
