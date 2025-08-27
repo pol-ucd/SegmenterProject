@@ -16,7 +16,7 @@ from nn.data import (SemanticSegmentationDatasetAugmentor,
                      SemanticSegmentationDatasetBasicHDF5)
 from nn.models import SegformerBinarySegmentation
 from nn.modules import HybridLoss
-from utils.torch_utils import RunManager
+from nn.torch_utils import RunManager
 
 
 def train_transform(image):

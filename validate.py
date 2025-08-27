@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from nn.data import SemanticSegmentationDatasetBasic
 from nn.models import SegformerBinarySegmentation
 from nn.modules import HybridLoss
-from utils.torch_utils import RunManager
+from nn.torch_utils import RunManager
 
 
 def main():

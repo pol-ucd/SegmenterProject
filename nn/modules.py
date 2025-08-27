@@ -2,11 +2,249 @@ import logging
 from abc import abstractmethod, ABC
 from typing import Optional
 
+import FastGeodis
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from scipy.ndimage import distance_transform_edt
+
+
+# ---------------------------
+# Utilities
+# ---------------------------
+
+def one_hot(mask: torch.Tensor, num_classes: int) -> torch.Tensor:
+    # mask: (B, H, W) int64 in [0..C-1] -> (B, C, H, W) float
+    return F.one_hot(mask.long(), num_classes).permute(0, 3, 1, 2).float()
+
+def sobel_grad(img: torch.Tensor) -> torch.Tensor:
+    # img: (B, 1, H, W)
+    kx = torch.tensor([[-1, 0, 1],
+                       [-2, 0, 2],
+                       [-1, 0, 1]], dtype=img.dtype, device=img.device).view(1,1,3,3)
+    ky = kx.transpose(2,3)
+    gx = F.conv2d(img, kx, padding=1)
+    gy = F.conv2d(img, ky, padding=1)
+    return torch.sqrt(gx * gx + gy * gy + 1e-12)
+
+def make_soft_boundary(prob: torch.Tensor, tau: float = 1.0) -> torch.Tensor:
+    # prob: (B, 1, H, W) in [0,1]; sharpen to emphasize edges, then Sobel
+    if tau != 1.0:
+        prob = torch.clamp(prob, 1e-6, 1 - 1e-6)
+        prob = torch.pow(prob, 1.0 / tau)
+    e = sobel_grad(prob)
+    # normalize per-map to [0,1] for stable weighting
+    e = e / (e.amax(dim=(-1,-2), keepdim=True) + 1e-8)
+    return e
+
+# ---------------------------
+# Distance transform backends (GPU)
+# Choose either Kornia or FastGeodis; both are CUDA-friendly.
+# ---------------------------
+
+class DistanceTransform2D:
+    def __init__(self, backend: str = "kornia", spacing=(1.0, 1.0)):
+        self.backend = backend
+        self.spacing = spacing
+        if backend == "kornia":
+            try:
+                import kornia
+                self.kornia = kornia
+            except Exception as e:
+                raise ImportError("Install kornia for GPU distance transform: pip install kornia") from e
+        elif backend == "fastgeodis":
+            try:
+                import FastGeodis  # noqa
+                self.FastGeodis = FastGeodis
+            except Exception as e:
+                raise ImportError("Install FastGeodis: pip install FastGeodis") from e
+        else:
+            raise ValueError("backend must be 'kornia' or 'fastgeodis'")
+
+    @torch.no_grad()
+    def edt(self, binary: torch.Tensor) -> torch.Tensor:
+        # binary: (B,1,H,W) in {0,1}; returns Euclidean distance to nearest 1-pixel.
+        if self.backend == "kornia":
+            # Kornia expects float; computes distance to zeros or ones depending on function.
+            # We compute distance to foreground by inverting once and once more for background as needed outside.
+            # kornia.contrib.distance_transform expects 1 for foreground; it returns distance to zero-valued background.
+            # To get distance to foreground: invert.
+            from kornia.contrib import distance_transform
+            # distance to foreground (1s): invert so foreground becomes 0, then DT to zeros:
+            inv = 1.0 - binary
+            dt = distance_transform(inv)
+            return dt
+        else:
+            # FastGeodis generalized geodesic with lambda=0 behaves like Euclidean DT over 4/8-connectivity
+            # Seeds are foreground; costs uniform.
+            import FastGeodis
+            # FastGeodis expects (B,1,H,W) float32
+            I = torch.zeros_like(binary)  # uniform cost
+            S = (binary > 0.5).float()
+            # geodesic2d(img, seeds, spacing, v, l, iter)
+            dt = FastGeodis.generalised_geodesic2d(I, S, list(self.spacing), 1.0, 0.0, True)
+            return dt
+
+    @torch.no_grad()
+    def signed_distance(self, mask: torch.Tensor) -> torch.Tensor:
+        # mask: (B,1,H,W) in {0,1}; returns D_bg - D_fg (positive inside, negative outside)
+        d_fg = self.edt(mask)
+        d_bg = self.edt(1.0 - mask)
+        return d_bg - d_fg
+
+# ---------------------------
+# Loss terms
+# ---------------------------
+
+def boundary_sdf_loss(pred_probs: torch.Tensor, gt_one_hot: torch.Tensor, dt: DistanceTransform2D) -> torch.Tensor:
+    # pred_probs: (B,C,H,W), gt_one_hot: (B,C,H,W)
+    B, C, H, W = pred_probs.shape
+    loss = 0.0
+    for c in range(C):
+        gt_c = gt_one_hot[:, c:c+1]
+        sdt_c = dt.signed_distance(gt_c)  # (B,1,H,W), detached by @no_grad
+        # normalize SDF per-sample for scale invariance
+        sdt_c = sdt_c / (sdt_c.amax(dim=(-1,-2), keepdim=True) + 1e-6)
+        loss += (pred_probs[:, c:c+1] * sdt_c).mean()
+    return loss / C
+
+def soft_chamfer_surface_loss(pred_probs: torch.Tensor, gt_one_hot: torch.Tensor, dt: DistanceTransform2D,
+                              tau: float = 0.8, band_px: int = 3) -> torch.Tensor:
+    # Build GT boundary maps (binary). Use morphological gradient via max-pool.
+    B, C, H, W = pred_probs.shape
+    pool = torch.nn.MaxPool2d(3, stride=1, padding=1)
+    loss = 0.0
+    eps = 1e-8
+
+    for c in range(C):
+        p = pred_probs[:, c:c+1]                     # (B,1,H,W)
+        m = gt_one_hot[:, c:c+1]                     # (B,1,H,W)
+
+        # GT boundary: dilation - erosion (approx via maxpool of mask and of inverted mask)
+        dil = pool(m)
+        ero = 1.0 - pool(1.0 - m)
+        e_gt = torch.clamp(dil - ero, 0, 1)          # binary-ish boundary
+
+        # Narrow band (optional): widen boundary to band_px to relax supervision
+        if band_px > 0:
+            k = 2 * band_px + 1
+            band = torch.nn.MaxPool2d(k, stride=1, padding=band_px)(e_gt)
+            e_gt_band = band
+        else:
+            e_gt_band = e_gt
+
+        # Soft predicted boundary
+        e_pred = make_soft_boundary(p, tau=tau)      # [0,1]
+
+        # Distances: GT-edge distances used by pred-edge and vice-versa.
+        # Note: detach distances computed from pred for stability (optional).
+        d_to_gt = dt.edt(e_gt_band)                  # distance to GT edge
+        d_to_pred = dt.edt((e_pred > 0.01).float())  # binarize soft edge for DT
+        d_to_pred = d_to_pred.detach()               # prevent exploding grads via DT backprop
+
+        # Chamfer-style symmetric surface loss
+        term_pred_to_gt = (e_pred * d_to_gt).sum(dim=(2,3)) / (e_pred.sum(dim=(2,3)) + eps)
+        term_gt_to_pred = (e_gt * d_to_pred).sum(dim=(2,3)) / (e_gt.sum(dim=(2,3)) + eps)
+        loss += 0.5 * (term_pred_to_gt.mean() + term_gt_to_pred.mean())
+
+    return loss / C
+
+
+# ---------------------------
+# Full hybrid loss
+# ---------------------------
+
+class HybridLesionLoss(torch.nn.Module):
+    def __init__(self, num_classes: int, alpha: float = 1.0, beta: float = 1.0, delta: float = 0.5,
+                 dt_backend: str = "kornia", spacing=(1.0, 1.0), tau: float = 0.8, band_px: int = 3):
+        super().__init__()
+        self.C = num_classes
+        self.alpha = alpha
+        self.beta = beta
+        self.delta = delta
+        self.dt = DistanceTransform2D(backend=dt_backend, spacing=spacing)
+        self.tau = tau
+        self.band_px = band_px
+
+    def forward(self, logits: torch.Tensor, gt_mask: torch.Tensor) -> torch.Tensor:
+        # logits: (B,C,H,W), gt_mask: (B,H,W)
+        probs = F.softmax(logits, dim=1)
+        gt = one_hot(gt_mask, self.C).to(probs.dtype)
+
+        Lb = boundary_sdf_loss(probs, gt, self.dt)
+        Ls = soft_chamfer_surface_loss(probs, gt, self.dt, tau=self.tau, band_px=self.band_px)
+        Lo = dice_loss(probs, gt)
+
+        return self.alpha * Lb + self.beta * Ls + self.delta * Lo
+
+
+def boundary_loss(pred, mask):
+    """
+    Boundary Loss
+    Penalizes misalignment between predicted and ground truth boundaries using distance maps.
+    Boundary loss rewards pixel-level alignment.
+
+    :param pred:
+    :param mask:
+    :param num_classes:
+    :return:
+    """
+    num_batch = pred.shape[0]
+    num_classes = pred.shape[1]
+    one_hot_mask = one_hot(mask, num_classes)
+    dist_maps = torch.zeros_like(one_hot_mask)
+
+
+    for b in range(num_batch):
+        for c in range(num_classes):
+            mask_c = one_hot_mask[b, c, :, :].unsqueeze(0).unsqueeze(0)  # [1,1,H,W]
+
+            dist_map = FastGeodis.generalised_geodesic2d(
+                mask_c, mask_c,
+                v=0.5,
+                lamb=0.0,
+                iter=2)
+
+            dist_maps[b, c, :, :] = dist_map
+
+    loss = (pred * dist_maps).sum(dim=(2, 3)).mean()
+    return loss
+
+
+def fourier_loss(pred_mask, true_mask):
+    """
+    Shape-Aware Loss
+    Penalizes shape discrepancies using Fourier descriptors or signed distance fields (SDFs).
+    extract contours and compute Fourier descriptors for both prediction and ground truth,
+    then penalize their difference. Fourier loss enforces global shape integrity.
+    Assume binary masks for each class.
+
+    :param pred_mask:
+    :param true_mask:
+    :return:
+    """
+
+    def compute_fd(mask):
+        coords = torch.nonzero(mask)
+        x, y = coords[:, 0].float(), coords[:, 1].float()
+        complex_coords = x + 1j * y
+        fd = torch.fft.fft(complex_coords)
+        return fd
+
+    loss = 0.0
+    for b in range(pred_mask.shape[0]):
+        fd_pred = compute_fd(pred_mask[b])
+        fd_true = compute_fd(true_mask[b])
+        loss += torch.norm(fd_pred - fd_true)
+    return loss / pred_mask.shape[0]
+
+
+def hybrid_loss(pred, mask, alpha=1.0, beta=1.0):
+    pred_mask = torch.argmax(pred, dim=1)  # (B, H, W)
+    boundary_element = boundary_loss(pred, mask)
+    shape_element = fourier_loss(pred_mask, mask)
+    return alpha * boundary_element + beta * shape_element
 
 
 def _compute_signed_distance_map(one_hot_mask: np.ndarray) -> np.ndarray:
@@ -34,51 +272,51 @@ def _compute_signed_distance_map(one_hot_mask: np.ndarray) -> np.ndarray:
     return signed_dist_map
 
 
-def boundary_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    """
-    Calculates the multi-class boundary loss in a vectorized manner.
-
-    This refactored version processes the entire batch and all classes simultaneously,
-    making it significantly more performant than the original.
-
-    Args:
-        pred (torch.Tensor): The model's raw output prediction tensor.
-                             Expected shape: (N, C, H, W).
-        target (torch.Tensor): The ground truth mask tensor with class indices.
-                               Expected shape: (N, H, W).
-
-    Returns:
-        torch.Tensor: The calculated multi-class boundary loss.
-    """
-    device = pred.device
-    num_classes = pred.shape[1]
-
-    # Convert true_mask to a one-hot encoded tensor and move to CPU for scipy
-    # Shape changes from (N, H, W) to (N, C, H, W)
-    target_one_hot = F.one_hot(target.long(), num_classes=num_classes)
-    target_one_hot = target_one_hot.permute(0, 3, 1, 2).float()
-    target_one_hot_cpu = target_one_hot.cpu().numpy()
-
-    # Process each sample and class to create the signed distance maps
-    # We use a list comprehension to handle the iteration over the batch and classes,
-    # which is more efficient than nested loops.
-    dist_maps = [_compute_signed_distance_map(target_one_hot_cpu[i, c])
-                 for i in range(pred.shape[0]) for c in range(num_classes)]
-
-    # Convert the list of numpy arrays to a single PyTorch tensor
-    dist_maps = torch.from_numpy(np.stack(dist_maps)).float().to(device)
-
-    # Reshape the distance maps to match the prediction tensor shape
-    dist_maps = dist_maps.view(pred.shape[0], num_classes, pred.shape[2], pred.shape[3])
-
-    # Apply sigmoid to the prediction to get a probability map
-    pred_sig = torch.sigmoid(pred)
-
-    # FIX: Take the absolute value of the distance map to ensure the loss is non-negative.
-    # A loss function must always be a non-negative value.
-    loss = (pred_sig * dist_maps.abs()).mean()
-
-    return loss
+# def boundary_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+#     """
+#     Calculates the multi-class boundary loss in a vectorized manner.
+#
+#     This refactored version processes the entire batch and all classes simultaneously,
+#     making it significantly more performant than the original.
+#
+#     Args:
+#         pred (torch.Tensor): The model's raw output prediction tensor.
+#                              Expected shape: (N, C, H, W).
+#         target (torch.Tensor): The ground truth mask tensor with class indices.
+#                                Expected shape: (N, H, W).
+#
+#     Returns:
+#         torch.Tensor: The calculated multi-class boundary loss.
+#     """
+#     device = pred.device
+#     num_classes = pred.shape[1]
+#
+#     # Convert true_mask to a one-hot encoded tensor and move to CPU for scipy
+#     # Shape changes from (N, H, W) to (N, C, H, W)
+#     target_one_hot = F.one_hot(target.long(), num_classes=num_classes)
+#     target_one_hot = target_one_hot.permute(0, 3, 1, 2).float()
+#     target_one_hot_cpu = target_one_hot.cpu().numpy()
+#
+#     # Process each sample and class to create the signed distance maps
+#     # We use a list comprehension to handle the iteration over the batch and classes,
+#     # which is more efficient than nested loops.
+#     dist_maps = [_compute_signed_distance_map(target_one_hot_cpu[i, c])
+#                  for i in range(pred.shape[0]) for c in range(num_classes)]
+#
+#     # Convert the list of numpy arrays to a single PyTorch tensor
+#     dist_maps = torch.from_numpy(np.stack(dist_maps)).float().to(device)
+#
+#     # Reshape the distance maps to match the prediction tensor shape
+#     dist_maps = dist_maps.view(pred.shape[0], num_classes, pred.shape[2], pred.shape[3])
+#
+#     # Apply sigmoid to the prediction to get a probability map
+#     pred_sig = torch.sigmoid(pred)
+#
+#     # FIX: Take the absolute value of the distance map to ensure the loss is non-negative.
+#     # A loss function must always be a non-negative value.
+#     loss = (pred_sig * dist_maps.abs()).mean()
+#
+#     return loss
 
 
 def focal_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.25, gamma: float = 2.0,
@@ -131,6 +369,12 @@ def tversky_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.5, b
     loss_tversky = 1.0 - tversky
     return loss_tversky.mean()
 
+# def dice_loss(pred_probs: torch.Tensor, gt_one_hot: torch.Tensor, smooth: float = 1.0) -> torch.Tensor:
+#     # Multi-class mean Dice loss
+#     inter = (pred_probs * gt_one_hot).sum(dim=(2,3))
+#     den = pred_probs.sum(dim=(2,3)) + gt_one_hot.sum(dim=(2,3))
+#     dice = (2 * inter + smooth) / (den + smooth)
+#     return 1.0 - dice.mean()
 
 def dice_loss(pred: torch.Tensor, true_mask: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
     """
@@ -151,22 +395,14 @@ def dice_loss(pred: torch.Tensor, true_mask: torch.Tensor, epsilon: float = 1e-6
     """
     num_classes = pred.shape[1]
     pred_prob = F.softmax(pred, dim=1)
+    true_mask_one_hot = one_hot(true_mask, num_classes=num_classes)
 
-    # Convert true_mask from class indices to a one-hot encoded tensor
-    true_mask_one_hot = F.one_hot(true_mask.long(), num_classes=num_classes)
-    true_mask_one_hot = true_mask_one_hot.permute(0, 3, 1, 2).float()
-
-    # Flatten the tensors for easier element-wise operations and summation
-    pred_flat = pred_prob.view(-1, pred.shape[2] * pred.shape[3])
-    true_flat = true_mask_one_hot.reshape(-1, true_mask_one_hot.shape[2] * true_mask_one_hot.shape[3])
-
-    intersection = (pred_flat * true_flat).sum(dim=1)
-    union = pred_flat.sum(dim=1) + true_flat.sum(dim=1)
+    intersection = (pred_prob * true_mask_one_hot).sum(dim=(2, 3))
+    union = pred_prob + true_mask_one_hot - (pred_prob * true_mask_one_hot)
+    union = union.sum(dim=(2, 3))
 
     dice_score = (2. * intersection + epsilon) / (union + epsilon)
-    dice_loss_val = 1.0 - dice_score
-
-    return dice_loss_val.mean()
+    return 1.0 - dice_score.mean()
 
 
 def iou_loss(pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
@@ -174,18 +410,18 @@ def iou_loss(pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-6) ->
     Computes the IoU Loss.
 
     Args:
-        pred (torch.Tensor): The model's raw output prediction tensor.
+        pred_probs (torch.Tensor): The model's raw output prediction tensor.
         target (torch.Tensor): The ground truth mask tensor with class indices.
         epsilon (float, optional): A small value to avoid division by zero.
 
     Returns:
         torch.Tensor: The calculated IoU loss.
     """
-    pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+    pred_probs = torch.softmax(pred, dim=1)
+    target_onehot = one_hot(target, num_classes=pred_probs.shape[1])
 
-    intersection = (pred * target_onehot).sum(dim=(2, 3))
-    union = pred + target_onehot - (pred * target_onehot)
+    intersection = (pred_probs * target_onehot).sum(dim=(2, 3))
+    union = pred_probs + target_onehot - (pred_probs * target_onehot)
     union = union.sum(dim=(2, 3))
 
     iou = (intersection + epsilon) / (union + epsilon)

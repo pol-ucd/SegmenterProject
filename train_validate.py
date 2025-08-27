@@ -15,7 +15,7 @@ from nn.data import (split_images_and_masks,
                      SemanticSegmentationDatasetBasic, CheckpointManager)
 from nn.models import SegformerBinarySegmentation
 from nn.modules import HybridLoss
-from utils.torch_utils import RunManager
+from nn.torch_utils import RunManager
 
 
 def main():
