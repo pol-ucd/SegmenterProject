@@ -3,6 +3,7 @@ from abc import abstractmethod, ABC
 from typing import Optional
 
 import FastGeodis
+import kornia
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -45,18 +46,16 @@ def make_soft_boundary(prob: torch.Tensor, tau: float = 1.0) -> torch.Tensor:
 # ---------------------------
 
 class DistanceTransform2D:
-    def __init__(self, backend: str = "kornia", spacing=(1.0, 1.0)):
+    def __init__(self, backend: str = "fastgeodis", spacing=(1.0, 1.0)):
         self.backend = backend
         self.spacing = spacing
         if backend == "kornia":
             try:
-                import kornia
-                self.kornia = kornia
+                self.kornia = kornia.contrib.distance_transform
             except Exception as e:
                 raise ImportError("Install kornia for GPU distance transform: pip install kornia") from e
         elif backend == "fastgeodis":
             try:
-                import FastGeodis  # noqa
                 self.FastGeodis = FastGeodis
             except Exception as e:
                 raise ImportError("Install FastGeodis: pip install FastGeodis") from e
@@ -93,6 +92,12 @@ class DistanceTransform2D:
         d_bg = self.edt(1.0 - mask)
         return d_bg - d_fg
 
+    @torch.no_grad()
+    def unsigned_distance(self, mask: torch.Tensor) -> torch.Tensor:
+        # mask: (B,1,H,W) in {0,1}; returns D_bg + D_fg
+        d_fg = self.edt(mask)
+        d_bg = self.edt(1.0 - mask)
+        return d_bg + d_fg
 
 # ---------------------------
 # Loss terms
@@ -206,12 +211,7 @@ def boundary_loss(pred, mask):
         for c in range(num_classes):
             mask_c = one_hot_mask[b, c, :, :].unsqueeze(0).unsqueeze(0)  # [1,1,H,W]
 
-            # dist_map = FastGeodis.generalised_geodesic2d(mask_c, mask_c,
-            #                                              v=1e10,
-            #                                              lamb=0.0,
-            #                                              iter=2)
-
-            dist_map = dt.edt(mask_c)  # (B,1,H,W), >= 0
+            dist_map = dt.unsigned_distance(mask_c)  # (B,1,H,W), >= 0
             # normalize to [0,1]
             dist_map = dist_map / (max_dist + eps)
 

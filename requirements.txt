@@ -15,3 +15,5 @@ pycocotools~=2.0.10
 segmentation_models_pytorch~=0.5.0
 scipy~=1.15.3
 torchinfo~=1.8.0
+kornia~=0.8.1
+segmentation_models_pytorch~=0.5.0
