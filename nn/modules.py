@@ -99,6 +99,7 @@ class DistanceTransform2D:
         d_bg = self.edt(1.0 - mask)
         return d_bg + d_fg
 
+
 # ---------------------------
 # Loss terms
 # ---------------------------
@@ -219,8 +220,7 @@ def boundary_loss(pred, mask):
 
             dist_maps[b, c, :, :] = dist_map
 
-
-    loss = (prob * dist_maps).sum(dim=(2, 3)).mean()
+    loss = (prob * dist_maps).mean()   # .sum(dim=(2, 3))
     print(loss)
     return loss
 
@@ -310,8 +310,9 @@ def tversky_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.5, b
     loss_tversky = 1.0 - tversky
     return loss_tversky.mean()
 
+
 def union_intersection(pred: torch.Tensor,
-              target: torch.Tensor):
+                       target: torch.Tensor):
     num_classes = pred.shape[1]
     pred_prob = torch.softmax(pred, dim=1)
     target_onehot = one_hot(target, num_classes=num_classes)
@@ -344,6 +345,7 @@ def dice_loss(pred: torch.Tensor,
 
     dice_score = (2. * intersection + epsilon) / (union + intersection + epsilon)
     return 1 - dice_score.mean()
+
 
 def iou_loss(pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
     """
