@@ -79,7 +79,6 @@ class DistanceTransform2D:
         else:
             # FastGeodis generalized geodesic with lambda=0 behaves like Euclidean DT over 4/8-connectivity
             # Seeds are foreground; costs uniform.
-            import FastGeodis
             # FastGeodis expects (B,1,H,W) float32
             I = torch.zeros_like(binary)  # uniform cost
             S = (binary > 0.5).float()
@@ -194,21 +193,31 @@ def boundary_loss(pred, mask):
     """
     num_batch = pred.shape[0]
     num_classes = pred.shape[1]
+    H, W = pred.shape[2], pred.shape[3]
+    # maximum possible distance in the image (corner-to-corner)
+    max_dist = ((H - 1) ** 2 + (W - 1) ** 2) ** 0.5
+    eps = 1e-8
+
     one_hot_mask = one_hot(mask, num_classes)
     dist_maps = torch.zeros_like(one_hot_mask)
+    dt = DistanceTransform2D()
 
     for b in range(num_batch):
         for c in range(num_classes):
             mask_c = one_hot_mask[b, c, :, :].unsqueeze(0).unsqueeze(0)  # [1,1,H,W]
 
-            dist_map = FastGeodis.generalised_geodesic2d(mask_c, mask_c,
-                                                         v=1e10,
-                                                         lamb=0.0,
-                                                         iter=2)
+            # dist_map = FastGeodis.generalised_geodesic2d(mask_c, mask_c,
+            #                                              v=1e10,
+            #                                              lamb=0.0,
+            #                                              iter=2)
+
+            dist_map = dt.edt(mask_c)  # (B,1,H,W), >= 0
+            # normalize to [0,1]
+            dist_map = dist_map / (max_dist + eps)
 
             dist_maps[b, c, :, :] = dist_map
 
-    loss = (pred * dist_maps).abs().sum(dim=(2, 3)).mean()
+    loss = (pred * dist_maps).sum(dim=(2, 3)).mean()
     return loss
 
 
