@@ -202,7 +202,7 @@ def boundary_loss(pred, mask):
 
             dist_map = FastGeodis.generalised_geodesic2d(
                 mask_c, mask_c,
-                v=0.5,
+                v=1e10,
                 lamb=0.0,
                 iter=2)
 
