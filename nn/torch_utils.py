@@ -119,7 +119,7 @@ class RunManager:
                 loss = self.criterion(logits, masks) # Mask: [B, H, W]
                 total_loss += [loss.item()]
                 total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
-                total_iou_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
+                total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -163,7 +163,7 @@ class RunManager:
                     loss = self.criterion(logits, masks)
 
                     total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
-                    total_iou_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
+                    total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
                     total_loss += [loss.item()]
 
                 if self.save_preds is True and self.save_preds_path is not None:
