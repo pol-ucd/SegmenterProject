@@ -18,13 +18,13 @@
         "min_delta": 0.001
     },
     "loss_weights": {
-        "ce":  {"weight": 1.0},
+        "ce":  {"weight": 0.25},
         "dice": {"weight": 1.0},
         "focal": {"weight": 0.0},
         "tversky": {"weight": 0.0},
         "iou":{"weight": 0.0},
         "boundary_sdf": {"weight": 1.0, "dt_backend": "fastgeodis"},
-        "soft_chamfer": {"weight": 1.0, "dt_backend": "fastgeodis"}
+        "soft_chamfer": {"weight": 0.8, "dt_backend": "fastgeodis"}
     },
     "scheduler": {
         "name": "CosineAnnealingLR",
