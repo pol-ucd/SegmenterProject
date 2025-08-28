@@ -18,7 +18,7 @@
         "min_delta": 0.001
     },
     "loss_weights": {
-        "ce":  {"weight": 0.25},
+        "ce":  {"weight": 0.1},
         "dice": {"weight": 1.0},
         "focal": {"weight": 0.0},
         "tversky": {"weight": 0.0},
