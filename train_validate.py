@@ -173,16 +173,14 @@ def main():
     logger.info(f"Training batches: {len(train_loader)}")
     logger.info(f"Test batches: {len(val_loader)}")
 
-    denom = 0.0
-    for weight in params['loss_weights']:
-        denom += params['loss_weights'][weight]
+    # loss_fn = HybridLoss(weight_ce=params['loss_weights']['weight_ce'] / denom,
+    #                      weight_dice=params['loss_weights']['weight_dice'] / denom,
+    #                      weight_focal=params['loss_weights']['weight_focal'] / denom,
+    #                      weight_tversky=params['loss_weights']['weight_tversky'] / denom,
+    #                      weight_iou=params['loss_weights']['weight_iou'] / denom,
+    #                      weight_boundary=params['loss_weights']['weight_boundary'] / denom)
 
-    loss_fn = HybridLoss(weight_ce=params['loss_weights']['weight_ce'] / denom,
-                         weight_dice=params['loss_weights']['weight_dice'] / denom,
-                         weight_focal=params['loss_weights']['weight_focal'] / denom,
-                         weight_tversky=params['loss_weights']['weight_tversky'] / denom,
-                         weight_iou=params['loss_weights']['weight_iou'] / denom,
-                         weight_boundary=params['loss_weights']['weight_boundary'] / denom)
+    loss_fn = HybridLoss(params['loss_weights'])
 
     # Initial freeze all parameters of the model
     logger.info("Freezing encoder layers...")

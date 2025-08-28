@@ -1,6 +1,6 @@
 import logging
 from abc import abstractmethod, ABC
-from typing import Optional
+from typing import Optional, Dict, Tuple
 
 import FastGeodis
 import kornia
@@ -8,538 +8,375 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# ---------------------------
+# Global Constants
+# ---------------------------
+EPSILON = 1e-6
 
 # ---------------------------
 # Utilities
 # ---------------------------
 
 def one_hot(mask: torch.Tensor, num_classes: int) -> torch.Tensor:
-    # mask: (B, H, W) int64 in [0..C-1] -> (B, C, H, W) float
+    """
+    Converts a segmentation mask to a one-hot encoded tensor.
+    Args:
+        mask (torch.Tensor): Segmentation mask of shape (B, H, W) with class indices.
+        num_classes (int): The total number of classes.
+    Returns:
+        torch.Tensor: One-hot encoded tensor of shape (B, C, H, W).
+    """
     return F.one_hot(mask.long(), num_classes).permute(0, 3, 1, 2).float()
 
 
 def sobel_grad(img: torch.Tensor) -> torch.Tensor:
-    # img: (B, 1, H, W)
-    kx = torch.tensor([[-1, 0, 1],
-                       [-2, 0, 2],
-                       [-1, 0, 1]], dtype=img.dtype, device=img.device).view(1, 1, 3, 3)
+    """
+    Computes the Sobel gradient magnitude of a single-channel image.
+    Args:
+        img (torch.Tensor): Image tensor of shape (B, 1, H, W).
+    Returns:
+        torch.Tensor: Gradient magnitude tensor of the same shape.
+    """
+    # Sobel kernels
+    kx = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=img.dtype, device=img.device).view(1, 1, 3, 3)
     ky = kx.transpose(2, 3)
+    # Apply 2D convolution with padding
     gx = F.conv2d(img, kx, padding=1)
     gy = F.conv2d(img, ky, padding=1)
-    return torch.sqrt(gx * gx + gy * gy + 1e-12)
+    return torch.sqrt(gx * gx + gy * gy + EPSILON)
 
 
 def make_soft_boundary(prob: torch.Tensor, tau: float = 1.0) -> torch.Tensor:
-    # prob: (B, 1, H, W) in [0,1]; sharpen to emphasize edges, then Sobel
+    """
+    Creates a soft boundary map from a probability map using Sobel gradient.
+    Args:
+        prob (torch.Tensor): Probability tensor of shape (B, 1, H, W) in [0,1].
+        tau (float): Tau parameter for sharpening the probability map before
+                     computing the gradient.
+    Returns:
+        torch.Tensor: The soft boundary map.
+    """
     if tau != 1.0:
-        prob = torch.clamp(prob, 1e-6, 1 - 1e-6)
+        prob = torch.clamp(prob, EPSILON, 1 - EPSILON)
         prob = torch.pow(prob, 1.0 / tau)
     e = sobel_grad(prob)
-    # normalize per-map to [0,1] for stable weighting
-    e = e / (e.amax(dim=(-1, -2), keepdim=True) + 1e-8)
-    return e
+    # Normalize per-map to [0,1] for stable weighting
+    return e / (e.amax(dim=(-1, -2), keepdim=True) + EPSILON)
 
 
 # ---------------------------
 # Distance transform backends (GPU)
-# Choose either Kornia or FastGeodis; both are CUDA-friendly.
 # ---------------------------
 
 class DistanceTransform2D:
-    def __init__(self, backend: str = "fastgeodis", spacing=(1.0, 1.0)):
+    """
+    Wrapper for different GPU-accelerated 2D distance transform backends.
+    Supports Kornia (Euclidean) and FastGeodis (Geodesic with lambda=0 for Euclidean).
+    """
+    def __init__(self, backend: str = "fastgeodis", spacing: Tuple[float, float] = (1.0, 1.0)):
+        """
+        Args:
+            backend (str): The backend to use, either "kornia" or "fastgeodis".
+            spacing (Tuple[float, float]): Pixel spacing (unused by Kornia).
+        """
         self.backend = backend
         self.spacing = spacing
         if backend == "kornia":
             try:
-                self.kornia = kornia.contrib.distance_transform
-            except Exception as e:
+                self.dt_fn = kornia.contrib.distance_transform
+            except ImportError as e:
                 raise ImportError("Install kornia for GPU distance transform: pip install kornia") from e
         elif backend == "fastgeodis":
             try:
-                self.FastGeodis = FastGeodis
-            except Exception as e:
-                raise ImportError("Install FastGeodis: pip install FastGeodis") from e
+                self.geodis_fn = FastGeodis.generalised_geodesic2d
+            except ImportError as e:
+                raise ImportError("Install FastGeodis for GPU distance transform: pip install FastGeodis") from e
         else:
             raise ValueError("backend must be 'kornia' or 'fastgeodis'")
 
     @torch.no_grad()
     def edt(self, binary: torch.Tensor) -> torch.Tensor:
-        # binary: (B,1,H,W) in {0,1}; returns Euclidean distance to nearest 1-pixel.
+        """
+        Computes Euclidean Distance Transform (EDT) for a binary mask.
+        Args:
+            binary (torch.Tensor): Binary mask of shape (B, 1, H, W) with values {0, 1}.
+        Returns:
+            torch.Tensor: EDT map where each pixel value is the Euclidean distance
+                          to the nearest '1' pixel.
+        """
+        n_batch = binary.shape[0]
         if self.backend == "kornia":
-            # Kornia expects float; computes distance to zeros or ones depending on function.
-            # We compute distance to foreground by inverting once and once more for background as needed outside.
-            # kornia.contrib.distance_transform expects 1 for foreground; it returns distance to zero-valued background.
-            # To get distance to foreground: invert.
-            from kornia.contrib import distance_transform
-            # distance to foreground (1s): invert so foreground becomes 0, then DT to zeros:
-            inv = 1.0 - binary
-            dt = distance_transform(inv)
-            return dt
+            # Kornia computes distance to zeros, so we invert the input
+            return self.dt_fn(1.0 - binary)
         else:
-            # FastGeodis generalized geodesic with lambda=0 behaves like Euclidean DT over 4/8-connectivity
-            # Seeds are foreground; costs uniform.
-            # FastGeodis expects (B,1,H,W) float32
-            I = torch.zeros_like(binary)  # uniform cost
-            S = (binary > 0.5).float()
-            # geodesic2d(img, seeds, spacing, v, l, iter)
-            dt = FastGeodis.generalised_geodesic2d(I, S, v=1e10, lamb=0, iter=2)
-            return dt
+            # FastGeodis computes distance to seeds, so we use the binary mask as seeds
+            I = torch.zeros_like(binary)
+            S = binary.float()
+            result = torch.zeros_like(binary)
+            for b_i in range(n_batch):
+                # Generalised geodesic with v=1e10, lambda=0 approximates Euclidean DT
+                result[b_i] = self.geodis_fn(I[b_i].unsqueeze(0),
+                                             S[b_i].unsqueeze(0),
+                                             v=1e10,
+                                             lamb=0,
+                                             iter=2)
+
+            return result
 
     @torch.no_grad()
     def signed_distance(self, mask: torch.Tensor) -> torch.Tensor:
-        # mask: (B,1,H,W) in {0,1}; returns D_bg - D_fg (positive inside, negative outside)
+        """
+        Computes the Signed Distance Transform (SDT) of a mask.
+        Args:
+            mask (torch.Tensor): Mask of shape (B, 1, H, W) with values {0, 1}.
+        Returns:
+            torch.Tensor: Signed distance map (positive inside, negative outside).
+        """
         d_fg = self.edt(mask)
         d_bg = self.edt(1.0 - mask)
         return d_bg - d_fg
 
-    @torch.no_grad()
-    def unsigned_distance(self, mask: torch.Tensor) -> torch.Tensor:
-        # mask: (B,1,H,W) in {0,1}; returns D_bg + D_fg
-        d_fg = self.edt(mask)
-        d_bg = self.edt(1.0 - mask)
-        return d_bg + d_fg
-
 
 # ---------------------------
-# Loss terms
+# Loss Components
 # ---------------------------
-
-def boundary_sdf_loss(pred_probs: torch.Tensor, gt_one_hot: torch.Tensor, dt: DistanceTransform2D) -> torch.Tensor:
-    # pred_probs: (B,C,H,W), gt_one_hot: (B,C,H,W)
-    B, C, H, W = pred_probs.shape
-    loss = 0.0
-    for c in range(C):
-        gt_c = gt_one_hot[:, c:c + 1]
-        sdt_c = dt.signed_distance(gt_c)  # (B,1,H,W), detached by @no_grad
-        # normalize SDF per-sample for scale invariance
-        sdt_c = sdt_c / (sdt_c.amax(dim=(-1, -2), keepdim=True) + 1e-6)
-        loss += (pred_probs[:, c:c + 1] * sdt_c).mean()
-    return loss / C
-
-
-def soft_chamfer_surface_loss(pred_probs: torch.Tensor, gt_one_hot: torch.Tensor, dt: DistanceTransform2D,
-                              tau: float = 0.8, band_px: int = 3) -> torch.Tensor:
-    # Build GT boundary maps (binary). Use morphological gradient via max-pool.
-    B, C, H, W = pred_probs.shape
-    pool = torch.nn.MaxPool2d(3, stride=1, padding=1)
-    loss = 0.0
-    eps = 1e-8
-
-    for c in range(C):
-        p = pred_probs[:, c:c + 1]  # (B,1,H,W)
-        m = gt_one_hot[:, c:c + 1]  # (B,1,H,W)
-
-        # GT boundary: dilation - erosion (approx via maxpool of mask and of inverted mask)
-        dil = pool(m)
-        ero = 1.0 - pool(1.0 - m)
-        e_gt = torch.clamp(dil - ero, 0, 1)  # binary-ish boundary
-
-        # Narrow band (optional): widen boundary to band_px to relax supervision
-        if band_px > 0:
-            k = 2 * band_px + 1
-            band = torch.nn.MaxPool2d(k, stride=1, padding=band_px)(e_gt)
-            e_gt_band = band
-        else:
-            e_gt_band = e_gt
-
-        # Soft predicted boundary
-        e_pred = make_soft_boundary(p, tau=tau)  # [0,1]
-
-        # Distances: GT-edge distances used by pred-edge and vice-versa.
-        # Note: detach distances computed from pred for stability (optional).
-        d_to_gt = dt.edt(e_gt_band)  # distance to GT edge
-        d_to_pred = dt.edt((e_pred > 0.01).float())  # binarize soft edge for DT
-        d_to_pred = d_to_pred.detach()  # prevent exploding grads via DT backprop
-
-        # Chamfer-style symmetric surface loss
-        term_pred_to_gt = (e_pred * d_to_gt).sum(dim=(2, 3)) / (e_pred.sum(dim=(2, 3)) + eps)
-        term_gt_to_pred = (e_gt * d_to_pred).sum(dim=(2, 3)) / (e_gt.sum(dim=(2, 3)) + eps)
-        loss += 0.5 * (term_pred_to_gt.mean() + term_gt_to_pred.mean())
-
-    return loss / C
-
-
-# ---------------------------
-# Full hybrid loss
-# ---------------------------
-
-class HybridLesionLoss(torch.nn.Module):
-    def __init__(self, num_classes: int, alpha: float = 1.0, beta: float = 1.0, delta: float = 0.5,
-                 dt_backend: str = "kornia", spacing=(1.0, 1.0), tau: float = 0.8, band_px: int = 3):
-        super().__init__()
-        self.C = num_classes
-        self.alpha = alpha
-        self.beta = beta
-        self.delta = delta
-        self.dt = DistanceTransform2D(backend=dt_backend, spacing=spacing)
-        self.tau = tau
-        self.band_px = band_px
-
-    def forward(self, logits: torch.Tensor, gt_mask: torch.Tensor) -> torch.Tensor:
-        # logits: (B,C,H,W), gt_mask: (B,H,W)
-        probs = F.softmax(logits, dim=1)
-        gt = one_hot(gt_mask, self.C).to(probs.dtype)
-
-        Lb = boundary_sdf_loss(probs, gt, self.dt)
-        Ls = soft_chamfer_surface_loss(probs, gt, self.dt, tau=self.tau, band_px=self.band_px)
-        Lo = dice_loss(probs, gt)
-
-        return self.alpha * Lb + self.beta * Ls + self.delta * Lo
-
-
-def boundary_loss(pred, mask):
-    """
-    Boundary Loss
-    Penalizes misalignment between predicted and ground truth boundaries using distance maps.
-    Boundary loss rewards pixel-level alignment.
-
-    :param pred:
-    :param mask:
-    :return:
-    """
-    num_batch = pred.shape[0]
-    num_classes = pred.shape[1]
-    H, W = pred.shape[2], pred.shape[3]
-    # maximum possible distance in the image (corner-to-corner)
-    max_dist = ((H - 1) ** 2 + (W - 1) ** 2) ** 0.5
-    eps = 1e-8
-
-    prob = F.softmax(pred, dim=1)
-
-    one_hot_mask = one_hot(mask, num_classes)
-    dist_maps = torch.zeros_like(one_hot_mask)
-    dt = DistanceTransform2D()
-
-    for b in range(num_batch):
-        for c in range(num_classes):
-            mask_c = one_hot_mask[b, c, :, :].unsqueeze(0).unsqueeze(0)  # [1,1,H,W]
-
-            dist_map = dt.unsigned_distance(mask_c)  # (B,1,H,W), >= 0
-            # normalize to [0,1]
-            dist_map = dist_map / (max_dist + eps)
-
-            dist_maps[b, c, :, :] = dist_map
-
-    loss = (prob * dist_maps).mean()   # .sum(dim=(2, 3))
-
-    return loss
-
-
-def fourier_loss(pred_mask, true_mask):
-    """
-    Shape-Aware Loss
-    Penalizes shape discrepancies using Fourier descriptors or signed distance fields (SDFs).
-    extract contours and compute Fourier descriptors for both prediction and ground truth,
-    then penalize their difference. Fourier loss enforces global shape integrity.
-    Assume binary masks for each class.
-
-    :param pred_mask:
-    :param true_mask:
-    :return:
-    """
-
-    def compute_fd(mask):
-        coords = torch.nonzero(mask)
-        x, y = coords[:, 0].float(), coords[:, 1].float()
-        complex_coords = x + 1j * y
-        fd = torch.fft.fft(complex_coords)
-        return fd
-
-    loss = 0.0
-    for b in range(pred_mask.shape[0]):
-        fd_pred = compute_fd(pred_mask[b])
-        fd_true = compute_fd(true_mask[b])
-        loss += torch.norm(fd_pred - fd_true)
-    return loss / pred_mask.shape[0]
-
-
-def hybrid_loss(pred, mask, alpha=1.0, beta=1.0):
-    pred_mask = torch.argmax(pred, dim=1)  # (B, H, W)
-    boundary_element = boundary_loss(pred, mask)
-    shape_element = fourier_loss(pred_mask, mask)
-    return alpha * boundary_element + beta * shape_element
-
-
-def focal_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.25, gamma: float = 2.0,
-               smooth: float = 1e-6) -> torch.Tensor:
-    """
-    Computes the Focal Loss.
-
-    Args:
-        pred (torch.Tensor): The model's raw output prediction tensor.
-        target (torch.Tensor): The ground truth mask tensor with class indices.
-        alpha (float, optional): Alpha parameter for the focal loss.
-        gamma (float, optional): Gamma parameter for the focal loss.
-        smooth (float, optional): Small value to avoid log(0) issues.
-
-    Returns:
-        torch.Tensor: The calculated focal loss.
-    """
-    pred = torch.softmax(pred, dim=1)
-    target_onehot = F.one_hot(target, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
-    pt = torch.where(target_onehot == 1, pred, 1 - pred)
-    focal_term = alpha * (1 - pt) ** gamma
-    bce = -torch.log(pt + smooth)
-    return (focal_term * bce).mean()
-
-
-def tversky_loss(pred: torch.Tensor, target: torch.Tensor, alpha: float = 0.5, beta: float = 0.5,
-                 smooth: float = 1e-6) -> torch.Tensor:
-    """
-    Computes the Tversky Loss.
-
-    Args:
-        pred (torch.Tensor): The model's raw output prediction tensor.
-        target (torch.Tensor): The ground truth mask tensor with class indices.
-        alpha (float, optional): False positive weight.
-        beta (float, optional): False negative weight.
-        smooth (float, optional): Small value to avoid division by zero.
-
-    Returns:
-        torch.Tensor: The calculated tversky loss.
-    """
-    probs = torch.softmax(pred, dim=1)
-    target_oh = F.one_hot(target, num_classes=probs.shape[1]).permute(0, 3, 1, 2).float()
-
-    # Vectorized calculation over all dimensions
-    TP = (probs * target_oh).sum(dim=(0, 2, 3))
-    FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))
-    FN = ((1 - probs) * target_oh).sum(dim=(0, 2, 3))
-
-    tversky = (TP + smooth) / (TP + alpha * FP + beta * FN + smooth)
-    loss_tversky = 1.0 - tversky
-    return loss_tversky.mean()
-
-
-def union_intersection(pred: torch.Tensor,
-                       target: torch.Tensor):
-    num_classes = pred.shape[1]
-    pred_prob = torch.softmax(pred, dim=1)
-    target_onehot = one_hot(target, num_classes=num_classes)
-
-    intersection = (pred_prob * target_onehot).sum(dim=(2, 3))
-    union = pred_prob.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3)) - intersection
-
-    return union, intersection
-
-
-def dice_loss(pred: torch.Tensor,
-              target: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
-    """
-    Calculates the multi-class Dice Loss.
-
-    This implementation is fully vectorized for efficiency and follows the
-    standard Dice Loss formula.
-
-    Args:
-        pred (torch.Tensor): The model's raw output prediction tensor.
-                             Expected shape: (N, C, H, W).
-        target (torch.Tensor): The ground truth mask tensor with class indices.
-                                  Expected shape: (N, H, W).
-        epsilon (float, optional): A small value to avoid division by zero.
-
-    Returns:
-        torch.Tensor: The calculated multi-class Dice Loss.
-    """
-    union, intersection = union_intersection(pred, target)
-
-    dice_score = (2. * intersection + epsilon) / (union + intersection + epsilon)
-    return 1 - dice_score.mean()
-
-
-def iou_loss(pred: torch.Tensor, target: torch.Tensor, epsilon: float = 1e-6) -> torch.Tensor:
-    """
-    Computes the IoU Loss.
-
-    Args:
-        pred (torch.Tensor): The model's raw output prediction tensor.
-        target (torch.Tensor): The ground truth mask tensor with class indices.
-        epsilon (float, optional): A small value to avoid division by zero.
-
-    Returns:
-        torch.Tensor: The calculated IoU loss.
-    """
-    union, intersection = union_intersection(pred, target)
-
-    iou = (intersection + epsilon) / (union + epsilon)
-    return 1 - iou.mean()
-
 
 class BaseLoss(nn.Module, ABC):
-    """
-    Abstract base class for all loss functions to ensure a consistent interface.
-    """
-
-    def __init__(self, epsilon: float = 1e-6):
+    """Abstract base class for all loss functions."""
+    def __init__(self, **kwargs):
         super().__init__()
-        self.epsilon = epsilon
+        self.kwargs = kwargs
 
     @abstractmethod
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """
-        Calculates the loss.
-
-        Args:
-            pred (torch.Tensor): The model's output.
-            target (torch.Tensor): The ground truth.
-
-        Returns:
-            torch.Tensor: The calculated loss value.
-        """
+        """Calculates the loss."""
         pass
 
 
-class BoundaryLoss(BaseLoss):
-    """
-    Loss based on the signed distance map from boundaries.
-
-    Args:
-        scale_factor (float): A factor to scale the final loss by, to
-                              prevent it from dominating other losses.
-    """
-
-    def __init__(self, scale_factor: float = 1.0):
-        super().__init__()
-        self.scale_factor = scale_factor
-
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        loss = boundary_loss(pred, target)
-        return loss * self.scale_factor
-
-
 class DiceLoss(BaseLoss):
-    """Calculates the Dice Loss."""
-
+    """Calculates the multi-class Dice Loss."""
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        return dice_loss(pred, target, self.epsilon)
+        num_classes = max(pred.shape[1], 2)
 
-
-class FocalLoss(BaseLoss):
-    """
-    Calculates the Focal Loss with adjustable alpha and gamma parameters.
-    """
-
-    def __init__(self, alpha: float = 0.25, gamma: float = 2.0):
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        return focal_loss(pred, target, alpha=self.alpha, gamma=self.gamma, smooth=self.epsilon)
-
-
-class TverskyLoss(BaseLoss):
-    """
-    Calculates the Tversky Loss with adjustable alpha and beta parameters.
-    """
-
-    def __init__(self, alpha: float = 0.5, beta: float = 0.5):
-        super().__init__()
-        self.alpha = alpha
-        self.beta = beta
-
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        return tversky_loss(pred, target, alpha=self.alpha, beta=self.beta, smooth=self.epsilon)
+        probs = F.softmax(pred, dim=1)
+        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        # Vectorized calculation
+        intersection = (probs * target_onehot).sum(dim=(2, 3))
+        union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3)))
+        dice_score = (2.0 * intersection + EPSILON) / (union + EPSILON)
+        return 1 - dice_score.mean()
 
 
 class IoULoss(BaseLoss):
     """Calculates the Intersection over Union (IoU) Loss."""
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(pred.shape[1], 2)
+        probs = F.softmax(pred, dim=1)
+        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        # Vectorized calculation
+        intersection = (probs * target_onehot).sum(dim=(2, 3))
+        union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))) - intersection
+        iou_score = (intersection + EPSILON) / (union + EPSILON)
+        return 1 - iou_score.mean()
+
+
+class FocalLoss(BaseLoss):
+    """Calculates the Focal Loss."""
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(pred.shape[1], 2)
+        alpha = self.kwargs.get('alpha', 0.25)
+        gamma = self.kwargs.get('gamma', 2.0)
+        probs = F.softmax(pred, dim=1)
+        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        pt = torch.where(target_onehot == 1, probs, 1 - probs)
+        focal_term = alpha * (1 - pt) ** gamma
+        bce = -torch.log(pt + EPSILON)
+        return (focal_term * bce).mean()
+
+
+class TverskyLoss(BaseLoss):
+    """Calculates the Tversky Loss."""
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(pred.shape[1], 2)
+
+        alpha = self.kwargs.get('alpha', 0.5)
+        beta = self.kwargs.get('beta', 0.5)
+        probs = F.softmax(pred, dim=1)
+        target_oh = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        # Vectorized calculation over all dimensions
+        TP = (probs * target_oh).sum(dim=(0, 2, 3))
+        FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))
+        FN = ((1 - probs) * target_oh).sum(dim=(0, 2, 3))
+        tversky = (TP + EPSILON) / (TP + alpha * FP + beta * FN + EPSILON)
+        return 1.0 - tversky.mean()
+
+
+class BoundarySDFLoss(BaseLoss):
+    """
+    Boundary Loss based on Signed Distance Functions (SDF).
+    Penalizes misalignment between predicted and ground truth boundaries.
+    """
+    def __init__(self, dt_backend: str = "fastgeodis", **kwargs):
+        super().__init__(**kwargs)
+        self.dt = DistanceTransform2D(backend=dt_backend)
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        return iou_loss(pred, target, self.epsilon)
+        num_classes = max(pred.shape[1], 2)
+        is_one_class = (pred.shape[1] == 1)
+        probs = F.softmax(pred, dim=1)
+        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        loss = 0.0
+        for c in range(num_classes):
+            gt_c = target_onehot[:, c:c + 1]
+            sdt_c = self.dt.signed_distance(gt_c)
+            # Normalize SDF per-sample for scale invariance
+            sdt_c = sdt_c / (sdt_c.amax(dim=(-1, -2), keepdim=True) + EPSILON)
+
+            # Penalize the difference between prediction and ground truth,
+            # weighted by the absolute signed distance. This ensures zero loss
+            # for a perfect match, regardless of the SDF value.
+            loss += (sdt_c.abs() * (probs[:, c:c + 1] - gt_c).abs()).mean()
+
+            if is_one_class:
+                break
+
+        return loss / num_classes
+
+class SoftChamferLoss(BaseLoss):
+    """
+    A symmetric soft Chamfer loss that penalizes surface misalignment.
+    Uses soft predicted boundaries and GT boundaries based on morphological operations.
+    """
+    def __init__(self, dt_backend: str = "fastgeodis", tau: float = 0.8, band_px: int = 3, **kwargs):
+        super().__init__(**kwargs)
+        self.dt = DistanceTransform2D(backend=dt_backend)
+        self.tau = tau
+        self.band_px = band_px
+        self.pool = nn.MaxPool2d(3, stride=1, padding=1)
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(pred.shape[1], 2)
+        probs = F.softmax(pred, dim=1)
+        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        loss = 0.0
+        for c in range(num_classes):
+            p = probs[:, c:c + 1]
+            m = target_onehot[:, c:c + 1]
+
+            # GT boundary approximation via morphological gradient
+            dil = self.pool(m)
+            ero = 1.0 - self.pool(1.0 - m)
+            e_gt = torch.clamp(dil - ero, 0, 1)
+
+            # Narrow band
+            if self.band_px > 0:
+                k = 2 * self.band_px + 1
+                band = nn.MaxPool2d(k, stride=1, padding=self.band_px)(e_gt)
+                e_gt_band = band
+            else:
+                e_gt_band = e_gt
+
+            # Soft predicted boundary
+            e_pred = make_soft_boundary(p, tau=self.tau)
+
+            # Distances to boundaries
+            d_to_gt = self.dt.edt(e_gt_band)
+            d_to_pred = self.dt.edt((e_pred > 0.01).float()).detach()
+
+            # --- NORMALIZATION ADDED HERE ---
+            # Normalizing distance maps to [0, 1] for stable loss values
+            max_dist_to_gt = d_to_gt.amax(dim=(-1, -2), keepdim=True) + EPSILON
+            max_dist_to_pred = d_to_pred.amax(dim=(-1, -2), keepdim=True) + EPSILON
+            d_to_gt = d_to_gt / max_dist_to_gt
+            d_to_pred = d_to_pred / max_dist_to_pred
+
+            # Chamfer-style symmetric loss terms
+            term_pred_to_gt = (e_pred * d_to_gt).sum(dim=(2, 3)) / (e_pred.sum(dim=(2, 3)) + EPSILON)
+            term_gt_to_pred = (e_gt * d_to_pred).sum(dim=(2, 3)) / (e_gt.sum(dim=(2, 3)) + EPSILON)
+            loss += 0.5 * (term_pred_to_gt.mean() + term_gt_to_pred.mean())
+
+        return loss / num_classes
+
+
+class LossFactory:
+    """
+    A factory class to create instances of loss functions by name.
+    This centralizes loss function creation and configuration.
+    """
+    _loss_map = {
+        'dice': DiceLoss,
+        'iou': IoULoss,
+        'focal': FocalLoss,
+        'tversky': TverskyLoss,
+        'boundary_sdf': BoundarySDFLoss,
+        'soft_chamfer': SoftChamferLoss,
+        'ce': nn.CrossEntropyLoss,
+        'bce': nn.BCEWithLogitsLoss
+    }
+
+    @staticmethod
+    def create(loss_name: str, **kwargs) -> nn.Module:
+        """
+        Creates a loss function instance.
+        Args:
+            loss_name (str): The name of the loss function.
+            **kwargs: Additional arguments for the loss function's constructor.
+        Returns:
+            nn.Module: An instance of the requested loss function.
+        Raises:
+            ValueError: If the loss name is not supported.
+        """
+        if loss_name not in LossFactory._loss_map:
+            raise ValueError(f"Loss '{loss_name}' not supported. "
+                             f"Supported losses are: {list(LossFactory._loss_map.keys())}")
+        return LossFactory._loss_map[loss_name](**kwargs)
 
 
 class HybridLoss(nn.Module):
     """
     Combines multiple loss functions with configurable weights.
-
-    This class correctly initializes all loss components and applies them
-    to the input tensors before combining.
+    The list of losses to use and their weights are passed in a dictionary.
     """
-
-    def __init__(self, weight_ce: float = 1.0, weight_dice: float = 1.0,
-                 weight_focal: float = 1.0, weight_tversky: float = 1.0,
-                 weight_iou: float = 1.0, weight_boundary: float = 1.0):
+    def __init__(self, loss_configs: Dict[str, Dict[str, float]]):
+        """
+        Args:
+            loss_configs (Dict[str, Dict[str, float]]):
+                A dictionary where keys are loss names and values are dictionaries
+                containing 'weight' and any other loss-specific arguments.
+                Example: {'dice': {'weight': 0.5}, 'ce': {'weight': 0.5}}.
+        """
         super().__init__()
-        self.weight_ce = weight_ce
-        self.weight_dice = weight_dice
-        self.weight_focal = weight_focal
-        self.weight_tversky = weight_tversky
-        self.weight_iou = weight_iou
-        self.weight_boundary = weight_boundary
+        self.loss_functions = nn.ModuleDict()
+        self.weights = {}
 
-        # Initialize all loss components
-        self.ce_loss = nn.CrossEntropyLoss()
-        self.dice_loss = DiceLoss()
-        self.focal_loss = FocalLoss()
-        self.tversky_loss = TverskyLoss(alpha=0.2, beta=0.4)
-        self.iou_loss = IoULoss()
-        # Initializing BoundaryLoss with a scale_factor to prevent it from dominating
-        self.boundary_loss = BoundaryLoss(scale_factor=1e-3)
+        for name, config in loss_configs.items():
+            weight = config.pop('weight', 1.0)
+            self.weights[name] = weight
+            self.loss_functions[name] = LossFactory.create(name, **config)
+            logging.info(f"Initialized loss '{name}' with weight {weight} and config {config}")
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        # Assuming target has shape (N, H, W) and pred is logits (N, C, H, W)
-        # Squeeze dim 1 if it exists, as CrossEntropyLoss expects (N, C, ...) and (N, ...)
-        target_squeezed = target.squeeze(1) if target.dim() == pred.dim() else target
+        num_classes = max(pred.shape[1], 2)
+        total_loss = torch.tensor(0.0, device=pred.device)
+        # Ensure target is of the correct format for multi-class losses
+        if target.dim() == pred.dim():
+            target = target.squeeze(1)
 
-        loss_ce = self.ce_loss(pred, target_squeezed)
-        loss_dice = self.dice_loss(pred, target_squeezed)
-        loss_focal = self.focal_loss(pred, target_squeezed)
-        loss_tversky = self.tversky_loss(pred, target_squeezed)
-        loss_iou = self.iou_loss(pred, target_squeezed)
-        loss_boundary = self.boundary_loss(pred, target_squeezed)
+        for name, loss_fn in self.loss_functions.items():
+            if name == 'bce':
+                # BCE expects pred with shape (B, 1, H, W) and target (B, 1, H, W)
+                current_loss = loss_fn(pred, target.unsqueeze(1).float())
+            elif name == 'ce':
+                if num_classes == 2:
+                    current_loss = loss_fn(pred, target.long())
+                else:
+                    current_loss = loss_fn(pred,
+                                           one_hot(target, num_classes))
+            else:
+                current_loss = loss_fn(pred,
+                                       target)
+            total_loss += self.weights[name] * current_loss
 
-        total_loss = (
-                self.weight_ce * loss_ce +
-                self.weight_dice * loss_dice +
-                self.weight_focal * loss_focal +
-                self.weight_tversky * loss_tversky +
-                self.weight_iou * loss_iou +
-                self.weight_boundary * loss_boundary
-        )
-        return total_loss
-
-
-class CombinedLoss(nn.Module):
-    """
-    Combines multiple loss functions for binary image classification.
-
-    This version correctly handles the binary case by using BCEWithLogitsLoss
-    and passing the appropriate targets to other multi-class losses.
-    """
-
-    def __init__(self, weights: Optional[dict] = None):
-        super().__init__()
-        if weights is None:
-            weights = {'bce': 0.2, 'tversky': 0.4, 'focal': 0.4, 'dice': 0.6, 'jaccard': 0.6}
-        self.weights = weights
-
-        self.bce = nn.BCEWithLogitsLoss()
-        self.tversky = TverskyLoss(alpha=0.2, beta=0.4)
-        self.focal = FocalLoss()
-        self.dice = DiceLoss()
-        self.iou = IoULoss()
-
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        # For binary classification, pred has shape (N, 1, H, W) or (N, H, W)
-        # target has shape (N, H, W) with values 0 or 1
-
-        # BCEWithLogitsLoss expects float target
-        bce = self.bce(pred, target.unsqueeze(1).float())
-
-        # For the other losses, we treat the binary case as a multi-class
-        # problem with 2 classes (0 and 1) to use the existing multi-class
-        # implementations.
-        tversky = self.tversky(pred, target.long())
-        focal = self.focal(pred, target.long())
-        dice = self.dice(pred, target.long())
-        jaccard = self.iou(pred, target.long())
-
-        total_loss = (self.weights['bce'] * bce +
-                      self.weights['tversky'] * tversky +
-                      self.weights['focal'] * focal +
-                      self.weights['dice'] * dice +
-                      self.weights['jaccard'] * jaccard)
         return total_loss
 
 
@@ -547,7 +384,6 @@ class EarlyStopping:
     """
     Early Stopping Implementation to halt training when a metric stops improving.
     """
-
     def __init__(self, patience: int = 5, min_delta: float = 0.0,
                  mode: str = 'min', verbose: bool = False,
                  save_path: Optional[str] = None):
@@ -586,7 +422,6 @@ class EarlyStopping:
     def __call__(self, current_score: float, model: Optional[nn.Module] = None, epoch: Optional[int] = None):
         """
         Evaluates the current score against the best score and updates state.
-
         Args:
             current_score (float): The score from the current epoch.
             model (Optional[nn.Module]): The model to save if a new best score is found.
@@ -621,3 +456,152 @@ class EarlyStopping:
         self.early_stop = False
         self.best_score = float('inf') if self.mode == 'min' else float('-inf')
         self.best_epoch = None
+
+
+if __name__ == '__main__':
+    # ---------------------------
+    # Test Calls for all functions and classes
+    # ---------------------------
+
+    # Setup for tests
+    n_batch, h, w, n_classes = 4, 128, 128, 3
+    test_logits = torch.randn(n_batch, n_classes, h, w)
+    test_mask = torch.randint(0, n_classes, (n_batch, h, w))
+    binary_logits = torch.randn(n_batch, 1, h, w)
+    binary_mask = torch.randint(0, 2, (n_batch, h, w))
+
+    print("--- Testing Utility Functions ---")
+    test_one_hot = one_hot(test_mask, n_classes)
+    print(f"one_hot output shape: {test_one_hot.shape}")
+    test_sobel_grad = sobel_grad(torch.randn(1, 1, h, w))
+    print(f"sobel_grad output shape: {test_sobel_grad.shape}")
+    test_soft_boundary = make_soft_boundary(torch.rand(1, 1, h, w))
+    print(f"make_soft_boundary output shape: {test_soft_boundary.shape}")
+
+    print("\n--- Testing DistanceTransform2D ---")
+    dt_kornia = DistanceTransform2D(backend="kornia")
+    dt_fastgeodis = DistanceTransform2D(backend="fastgeodis")
+    binary_map = (test_mask[:, None, :, :] == 1).float()
+    print(f"DistanceTransform2D (kornia) EDT: {dt_kornia.edt(binary_map).mean().item():.4f}")
+    print(f"DistanceTransform2D (fastgeodis) EDT: {dt_fastgeodis.edt(binary_map).mean().item():.4f}")
+    print(f"DistanceTransform2D (kornia) SDT: {dt_kornia.signed_distance(binary_map).mean().item():.4f}")
+    print(f"DistanceTransform2D (fastgeodis) SDT: {dt_fastgeodis.signed_distance(binary_map).mean().item():.4f}")
+
+    print("\n--- Testing Individual Loss Components (via LossFactory) ---")
+    dice_loss_fn = LossFactory.create('dice')
+    iou_loss_fn = LossFactory.create('iou')
+    focal_loss_fn = LossFactory.create('focal', alpha=0.5, gamma=3.0)
+    tversky_loss_fn = LossFactory.create('tversky', alpha=0.3, beta=0.7)
+    ce_loss_fn = LossFactory.create('ce')
+    boundary_sdf_loss_fn = LossFactory.create('boundary_sdf', dt_backend="fastgeodis")
+    soft_chamfer_loss_fn = LossFactory.create('soft_chamfer', dt_backend="fastgeodis")
+
+    print(f"Dice Loss: {dice_loss_fn(test_logits, test_mask).item():.4f}")
+    print(f"IoU Loss: {iou_loss_fn(test_logits, test_mask).item():.4f}")
+    print(f"Focal Loss: {focal_loss_fn(test_logits, test_mask).item():.4f}")
+    print(f"Tversky Loss: {tversky_loss_fn(test_logits, test_mask).item():.4f}")
+    print(f"Cross-Entropy Loss: {ce_loss_fn(test_logits, test_mask).item():.4f}")
+    print(f"Boundary SDF Loss: {boundary_sdf_loss_fn(test_logits, test_mask).item():.4f}")
+    print(f"Soft Chamfer Loss: {soft_chamfer_loss_fn(test_logits, test_mask).item():.4f}")
+
+    print("\n--- Testing DiceLoss with a perfect prediction ---")
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, h, w).long()
+    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+    perfect_loss = dice_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "DiceLoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing IoULoss with a perfect prediction ---")
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, h, w).long()
+    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+    perfect_loss = iou_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "IoULoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing FocalLoss with a perfect prediction ---")
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, h, w).long()
+    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+    perfect_loss = focal_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "FocalLoss for perfect prediction is not near zero!"
+
+
+    print("\n--- Testing TverskyLoss with a perfect prediction ---")
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, h, w).long()
+    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+    perfect_loss = tversky_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "TverskyLoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing CrossEntropyLoss with a perfect prediction ---")
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, h, w).long()
+    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+    perfect_loss = ce_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "CrossEntropyLoss for perfect prediction is not near zero!"
+
+    # Boundary SDF Loss
+    print("\n--- Testing BoundarySDFLoss with perfect prediction ---")
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, h, w).long()
+    # Set logits for class 0 to be very high, predicting the correct class
+    perfect_pred[0, 0, :, :] = 100.0
+    perfect_target[0, :, :] = 0
+    perfect_sdf_loss = boundary_sdf_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Boundary SDF Loss for perfect prediction: {perfect_sdf_loss:.6f}")
+    assert perfect_sdf_loss < 1e-5, "Boundary SDF Loss for perfect prediction is not near zero!"
+
+    print("\n--- Testing SoftChamferLoss with a perfect prediction ---")
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, h, w).long()
+    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+    perfect_loss = soft_chamfer_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "SoftChamferLoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing HybridLoss Class ---")
+    loss_config_multi = {
+        'ce': {'weight': 0.5},
+        'dice': {'weight': 0.5},
+        'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
+    }
+    hybrid_loss_multi = HybridLoss(loss_config_multi)
+    hybrid_total_loss_multi = hybrid_loss_multi(test_logits, test_mask)
+    print(f"HybridLoss (multi-class) total loss: {hybrid_total_loss_multi.item():.4f}")
+
+    loss_config_binary = {
+        'bce': {'weight': 0.4},
+        'ce': {'weight': 0.4},
+        'tversky': {'weight': 0.6},
+        'dice': {'weight': 0.5},
+        'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
+    }
+    hybrid_loss_binary = HybridLoss(loss_config_binary)
+    hybrid_total_loss_binary = hybrid_loss_binary(binary_logits, binary_mask)
+    print(f"HybridLoss (binary) total loss: {hybrid_total_loss_binary.item():.4f}")
+
+    print("\n--- Testing EarlyStopping Class ---")
+    es = EarlyStopping(patience=3, min_delta=0.01, verbose=True, mode='min')
+    print("Initial state:")
+    es(0.5)
+    es(0.48)
+    es(0.47)
+    es(0.46)
+    print(f"Early stop flag: {es.early_stop}")
+    es(0.47) # No improvement
+    es(0.48) # No improvement
+    es(0.49) # Trigger early stop
+    print(f"Early stop flag: {es.early_stop}")
+    es.reset()
+    print(f"After reset, early stop flag: {es.early_stop}")
