@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch import GradScaler
+from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader
 
 from nn.data import (split_images_and_masks,
@@ -39,7 +40,8 @@ def main():
     checkpoint_patience = params['checkpoints']['patience']
     checkpoint_min_delta = params['checkpoints']['min_delta']
     if not os.path.isdir(checkpoint_path):
-        logger.info(f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
+        logger.info(
+            f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
 
     test_split = params['test_split']
@@ -199,8 +201,18 @@ def main():
         weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
     )
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
     # torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, T_max = 50)
+    # Extract each group's lr to serve as its max_lr
+
+    max_lrs = [group["lr"] for group in optimizer.param_groups]
+    scheduler = OneCycleLR(
+        optimizer,
+        max_lr=max_lrs,
+        total_steps=n_epochs*len(train_loader),
+        pct_start=0.1,  # 10% of cycle is ramp-up
+        anneal_strategy="cos"  # or "linear"
+    )
 
     """
     Only use GradScaler if we have CUDA
