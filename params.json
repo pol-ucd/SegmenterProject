@@ -6,7 +6,7 @@
     "n_augments": 2,
     "image_size": [512, 512],
     "optimizer_settings": {
-        "learning_rate": 5e-5,
+        "learning_rate": 1e-4,
         "l2_decay_penalty": 1e-5
     },
     "n_epochs": 100,
