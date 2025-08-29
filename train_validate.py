@@ -7,7 +7,6 @@ import sys
 import numpy as np
 import pandas as pd
 import torch
-from torch import GradScaler
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader
 
@@ -218,8 +217,8 @@ def main():
     Only use GradScaler if we have CUDA
     """
     scaler = None
-    if torch.cuda.is_available():
-        scaler = GradScaler()
+    # if torch.cuda.is_available():
+    #     scaler = GradScaler()
 
     trainer = RunManager(model,
                          optimizer,
