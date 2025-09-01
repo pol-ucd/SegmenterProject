@@ -120,7 +120,7 @@ def main():
     Setup the model 
     """
     model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
-                                        num_classes=num_classes)
+                                        num_classes=num_classes).to(device)
 
 
 
