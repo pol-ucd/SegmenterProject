@@ -2,7 +2,7 @@
     "test_split": 0.1,
     "num_classes": 2,
     "batch_size": 64,
-    "num_workers": 0,
+    "num_workers": 4,
     "n_augments": 2,
     "image_size": [512, 512],
     "optimizer_settings": {
