@@ -138,6 +138,7 @@ def main():
     # # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
         # filter(lambda p: p.requires_grad, model.parameters()),
+        params=model.parameters(),
         lr=learning_rate,
         weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
     )
