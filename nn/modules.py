@@ -2,8 +2,19 @@ import logging
 from abc import abstractmethod, ABC
 from typing import Optional, Dict, Tuple
 
-import FastGeodis
-import kornia
+try:
+    import FastGeodis
+    is_geo_installed = True
+except ImportError:
+    is_geo_installed = False
+
+try:
+    import kornia
+except ImportError:
+    if not is_geo_installed:
+        msg = f"Install kornia or FastGeodis packages required for GPU distance transform."
+        raise ImportError(msg)
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
