@@ -99,6 +99,7 @@ class RunManager:
         """
         # TODO: implement parameters
         self.model.train()
+        print(f"self.device is {self.device}")
         total_loss = []
         total_dice_loss = []
         total_iou_loss = []
