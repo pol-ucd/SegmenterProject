@@ -31,7 +31,7 @@
         "T_max": 50
     },
     "datasets": {
-        "hdf5_dir": "/Users/polmacaonghusa/Library/CloudStorage/GoogleDrive-pol.macaonghusa@ucd.ie/My Drive/polyp_data/data",
+        "hdf5_dir": "/content/drive/MyDrive/polyp_data/data",
         "hdf5_files": ["Classica.h5",
                        "Kvasir-SEG-sessile.h5",
                        "CVC-300.h5",
