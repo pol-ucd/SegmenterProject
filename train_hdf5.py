@@ -5,7 +5,7 @@ import sys
 
 import torch
 from torch import GradScaler
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 
 from nn.data import (get_num_samples_from_hdf5, HDF5ImageDataset, CheckpointManager)
 from nn.models import SegformerBinarySegmentation
@@ -94,8 +94,10 @@ def main():
         n_records += len_hdf5
     logger.info(f"Using {n_records} total records for training and testing.")
 
-    final_train_dataset = ConcatDataset(train_datasets)
-    final_test_dataset = ConcatDataset(test_datasets)
+    # final_train_dataset = ConcatDataset(train_datasets)
+    # final_test_dataset = ConcatDataset(test_datasets)
+    final_train_dataset = train_datasets[0]
+    final_test_dataset = test_datasets[0]
 
     train_loader = DataLoader(
         final_train_dataset,

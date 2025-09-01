@@ -32,14 +32,7 @@
     },
     "datasets": {
         "hdf5_dir": "/content/drive/MyDrive/polyp_data/data",
-        "hdf5_files": ["Classica.h5",
-                       "Kvasir-SEG-sessile.h5",
-                       "CVC-300.h5",
-                       "Kvasir-SEG.h5",
-                       "CVC-ClinicDB.h5",
-                       "Kvasir.h5",
-                       "ETIS-LaribPolypDB.h5",
-                       "PolypGen2021_segmentation.h5"],
+        "hdf5_files": ["all_data.h5"],
         "image_paths": [
             "data/Classica/images",
             "data/Polyp Segmentation/train",
