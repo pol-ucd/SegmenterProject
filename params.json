@@ -31,7 +31,15 @@
         "T_max": 50
     },
     "datasets": {
-        "hdf5": "data/all_images.hdf5",
+        "hdf5_dir": "/Users/polmacaonghusa/Library/CloudStorage/GoogleDrive-pol.macaonghusa@ucd.ie/My Drive/polyp_data/data",
+        "hdf5_files": ["Classica.h5",
+                       "Kvasir-SEG-sessile.h5",
+                       "CVC-300.h5",
+                       "Kvasir-SEG.h5",
+                       "CVC-ClinicDB.h5",
+                       "Kvasir.h5",
+                       "ETIS-LaribPolypDB.h5",
+                       "PolypGen2021_segmentation.h5"],
         "image_paths": [
             "data/Classica/images",
             "data/Polyp Segmentation/train",

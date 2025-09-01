@@ -159,7 +159,10 @@ class DiceLoss(BaseLoss):
         num_classes = max(pred.shape[1], 2)
 
         probs = F.softmax(pred, dim=1)
-        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        if target.shape[1] == 1:
+            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        else:
+            target_onehot = target.to(pred.dtype)
         # Vectorized calculation
         intersection = (probs * target_onehot).sum(dim=(2, 3))
         union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3)))
@@ -172,7 +175,10 @@ class IoULoss(BaseLoss):
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         num_classes = max(pred.shape[1], 2)
         probs = F.softmax(pred, dim=1)
-        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        if target.shape[1] == 1:
+            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        else:
+            target_onehot = target.to(pred.dtype)
         # Vectorized calculation
         intersection = (probs * target_onehot).sum(dim=(2, 3))
         union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))) - intersection
@@ -187,7 +193,10 @@ class FocalLoss(BaseLoss):
         alpha = self.kwargs.get('alpha', 0.25)
         gamma = self.kwargs.get('gamma', 2.0)
         probs = F.softmax(pred, dim=1)
-        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        if target.shape[1] == 1:
+            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        else:
+            target_onehot = target.to(pred.dtype)
         pt = torch.where(target_onehot == 1, probs, 1 - probs)
         focal_term = alpha * (1 - pt) ** gamma
         bce = -torch.log(pt + EPSILON)
@@ -202,7 +211,10 @@ class TverskyLoss(BaseLoss):
         alpha = self.kwargs.get('alpha', 0.5)
         beta = self.kwargs.get('beta', 0.5)
         probs = F.softmax(pred, dim=1)
-        target_oh = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        if target.shape[1] == 1:
+            target_oh = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        else:
+            target_oh = target.to(pred.dtype)
         # Vectorized calculation over all dimensions
         TP = (probs * target_oh).sum(dim=(0, 2, 3))
         FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))
@@ -224,7 +236,10 @@ class BoundarySDFLoss(BaseLoss):
         num_classes = max(pred.shape[1], 2)
         is_one_class = (pred.shape[1] == 1)
         probs = F.softmax(pred, dim=1)
-        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        if target.shape[1] == 1:
+            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        else:
+            target_onehot = target.to(pred.dtype)
         loss = 0.0
         for c in range(num_classes):
             gt_c = target_onehot[:, c:c + 1]
@@ -257,7 +272,10 @@ class SoftChamferLoss(BaseLoss):
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         num_classes = max(pred.shape[1], 2)
         probs = F.softmax(pred, dim=1)
-        target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        if target.shape[1] == 1:
+            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+        else:
+            target_onehot = target.to(pred.dtype)
         loss = 0.0
         for c in range(num_classes):
             p = probs[:, c:c + 1]
@@ -365,10 +383,10 @@ class HybridLoss(nn.Module):
         for name, loss_fn in self.loss_functions.items():
             if name == 'bce':
                 # BCE expects pred with shape (B, 1, H, W) and target (B, 1, H, W)
-                current_loss = loss_fn(pred, target.unsqueeze(1).float())
+                current_loss = loss_fn(pred, target.unsqueeze(1).type(pred.dtype))
             elif name == 'ce':
                 if num_classes == 2:
-                    current_loss = loss_fn(pred, target.long())
+                    current_loss = loss_fn(pred, target.type(pred.dtype))
                 else:
                     current_loss = loss_fn(pred,
                                            one_hot(target, num_classes))

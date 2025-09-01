@@ -1,34 +1,17 @@
-import glob
 import json
 import logging
 import os
 import sys
 
-import numpy as np
-import pandas as pd
 import torch
-from sklearn.model_selection import train_test_split
 from torch import GradScaler
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, ConcatDataset
 
-from nn.data import (SemanticSegmentationDatasetAugmentor,
-                     SemanticSegmentationDatasetBasic, CheckpointManager, HDF5Dataset,
-                     SemanticSegmentationDatasetBasicHDF5)
+from nn.data import (get_num_samples_from_hdf5, HDF5ImageDataset, CheckpointManager)
 from nn.models import SegformerBinarySegmentation
 from nn.modules import HybridLoss
 from nn.torch_utils import RunManager
 
-
-def train_transform(image):
-    # Example of a simple transform
-    # For real augmentation, you would need to apply the same transform
-    # parameters (e.g., rotation angle) to all three tensors.
-
-    # Simulating a simple operation for demonstration
-    image = transforms.ColorJitter(brightness=0.2)(image)
-    # Assuming you've created a custom transform that handles all three
-
-    return image, mask, dist_map
 
 def main():
     # logger = logging.getLogger(__name__)
@@ -68,134 +51,79 @@ def main():
     image_paths = params["datasets"]["image_paths"]
     mask_paths = params["datasets"]["mask_paths"]
     file_types = params["datasets"]["file_types"]
-    hdf5_path = params["datasets"]["hdf5"]
+    hdf5_path = params["datasets"]["hdf5_dir"]
+    hdf5_files = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]]
+
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
     logger.info(f"Using {device} device for model training.")
     logger.info(f"Loaded parameters: {params}")
 
-    cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
-                                   prefix=checkpoint_prefix,
-                                   patience=checkpoint_patience,
-                                   min_delta=checkpoint_min_delta)
+    """ Load datasets for test and training """
+    # Now we correctly split the indices and create new datasets
+    train_datasets = []
+    test_datasets = []
+
+    n_records = 0
+    for hdf5_file in hdf5_files:
+        len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
+        # Ensure reproducibility of training and test with a fixed seed
+        torch.manual_seed(42)
+        shuffled_indices = torch.randperm(len_hdf5)
+        test_indices = shuffled_indices[int(len_hdf5 * test_split):]
+        train_indices = shuffled_indices[:len_hdf5 - len(test_indices)]
+
+
+        train_datasets.append(HDF5ImageDataset(
+            hdf5_path=hdf5_file,
+            indices=train_indices,
+            is_train_split=True,
+            image_size=image_size,
+            n_augment=n_augments
+        ))
+
+
+        test_datasets.append(HDF5ImageDataset(
+            hdf5_path=hdf5_file,
+            indices=test_indices,
+            is_train_split=False,
+            image_size=image_size,
+            n_augment=0
+        ))
+
+        n_records += len_hdf5
+    logger.info(f"Using {n_records} total records for training and testing.")
+
+    final_train_dataset = ConcatDataset(train_datasets)
+    final_test_dataset = ConcatDataset(test_datasets)
+
+    train_loader = DataLoader(
+        final_train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers
+    )
+    test_loader = DataLoader(
+        final_test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers
+    )
+    logger.info(f"Successfully loaded training and testing dataset for {n_records} records.")
+    logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
+    logger.info(f"Number of batches in the test DataLoader: {len(test_loader)}")
+
 
     """
     Setup the model 
     """
     model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
                                         num_classes=num_classes)
-    latest_checkpoint = None
-    try:
-        # Get the list of saved checkpoints
-        checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
-        if checkpoints:
-            latest_checkpoint = checkpoints[-1]
-            cp_manager.load(model, latest_checkpoint, device=device)
-            logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
-        else:
-            logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
-    except FileNotFoundError as e:
-        logger.info(f"Unable to load checkpoint {e}")
 
-    model.to(device)
-    logger.info(f"Instantiated model with {model.num_classes} classes.")
 
-    """
-    Load the list of training and testing images and masks.
-    We take the same percentage split from each separate source of images so
-    that we are guaranteed to have a representation from each source in the
-    training and testing sets.
-    """
 
-    full_dataset = HDF5Dataset(hdf5_path=hdf5_path)
-    test_size = int(len(full_dataset) * test_split)
-    train_size = len(full_dataset) - test_size
 
-    logger.info(f"Splitting dataset into {train_size} (train) and {test_size} (test) samples.")
-
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, test_size])
-    if latest_checkpoint is not None:
-        latest_csv = latest_checkpoint.split(".pt")[0] + ".csv"
-        df_data = pd.read_csv(latest_csv)
-        train_images = df_data[df_data.phase == "T"]["image"].values
-        val_images = df_data[df_data.phase == "V"]["image"].values
-        train_indices = full_dataset.get_indices_from_paths(train_images)
-        val_indices = full_dataset.get_indices_from_paths(val_images)
-        logger.info(f"Loading training and test data from {latest_checkpoint}.")
-    else:
-        indices = np.arange(len(full_dataset))
-        _, _, train_indices, val_indices = train_test_split(indices[:, np.newaxis], indices,
-                                                             test_size=test_split,
-                                                             shuffle=False)
-        logger.info(f"Loading new training and testing images and masks.")
-
-    train_dataset = full_dataset.create_subset_from_indices(train_indices)
-    val_dataset = full_dataset.create_subset_from_indices(val_indices)
-
-    all_images = np.array(full_dataset.get_all_image_paths(), dtype='str')
-    print(train_indices.dtype, all_images.dtype)
-    print(train_indices[:10])
-    train_images = all_images[train_indices.astype(int)]
-    val_images = all_images[val_indices.astype(int)]
-    """
-    Save the names of the files in the validation & training subset for 
-    later use
-    """
-    csv_path = os.path.join(checkpoint_path,
-                            cp_manager.get_prefix() + "_" + cp_manager.get_timestamp() + ".csv")
-    df_dict = {"image": np.concatenate([train_images, val_images]),
-               "phase": ["T"] * len(train_images) + ["V"] * len(val_images)}
-
-    pd.DataFrame(df_dict).to_csv(csv_path,
-                                 index=False)
-
-    """ 
-    Data sets and loaders
-    """
-    """
-    Only use the SemanticSegmentationDatasetAugmentor class for 
-    training data sine it randomly augments the available data
-    to create more training data - and so is not suitable for 
-    test or validation
-    """
-    train_ds = SemanticSegmentationDatasetAugmentor(
-        train_images,
-        train_masks,
-        n_augments=n_augments,
-        image_size=image_size
-    )
-
-    """
-    Use the SemanticSegmentationDatasetBasic class for 
-    validation or test. It does not perform any augmentations
-    other than resizing and standard normalisation of the 
-    images. Masks are not normalised.
-    """
-    val_ds = SemanticSegmentationDatasetBasic(
-        val_images,
-        val_masks,
-        image_size=image_size
-    )
-
-    train_loader = DataLoader(train_ds, batch_size=batch_size,
-                              shuffle=True, num_workers=num_workers, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size,
-                            shuffle=False, num_workers=num_workers, pin_memory=True)
-
-    logger.info(f"Training batches: {len(train_loader)}")
-    logger.info(f"Test batches: {len(val_loader)}")
-
-    denom = 0.0
-    for weight in params['loss_weights']:
-        denom += params['loss_weights'][weight]
-
-    loss_fn = HybridLoss(weight_ce=params['loss_weights']['weight_ce'] / denom,
-                         weight_dice=params['loss_weights']['weight_dice'] / denom,
-                         weight_focal=params['loss_weights']['weight_focal'] / denom,
-                         weight_tversky=params['loss_weights']['weight_tversky'] / denom,
-                         weight_iou=params['loss_weights']['weight_iou'] / denom,
-                         weight_boundary=params['loss_weights']['weight_boundary'] / denom)
+    loss_fn = HybridLoss(params['loss_weights'])
 
     # Initial freeze all parameters of the model
     logger.info("Freezing encoder layers...")
@@ -224,12 +152,17 @@ def main():
     if torch.cuda.is_available():
         scaler = GradScaler()
 
+    cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
+                                   prefix=checkpoint_prefix,
+                                   patience=checkpoint_patience,
+                                   min_delta=checkpoint_min_delta)
+
     trainer = RunManager(model,
                          optimizer,
                          criterion=loss_fn,
                          scaler=scaler,
                          train_loader=train_loader,
-                         eval_loader=val_loader,
+                         eval_loader=test_loader,
                          save_preds=False,
                          save_preds_path=""
                          )

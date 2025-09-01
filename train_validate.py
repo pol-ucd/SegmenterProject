@@ -62,6 +62,7 @@ def main():
     logger.info(f"Using {device} device for model training.")
     logger.info(f"Loaded parameters: {params}")
 
+
     cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
                                    prefix=checkpoint_prefix,
                                    patience=checkpoint_patience,
@@ -217,8 +218,8 @@ def main():
     Only use GradScaler if we have CUDA
     """
     scaler = None
-    # if torch.cuda.is_available():
-    #     scaler = GradScaler()
+    if torch.cuda.is_available():
+        scaler = GradScaler()
 
     trainer = RunManager(model,
                          optimizer,
