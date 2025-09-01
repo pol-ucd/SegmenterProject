@@ -1,7 +1,7 @@
 {
     "test_split": 0.1,
     "num_classes": 2,
-    "batch_size": 64,
+    "batch_size": 16,
     "num_workers": 4,
     "n_augments": 2,
     "image_size": [512, 512],
@@ -31,7 +31,7 @@
         "T_max": 50
     },
     "datasets": {
-        "hdf5_dir": "/content/drive/MyDrive/polyp_data/data",
+        "hdf5_dir": "/content/data",
         "hdf5_files": ["all_data.h5"],
         "image_paths": [
             "data/Classica/images",
