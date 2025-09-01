@@ -70,8 +70,8 @@ def main():
         # Ensure reproducibility of training and test with a fixed seed
         torch.manual_seed(42)
         shuffled_indices = torch.randperm(len_hdf5)
-        test_indices = shuffled_indices[int(len_hdf5 * test_split):]
-        train_indices = shuffled_indices[:len_hdf5 - len(test_indices)]
+        test_indices = shuffled_indices[:int(len_hdf5 * test_split)]
+        train_indices = shuffled_indices[int(len_hdf5 * test_split):]
 
 
         train_datasets.append(HDF5ImageDataset(
