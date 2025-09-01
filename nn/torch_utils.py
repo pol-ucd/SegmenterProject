@@ -97,9 +97,8 @@ class RunManager:
         Trains one epoch using the data provided in self.train_loader
         :return: total loss and dice score
         """
-        # TODO: implement parameters
+
         self.model.train()
-        print(f"self.device is {self.device}")
         total_loss = []
         total_dice_loss = []
         total_iou_loss = []
@@ -144,7 +143,7 @@ class RunManager:
         Evaluate using the data provided in self.eval_loader
         :return: total loss and dice score
         """
-        # TODO: implement parameters
+
         self.model.eval()
         total_loss = []
         total_dice_loss = []
