@@ -128,19 +128,19 @@ def main():
     loss_fn = HybridLoss(params['loss_weights'])
 
     # Initial freeze all parameters of the model
-    logger.info("Freezing encoder layers...")
-    for param in model.base_model.parameters():
-        param.requires_grad = False
-
-    # Unfreeze the decoder head and segmentation head because we replaced these
-    logger.info("Unfreezing decoder and segmentation head...")
-    for param in model.base_model.decode_head.parameters():
-        param.requires_grad = True
+    # logger.info("Freezing encoder layers...")
+    # for param in model.base_model.parameters():
+    #     param.requires_grad = False
+    #
+    # # Unfreeze the decoder head and segmentation head because we replaced these
+    # logger.info("Unfreezing decoder and segmentation head...")
+    # for param in model.base_model.decode_head.parameters():
+    #     param.requires_grad = True
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
-        params=filter(lambda p: p.requires_grad, model.parameters()),
-        # params=model.parameters(),
+        # params=filter(lambda p: p.requires_grad, model.parameters()),
+        params=model.parameters(),
         lr=learning_rate,
         weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
     )
