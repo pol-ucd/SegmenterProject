@@ -1,3 +1,4 @@
+import glob
 import json
 import logging
 import os
@@ -115,16 +116,30 @@ def main():
     logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
     logger.info(f"Number of batches in the test DataLoader: {len(test_loader)}")
 
-
+    cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
+                                   prefix=checkpoint_prefix,
+                                   patience=checkpoint_patience,
+                                   min_delta=checkpoint_min_delta)
     """
     Setup the model 
     """
     model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
-                                        num_classes=num_classes).to(device)
+                                        num_classes=num_classes)
 
+    latest_checkpoint = None
+    try:
+        # Get the list of saved checkpoints
+        checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
+        if checkpoints:
+            latest_checkpoint = checkpoints[-1]
+            cp_manager.load(model, latest_checkpoint, device=device)
+            logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
+        else:
+            logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
+    except FileNotFoundError as e:
+        logger.info(f"Unable to load checkpoint {e}")
 
-
-
+    model.to(device)
     loss_fn = HybridLoss(params['loss_weights'])
 
     # Initial freeze all parameters of the model
@@ -155,10 +170,7 @@ def main():
     if torch.cuda.is_available():
         scaler = GradScaler()
 
-    cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
-                                   prefix=checkpoint_prefix,
-                                   patience=checkpoint_patience,
-                                   min_delta=checkpoint_min_delta)
+
 
     trainer = RunManager(model,
                          optimizer,
