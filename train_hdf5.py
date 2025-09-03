@@ -157,7 +157,7 @@ def main():
         # params=filter(lambda p: p.requires_grad, model.parameters()),
         params=model.parameters(),
         lr=learning_rate,
-        weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
+        # weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
     )
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
