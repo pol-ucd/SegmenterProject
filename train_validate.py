@@ -12,10 +12,10 @@ from torch.utils.data import DataLoader
 
 from segmenter.data import (split_images_and_masks,
                             SemanticSegmentationDatasetAugmentor,
-                            SemanticSegmentationDatasetBasic, CheckpointManager)
+                            SemanticSegmentationDatasetBasic)
 from segmenter.models import SegformerBinarySegmentation
 from segmenter.modules import HybridLoss
-from segmenter.torch_utils import RunManager
+from segmenter.torch_utils import RunManager, CheckpointManager
 
 
 def main():
