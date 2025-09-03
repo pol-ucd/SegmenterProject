@@ -1,51 +1,66 @@
 {
-"model": {
-"name": "SegformerForSemanticSegmentation",
-"params": {
-"num_labels": 11,
-"id2label": {
-"0": "Background", "1": "Ventricle", "2": "Cortex",
-"3": "Cerebellum", "4": "BrainStem", "5": "Hippocampus",
-"6": "Thalamus", "7": "Subcortical", "8": "WhiteMatter",
-"9": "GrayMatter", "10": "Lesion"
-}
-}
-},
-"optimizer": {
-"name": "AdamW",
-"params": {
-"lr": 0.00006
-}
-},
-"criterion": {
-"name": "CrossEntropyLoss",
-"params": {
-"ignore_index": 255
-}
-},
-"scheduler": {
-"name": "LambdaLR",
-"params": {
-"lr_lambda": "lambda epoch: 0.95 ** epoch"
-}
-},
-"data_loader": {
-"hdf5_paths": ["./dummy_data_1.h5", "./dummy_data_2.h5"],
-"batch_size": 2,
-"image_size": [256, 256],
-"n_augment": 2,
-"train_split": 0.9
-},
-"run_manager": {
-"epochs": 10,
-"save_preds": false,
-"save_preds_path": "./predictions"
-},
-"checkpoint_manager": {
-"checkpoint_dir": "./checkpoints",
-"prefix": "model_checkpoint",
-"patience": 3,
-"min_delta": 0.01
-}
+  "model": {
+    "name": "SegformerForSemanticSegmentation",
+    "params": {
+      "num_labels": 11,
+        "id2label": {
+        "0": "Background", "1": "Ventricle", "2": "Cortex",
+        "3": "Cerebellum", "4": "BrainStem", "5": "Hippocampus",
+        "6": "Thalamus", "7": "Subcortical", "8": "WhiteMatter",
+        "9": "GrayMatter", "10": "Lesion"
+        }
+    }
+  },
+  "optimizer": {
+    "name": "AdamW",
+    "params": {
+    "lr": 0.00006
+    }
+  },
+  "criterion": {
+    "name": "HybridLoss",
+    "params": {
+        "ce":  {"weight": 0.1},
+        "dice": {"weight": 1.0},
+        "focal": {"weight": 0.0},
+        "tversky": {"weight": 0.0},
+        "iou":{"weight": 0.0},
+        "boundary_sdf": {"weight": 1.0, "dt_backend": "fastgeodis"},
+        "soft_chamfer": {"weight": 0.8, "dt_backend": "fastgeodis"}
+    }
+  },
+  "scheduler": {
+    "name": "LambdaLR",
+    "params": {
+    "lr_lambda": "lambda epoch: 0.95 ** epoch"
+    }
+  },
+  "data_loader": {
+    "hdf5_paths": ["./dummy_data_1.h5", "./dummy_data_2.h5"],
+    "batch_size": 2,
+    "image_size": [256, 256],
+    "n_augment": 2,
+    "train_split": 0.9
+    },
+  "run_manager": {
+    "epochs": 10,
+    "save_preds": false,
+    "save_preds_path": "./predictions"
+  },
+  "checkpoint_manager": {
+    "checkpoint_dir": "./checkpoints",
+    "prefix": "model_checkpoint",
+    "patience": 3,
+    "min_delta": 0.01
+  },
+  "metrics": {
+        "ce":  {"weight": 0.1},
+        "dice": {"weight": 1.0},
+        "focal": {"weight": 0.0},
+        "tversky": {"weight": 0.0},
+        "iou":{"weight": 0.0},
+        "boundary_sdf": {"weight": 1.0, "dt_backend": "fastgeodis"},
+        "soft_chamfer": {"weight": 0.8, "dt_backend": "fastgeodis"}
+    }
 }
 
