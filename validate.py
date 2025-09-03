@@ -6,10 +6,10 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from nn.data import SemanticSegmentationDatasetBasic
-from nn.models import SegformerBinarySegmentation
-from nn.modules import HybridLoss
-from nn.torch_utils import RunManager
+from segmenter.data import SemanticSegmentationDatasetBasic
+from segmenter.models import SegformerBinarySegmentation
+from segmenter.modules import HybridLoss
+from segmenter.torch_utils import RunManager
 
 
 def main():

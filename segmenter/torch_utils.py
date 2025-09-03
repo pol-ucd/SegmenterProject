@@ -8,7 +8,7 @@ import torch
 from torch import autocast
 from tqdm import tqdm
 
-from nn.modules import LossFactory
+from segmenter.modules import LossFactory
 
 
 def get_default_device_type() -> str:

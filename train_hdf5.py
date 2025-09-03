@@ -8,10 +8,10 @@ import torch
 from torch import GradScaler
 from torch.utils.data import DataLoader
 
-from nn.data import (get_num_samples_from_hdf5, HDF5ImageDataset, CheckpointManager)
-from nn.models import SegformerBinarySegmentation
-from nn.modules import HybridLoss
-from nn.torch_utils import RunManager
+from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset, CheckpointManager)
+from segmenter.models import SegformerBinarySegmentation
+from segmenter.modules import HybridLoss
+from segmenter.torch_utils import RunManager
 
 
 def main():

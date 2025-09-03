@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, Subset, random_split, ConcatDataset, DataL
 from torchvision import transforms
 from torchvision.transforms import functional as F
 
-from nn.modules import EarlyStopping
+from segmenter.modules import EarlyStopping
 
 
 # --- Custom Paired Augmentation Classes ---
