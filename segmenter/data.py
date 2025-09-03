@@ -1,5 +1,4 @@
 import os
-import os
 import platform
 
 import h5py
@@ -598,7 +597,7 @@ class HDF5ImageDataset(Dataset):
         self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True)
         self.images = self.hdf5_file['images']
         self.masks = self.hdf5_file['masks']
-        self.original_shapes = self.hdf5_file['original_shapes']
+        # self.original_shapes = self.hdf5_file['original_shapes']
 
     def __len__(self):
         """Returns the number of samples in the current split."""
@@ -658,7 +657,7 @@ class HDF5ImageDataset(Dataset):
         # Load image and mask as NumPy arrays
         image_np = self.images[original_idx]
         mask_np = self.masks[original_idx]
-        original_shape = tuple(self.original_shapes[original_idx])
+        # original_shape = tuple(self.original_shapes[original_idx])
 
         # Convert NumPy arrays to PIL Images for easy transformation
         image_pil = Image.fromarray(image_np).convert("RGB")
@@ -679,7 +678,7 @@ class HDF5ImageDataset(Dataset):
         # Final conversion of mask to Long Tensor for loss functions
         mask_tensor = mask_tensor.to(torch.long)
 
-        return image_tensor, mask_tensor, original_shape
+        return image_tensor, mask_tensor  #, original_shape
 
 
 # The rest of the script remains the same, but with the modified usage in the main block.
