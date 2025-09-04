@@ -9,7 +9,6 @@ from datetime import datetime
 import numpy as np
 import torch
 from torch import autocast
-from tqdm import tqdm
 
 from segmenter.modules import LossFactory, HybridLoss
 
@@ -121,7 +120,7 @@ class RunManager:
         total_iou_loss = []
         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
-        for images, masks in tqdm(self.train_loader, colour='green'):
+        for images, masks in self.train_loader:
 
             if images.device != self.device:
                 images = images.to(self.device)
@@ -168,7 +167,7 @@ class RunManager:
         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
         with torch.no_grad():
-            for images, masks in tqdm(self.eval_loader, colour='yellow'):
+            for images, masks in self.eval_loader:
                 if images.device != self.device:
                     images = images.to(self.device)
 
