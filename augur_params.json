@@ -1,0 +1,73 @@
+{
+    "model": {
+        "name": "SegformerForSemanticSegmentation",
+        "params": {
+          "num_labels": 11,
+            "id2label": {
+            "0": "abdominal_wall",
+            "1": "colon",
+            "2": "inferior_mesenteric_artery",
+            "3": "intestinal_veins",
+            "4": "liver",
+            "5": "pancreas",
+            "6": "small_intestine",
+            "7": "spleen",
+            "8": "stomach",
+            "9": "ureter",
+            "10": "vesicular_glands"
+            }
+        }
+    },
+    "test_split": 0.1,
+    "num_classes": 2,
+    "batch_size": 8,
+    "num_workers": 8,
+    "n_augments": 1,
+    "image_size": [512, 512],
+    "optimizer_settings": {
+        "learning_rate": 1e-4,
+        "l2_decay_penalty": 1e-5
+    },
+    "n_epochs": 100,
+    "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
+    "checkpoints": {
+        "path": "~/segmenter/checkpoint",
+        "prefix": "model_augur_segmentation",
+        "patience": 5,
+        "min_delta": 0.0001
+    },
+    "loss_weights": {
+        "ce":  {"weight": 0.1},
+        "dice": {"weight": 1.0},
+        "focal": {"weight": 0.0},
+        "tversky": {"weight": 0.0},
+        "iou":{"weight": 0.0},
+        "boundary_sdf": {"weight": 0.5, "dt_backend": "fastgeodis"},
+        "soft_chamfer": {"weight": 0.5, "dt_backend": "fastgeodis"}
+    },
+    "scheduler": {
+        "name": "CosineAnnealingLR",
+        "T_max": 50
+    },
+    "datasets": {
+        "hdf5_dir": "~/segmenter/data",
+        "hdf5_files": ["dresden_preprocessed.h5"],
+        "image_paths": [
+            "data/Classica/images",
+            "data/Polyp Segmentation/train",
+            "data/Polyp Segmentation/valid",
+            "data/Kvasir-SEG/images"
+        ],
+        "mask_paths": [
+            "data/Classica/masks",
+            "data/Polyp Segmentation/train_masks",
+            "data/Polyp Segmentation/valid_masks",
+            "data/Kvasir-SEG/masks"
+        ],
+        "file_types": [
+            "*.jpg",
+            "*.png",
+            "*.jpeg"
+        ]
+    }
+}

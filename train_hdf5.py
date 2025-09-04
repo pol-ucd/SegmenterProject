@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import torch
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
 from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
