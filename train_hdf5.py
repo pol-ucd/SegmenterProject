@@ -169,9 +169,8 @@ def main():
         # weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
     )
 
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
-    # torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, T_max = 50)
-    scheduler = None
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
+
 
     """
     Only use GradScaler if we have CUDA
