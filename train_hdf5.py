@@ -69,7 +69,7 @@ def main():
     hdf5_files = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]]
 
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using {device} device for model training.")
     logger.info(f"Loaded parameters: {params}")
 
