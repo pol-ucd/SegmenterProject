@@ -55,23 +55,28 @@ def main():
             f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
 
-    test_split = params['test_split']
-    num_classes = params['num_classes']
-    batch_size = params['batch_size']
-    num_workers = params['num_workers']
-    n_augments = params['n_augments']
-    image_size = tuple(params['image_size'])
-    learning_rate = params['optimizer_settings']['learning_rate']
-    l2_decay_penalty = params['optimizer_settings']['l2_decay_penalty']
-    n_epochs = params['n_epochs']
+    """ Configure the run """
+    run_params = params['run']
+    test_split = run_params['test_split']
+    num_classes = run_params['num_classes']
+    batch_size = run_params['batch_size']
+    num_workers = run_params['num_workers']
+    n_augments = run_params['n_augments']
+    image_size = tuple(run_params['image_size'])
+    n_epochs = run_params['n_epochs']
 
+    """ Optimiser settings """
+    opt_params = params['optimizer_settings']
+    learning_rate = opt_params['learning_rate']
+    l2_decay_penalty = opt_params['l2_decay_penalty']
+
+    """ Data settings """
     hdf5_path = params["datasets"]["hdf5_dir"]
     hdf5_files = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]]
-
+    logger.info(f"Loaded parameters: {params}")
 
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using {device} device for model training.")
-    logger.info(f"Loaded parameters: {params}")
 
     """ Load datasets for test and training """
     # Now we correctly split the indices and create new datasets
@@ -151,7 +156,8 @@ def main():
         logger.info(f"Unable to load checkpoint {e}")
 
     model.to(device)
-    loss_fn = HybridLoss(params['loss_weights'])
+    loss_params = params['loss']
+    loss_fn = HybridLoss(loss_params['loss_params'])
 
     # Initial freeze all parameters of the model
     # logger.info("Freezing encoder layers...")
@@ -180,8 +186,6 @@ def main():
     scaler = None
     if torch.cuda.is_available():
         scaler = GradScaler()
-
-
 
     trainer = RunManager(model,
                          optimizer,

@@ -18,17 +18,22 @@
             }
         }
     },
-    "test_split": 0.1,
-    "num_classes": 11,
-    "batch_size": 8,
-    "num_workers": 16,
-    "n_augments": 1,
-    "image_size": [512, 512],
-    "optimizer_settings": {
-        "learning_rate": 1e-4,
-        "l2_decay_penalty": 1e-5
+    "run": {
+        "test_split": 0.1,
+        "num_classes": 11,
+        "batch_size": 8,
+        "num_workers": 16,
+        "n_augments": 1,
+        "image_size": [
+            512,
+            512
+        ],
+        "n_epochs": 100
     },
-    "n_epochs": 100,
+    "optimizer": {
+            "learning_rate": 1e-4,
+            "l2_decay_penalty": 1e-5
+        },
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
@@ -36,14 +41,33 @@
         "patience": 7,
         "min_delta": 0.0001
     },
-    "loss_weights": {
-        "ce":  {"weight": 0.1},
-        "dice": {"weight": 1.0},
-        "focal": {"weight": 0.0},
-        "tversky": {"weight": 0.0},
-        "iou":{"weight": 0.0},
-        "boundary_sdf": {"weight": 0.5, "dt_backend": "fastgeodis"},
-        "soft_chamfer": {"weight": 0.5, "dt_backend": "fastgeodis"}
+    "loss": {
+        "function": "HybridLoss",
+        "loss_params": {
+            "ce": {
+                "weight": 0.1
+            },
+            "dice": {
+                "weight": 1.0
+            },
+            "focal": {
+                "weight": 0.0
+            },
+            "tversky": {
+                "weight": 0.0
+            },
+            "iou": {
+                "weight": 0.0
+            },
+            "boundary_sdf": {
+                "weight": 0.3,
+                "dt_backend": "fastgeodis"
+            },
+            "soft_chamfer": {
+                "weight": 0.3,
+                "dt_backend": "fastgeodis"
+            }
+        }
     },
     "scheduler": {
         "name": "CosineAnnealingLR",
@@ -51,23 +75,6 @@
     },
     "datasets": {
         "hdf5_dir": "../segmenter/data",
-        "hdf5_files": ["dresden_preprocessed.h5"],
-        "image_paths": [
-            "data/Classica/images",
-            "data/Polyp Segmentation/train",
-            "data/Polyp Segmentation/valid",
-            "data/Kvasir-SEG/images"
-        ],
-        "mask_paths": [
-            "data/Classica/masks",
-            "data/Polyp Segmentation/train_masks",
-            "data/Polyp Segmentation/valid_masks",
-            "data/Kvasir-SEG/masks"
-        ],
-        "file_types": [
-            "*.jpg",
-            "*.png",
-            "*.jpeg"
-        ]
+        "hdf5_files": ["dresden_preprocessed.h5"]
     }
 }

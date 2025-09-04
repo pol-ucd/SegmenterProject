@@ -58,12 +58,12 @@ def set_default_device(device: torch.device):
     return
 
 """
-class TrainingManager
+class RunManager
 
-Wraps train() and evaluate() methods 
+Manages the training and evaluation loop for a PyTorch model.
 
-Models, optimizers etc. are instantiated first and then passed as object instances to 
-a TrainingManager instance
+    This class is parameterized via a JSON configuration file, dynamically
+    instantiating the model, optimizer, criterion, and data loaders.
 
 """
 class RunManager:
@@ -76,7 +76,10 @@ class RunManager:
                  train_loader=None,
                  eval_loader=None,
                  save_preds=False,
-                 save_preds_path=None):
+                 save_preds_path=None,
+                 config_path: str = None):
+        self.device = get_default_device()
+        self.config = self._load_config(config_path)
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.model = model
@@ -104,8 +107,11 @@ class RunManager:
         else:
             self.save_preds = False
 
-        # self.dice_loss = DL(mode='binary')
-        # self.iou_loss = JL(mode='binary')
+    def _load_config(self, config_path):
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Configuration file not found at: {config_path}")
+        with open(config_path, 'r') as f:
+            return json.load(f)
 
 
     def train(self, **train_params: object) -> dict[str, float]:
@@ -220,9 +226,8 @@ class CheckpointManager:
 
     def __init__(self, checkpoint_dir: str,
                  prefix: str ="model_checkpoint",
-                 patience: int =5,
-                 min_delta: float =0.0,
-                 warm_start: bool =False):
+                 patience: int = 5,
+                 min_delta: float = 0.0):
         self.logger = logging.getLogger(self.__class__.__name__)
         # Ensure the checkpoint directory exists and if not, revert to local
         self.checkpoint_dir = checkpoint_dir
