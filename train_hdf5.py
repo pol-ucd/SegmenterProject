@@ -198,7 +198,8 @@ def main():
                          train_loader=train_loader,
                          eval_loader=test_loader,
                          save_preds=False,
-                         save_preds_path=""
+                         save_preds_path="",
+                         config_path=params_file
                          )
     train_params = {}
     eval_params = {}
