@@ -2,24 +2,14 @@
     "model": {
         "name": "SegformerForSemanticSegmentation",
         "params": {
-          "num_labels": 11,
+          "num_labels": 2,
             "id2label": {
-            "0": "abdominal_wall",
-            "1": "colon",
-            "2": "inferior_mesenteric_artery",
-            "3": "intestinal_veins",
-            "4": "liver",
-            "5": "pancreas",
-            "6": "small_intestine",
-            "7": "spleen",
-            "8": "stomach",
-            "9": "ureter",
-            "10": "vesicular_glands"
+            "0": "Background", "1": "Lesion"
             }
         }
     },
     "test_split": 0.1,
-    "num_classes": 11,
+    "num_classes": 2,
     "batch_size": 8,
     "num_workers": 16,
     "n_augments": 1,
@@ -32,7 +22,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "model_augur_segmentation",
+        "prefix": "model_lesion_segmentation",
         "patience": 5,
         "min_delta": 0.0001
     },
@@ -51,7 +41,7 @@
     },
     "datasets": {
         "hdf5_dir": "../segmenter/data",
-        "hdf5_files": ["dresden_preprocessed.h5"],
+        "hdf5_files": ["all_data.h5"],
         "image_paths": [
             "data/Classica/images",
             "data/Polyp Segmentation/train",
