@@ -302,12 +302,11 @@ class CheckpointManager:
         Returns:
             torch.nn.Module: The model with the loaded state.
         """
-        filepath = os.path.join(self.checkpoint_dir, filename)
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
+        # filepath = os.path.join(self.checkpoint_dir, filename)
+        # if not os.path.exists(filepath):
+        #     raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
 
-
-        json_filepath = filepath.replace(".pt", ".json")
+        json_filepath = filename.replace(".pt", ".json")
         try:
             with open(json_filepath, 'r') as fp:
                 json_data  = json.load(fp)
@@ -323,11 +322,11 @@ class CheckpointManager:
             self.logger.warning(f"Checkpoint JSON configuration file not found: {filepath}")
 
         # Load the state dictionary and apply it to the model
-        model.load_state_dict(torch.load(filepath,
+        model.load_state_dict(torch.load(filename,
                                          # map_location=device,
                                          map_location=next(model.parameters()).device,
                                          weights_only=False))
-        self.logger.info(f"Checkpoint loaded successfully from: {filepath}")
+        self.logger.info(f"Checkpoint loaded successfully from: {filename}")
         return model
 
     """ Getters and Setters """
