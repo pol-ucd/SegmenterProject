@@ -145,8 +145,8 @@ class RunManager:
             else:
                 loss.backward()
                 self.optimizer.step()
-            if self.scheduler is not None:
-                self.scheduler.step()
+        if self.scheduler is not None:
+            self.scheduler.step()
 
         total_metrics['loss'] = np.mean(total_loss)
         total_metrics['dice'] = np.mean(total_dice_loss)
