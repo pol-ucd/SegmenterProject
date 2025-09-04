@@ -29,7 +29,7 @@ def main():
     if os.path.isfile(os.path.join(home, "segmenter", "augur_params.json")):
         params_file = os.path.join(home, "segmenter", "augur_params.json")
     else:
-        params_file = "params.json"
+        params_file = "augur_params.json"
 
 
     # --- Load parameters from JSON file ---
