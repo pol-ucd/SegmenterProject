@@ -325,7 +325,8 @@ class CheckpointManager:
                 self.logger.info(f"Warm start with loss: {self.best_accuracy}")
         except FileNotFoundError:
             self.logger.warning(f"Checkpoint JSON configuration file not found: {filepath}")
-        self.logger.log(f"Loading model parameters from checkpoint {filename}")
+
+        self.logger.info(f"Loading model parameters from checkpoint {filename}")
         # Load the state dictionary and apply it to the model
         model.load_state_dict(torch.load(filename,
                                          # map_location=device,
