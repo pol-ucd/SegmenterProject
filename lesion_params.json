@@ -23,7 +23,7 @@
     "checkpoints": {
         "path": "../segmenter/checkpoint",
         "prefix": "model_lesion_segmentation",
-        "patience": 5,
+        "patience": 7,
         "min_delta": 0.0001
     },
     "loss_weights": {
