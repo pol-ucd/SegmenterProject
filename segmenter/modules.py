@@ -38,7 +38,7 @@ def one_hot(mask: torch.Tensor, num_classes: int) -> torch.Tensor:
         torch.Tensor: One-hot encoded tensor of shape (B, C, H, W).
     """
     if mask.shape[1] == num_classes:
-        return mask.permute(0, 3, 1, 2).float()
+        return mask.float()
     return F.one_hot(mask.long(), num_classes).permute(0, 3, 1, 2).float()
 
 
