@@ -246,6 +246,7 @@ class CheckpointManager:
         self.best_accuracy = float('-inf')  # Initialize with a very low value
         self.epochs_without_improvement = 0
         self.stop_training = False
+        self.logger.info(f"Checkpoint manager loaded with prefix: {self.prefix} and timestamp: {self.timestamp}")
 
     def save(self, model, current_accuracy) -> bool:
         """
