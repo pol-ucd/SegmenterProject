@@ -5,7 +5,6 @@ import os
 import sys
 
 import torch
-from torch import GradScaler
 from torch.utils.data import DataLoader
 
 from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
@@ -155,15 +154,16 @@ def main():
         # weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
     )
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
     # torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, T_max = 50)
+    scheduler = None
 
     """
     Only use GradScaler if we have CUDA
     """
     scaler = None
-    if torch.cuda.is_available():
-        scaler = GradScaler()
+    # if torch.cuda.is_available():
+    #     scaler = GradScaler()
 
 
 
