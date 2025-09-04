@@ -77,7 +77,7 @@ class RunManager:
                  eval_loader=None,
                  save_preds=False,
                  save_preds_path=None,
-                 config_path: str = None):
+                 config_path: str = "../segmenter"):
         self.device = get_default_device()
         self.config = self._load_config(config_path)
 
