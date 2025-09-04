@@ -32,8 +32,8 @@
         "focal": {"weight": 0.0},
         "tversky": {"weight": 0.0},
         "iou":{"weight": 0.0},
-        "boundary_sdf": {"weight": 0.5, "dt_backend": "fastgeodis"},
-        "soft_chamfer": {"weight": 0.5, "dt_backend": "fastgeodis"}
+        "boundary_sdf": {"weight": 0.4, "dt_backend": "fastgeodis"},
+        "soft_chamfer": {"weight": 0.4, "dt_backend": "fastgeodis"}
     },
     "scheduler": {
         "name": "CosineAnnealingLR",
