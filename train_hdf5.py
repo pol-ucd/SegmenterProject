@@ -196,7 +196,7 @@ def main():
         logger.info(f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
         logger.info(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
 
-        scheduler.step(epoch + 1)
+        # scheduler.step(epoch + 1)
 
         stop_training = cp_manager.save(model, 1 - val_miou)
         if stop_training:
