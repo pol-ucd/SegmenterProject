@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -219,16 +220,22 @@ def main():
 
 if __name__ == "__main__":
     # --- Logging Setup ---
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    home_dir = Path.home()
+    if not os.path.exists(os.path.join(home_dir, "segmenter")):
+        os.makedirs(os.path.join(home_dir, "segmenter"))
+    logfile = os.path.join(home_dir, "segmenter", f"training_{timestamp}.log")
+
     logging.basicConfig(
         level=logging.INFO,
         force=True,  # Resets any previous configuration - in Colab for example
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler("training.log")
+            logging.FileHandler(logfile)
         ]
     )
-    logger = logging.getLogger()
+    logger = logging.getLogger(__name__)
     try:
         main()
     except KeyboardInterrupt:
