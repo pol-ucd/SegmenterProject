@@ -171,6 +171,7 @@ def main():
                          optimizer,
                          criterion=loss_fn,
                          scaler=scaler,
+                         scheduler=scheduler,
                          train_loader=train_loader,
                          eval_loader=test_loader,
                          save_preds=False,

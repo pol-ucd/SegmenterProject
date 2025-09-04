@@ -77,8 +77,7 @@ class RunManager:
                  train_loader=None,
                  eval_loader=None,
                  save_preds=False,
-                 save_preds_path=None,
-                 device='cpu'):
+                 save_preds_path=None):
 
         self.logger = logging.getLogger(self.__class__.__name__)
         self.model = model
