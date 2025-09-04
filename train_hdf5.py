@@ -24,8 +24,8 @@ def main():
     if not os.path.exists(os.path.join(home, "segmenter/data")):
         logger.warning("Creating 'data' directory in $HOME/segmenter directory.")
         os.makedirs(os.path.join(home, "segmenter/data"))
-    if os.path.isfile(os.path.join(home, "segmenter/data", "params.json")):
-        params_file = os.path.join(home, "segmenter/data", "params.json")
+    if os.path.isfile(os.path.join(home, "segmenter", "params.json")):
+        params_file = os.path.join(home, "segmenter", "params.json")
     else:
         params_file = "params.json"
 
