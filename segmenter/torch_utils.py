@@ -1,7 +1,6 @@
 """
 Utilities to help with PyTorch
 """
-import argparse
 import json
 import logging
 import os
@@ -12,8 +11,23 @@ import torch
 from torch import autocast
 from tqdm import tqdm
 
-from segmenter.modules import LossFactory
+from segmenter.modules import LossFactory, HybridLoss
 
+# Pre-define a mapping of class names to their actual classes
+# This avoids needing a separate factory file
+MODEL_MAP = {
+    "SegformerForSemanticSegmentation": None  # Will be imported on use
+}
+OPTIMIZER_MAP = {
+    "AdamW": torch.optim.AdamW
+}
+CRITERION_MAP = {
+    "CrossEntropyLoss": torch.nn.CrossEntropyLoss,
+    "HybridLoss": HybridLoss
+}
+SCHEDULER_MAP = {
+    "LambdaLR": torch.optim.lr_scheduler.LambdaLR
+}
 
 def get_default_device_type() -> str:
     """
@@ -66,7 +80,7 @@ class RunManager:
                  save_preds_path=None,
                  device='cpu'):
 
-
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.model = model
         if self.model is None:
             raise ValueError('Please provide a valid model in TrainingManager')
@@ -180,26 +194,6 @@ class RunManager:
         return total_metrics
 
 
-def validate_positive_integer(value):
-    """
-    Custom type function for argparse to ensure an integer is greater than zero.
-    """
-    ivalue = int(value)
-    if ivalue <= 0:
-        raise argparse.ArgumentTypeError(f"'{value}' is an invalid positive integer value. Must be greater than zero.")
-    return ivalue
-
-
-def validate_01_float(value):
-    """
-    Custom type function for argparse to ensure a float is between 0 and 1.0
-    """
-    fvalue = float(value)
-    if fvalue <= 0 or fvalue > 1.0:
-        raise argparse.ArgumentTypeError(f"'{value}' is an invalid float value. Must be in the range [0, 1].")
-    return fvalue
-
-
 class CheckpointError(Exception):
     """
     Custom exception for errors related to loading or saving CSV files
@@ -223,12 +217,14 @@ class CheckpointManager:
         prefix (str): A string prefix for checkpoint filenames.
         patience (int): The number of epochs to wait for improvement before stopping.
         min_delta (float): The minimum change in accuracy to qualify as an improvement.
+        warm_start (bool): Whether or not to start training from scratch or load the last checkpoint
     """
 
     def __init__(self, checkpoint_dir: str,
                  prefix: str ="model_checkpoint",
                  patience: int =5,
-                 min_delta: float =0.0):
+                 min_delta: float =0.0,
+                 warm_start: bool =False):
         self.logger = logging.getLogger(self.__class__.__name__)
         # Ensure the checkpoint directory exists and if not, revert to local
         self.checkpoint_dir = checkpoint_dir
@@ -270,7 +266,7 @@ class CheckpointManager:
             filename = f"{self.prefix}_{self.timestamp}.pt"
             filepath = os.path.join(self.checkpoint_dir, filename)
 
-            json_filename =  f"{self.prefix}_{self.timestamp}.pt" f"{self.prefix}_{self.timestamp}.json"
+            json_filename =  f"{self.prefix}_{self.timestamp}.json"
             json_filepath = os.path.join(self.checkpoint_dir, json_filename)
             json_data = {"best_accuracy": current_accuracy,
                          "timestamp": self.timestamp,
@@ -324,11 +320,15 @@ class CheckpointManager:
                     self.timestamp = json_data["timestamp"]
                 except KeyError:
                     pass
+                self.logger.info(f"Warm start with loss: {self.best_accuracy}")
         except FileNotFoundError:
             self.logger.warning(f"Checkpoint JSON configuration file not found: {filepath}")
 
         # Load the state dictionary and apply it to the model
-        model.load_state_dict(torch.load(filepath, map_location=device, weights_only=False))
+        model.load_state_dict(torch.load(filepath,
+                                         # map_location=device,
+                                         map_location=next(model.parameters()).device,
+                                         weights_only=False))
         self.logger.info(f"Checkpoint loaded successfully from: {filepath}")
         return model
 

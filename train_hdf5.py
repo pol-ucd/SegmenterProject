@@ -49,9 +49,6 @@ def main():
     l2_decay_penalty = params['optimizer_settings']['l2_decay_penalty']
     n_epochs = params['n_epochs']
 
-    image_paths = params["datasets"]["image_paths"]
-    mask_paths = params["datasets"]["mask_paths"]
-    file_types = params["datasets"]["file_types"]
     hdf5_path = params["datasets"]["hdf5_dir"]
     hdf5_files = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]]
 
@@ -95,8 +92,6 @@ def main():
         n_records += len_hdf5
     logger.info(f"Using {n_records} total records for training and testing.")
 
-    # final_train_dataset = ConcatDataset(train_datasets)
-    # final_test_dataset = ConcatDataset(test_datasets)
     final_train_dataset = train_datasets[0]
     final_test_dataset = test_datasets[0]
 
