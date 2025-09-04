@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -16,16 +17,28 @@ from segmenter.torch_utils import RunManager, CheckpointManager
 def main():
     # logger = logging.getLogger(__name__)
     logger = logging.getLogger()
+    home = Path.home()
+    if not os.path.exists(os.path.join(home, "segmenter")):
+        logger.warning("Creating 'segmenter' directory in $HOME directory.")
+        os.makedirs(os.path.join(home, "segmenter"))
+    if not os.path.exists(os.path.join(home, "segmenter/data")):
+        logger.warning("Creating 'data' directory in $HOME/segmenter directory.")
+        os.makedirs(os.path.join(home, "segmenter/data"))
+    if os.path.isfile(os.path.join(home, "segmenter/data", "params.json")):
+        params_file = os.path.join(home, "segmenter/data", "params.json")
+    else:
+        params_file = "params.json"
+
 
     # --- Load parameters from JSON file ---
     try:
-        with open('params.json', 'r') as f:
+        with open(params_file, 'r') as f:
             params = json.load(f)
     except FileNotFoundError:
-        logger.error("Error: 'params.json' file not found. Please ensure it is in the same directory.")
+        logger.error(f"Error: {params_file} file not found. Please ensure it is in the same directory.")
         return
     except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON from 'params.json': {e}")
+        logger.error(f"Error decoding JSON from {params_file}: {e}")
         return
 
     pretrained_model = params['pretrained_model']
