@@ -26,8 +26,8 @@ def main():
     if not os.path.exists(os.path.join(home, "segmenter/data")):
         logger.warning("Creating 'data' directory in $HOME/segmenter directory.")
         os.makedirs(os.path.join(home, "segmenter/data"))
-    if os.path.isfile(os.path.join(home, "segmenter", "params.json")):
-        params_file = os.path.join(home, "segmenter", "params.json")
+    if os.path.isfile(os.path.join(home, "segmenter", "augur_params.json")):
+        params_file = os.path.join(home, "segmenter", "augur_params.json")
     else:
         params_file = "params.json"
 
@@ -67,7 +67,7 @@ def main():
     hdf5_files = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]]
 
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using {device} device for model training.")
     logger.info(f"Loaded parameters: {params}")
 
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     home_dir = Path.home()
     if not os.path.exists(os.path.join(home_dir, "segmenter")):
         os.makedirs(os.path.join(home_dir, "segmenter"))
-    logfile = os.path.join(home_dir, "segmenter", f"training_{timestamp}.log")
+    logfile = os.path.join(home_dir, "segmenter", f"training_augur_{timestamp}.log")
 
     logging.basicConfig(
         level=logging.INFO,
