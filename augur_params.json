@@ -50,7 +50,7 @@
         "T_max": 50
     },
     "datasets": {
-        "hdf5_dir": "~/segmenter/data",
+        "hdf5_dir": "../segmenter/data",
         "hdf5_files": ["dresden_preprocessed.h5"],
         "image_paths": [
             "data/Classica/images",
