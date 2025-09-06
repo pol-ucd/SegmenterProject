@@ -194,7 +194,6 @@ class BaseLoss(nn.Module, ABC):
     def __init__(self, **kwargs):
         super().__init__()
         self.kwargs = kwargs
-        self.num_classes = num_classes
 
     @abstractmethod
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
