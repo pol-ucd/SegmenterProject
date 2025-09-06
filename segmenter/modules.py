@@ -111,7 +111,7 @@ class DistanceTransform2D:
     Supports Kornia (Euclidean) and FastGeodis (Geodesic with lambda=0 for Euclidean).
     """
 
-    def __init__(self, backend: str = "fastgeodis", spacing: Tuple[float, float] = (1.0, 1.0)):
+    def __init__(self, backend: str = "kornia", spacing: Tuple[float, float] = (1.0, 1.0)):
         """
         Args:
             backend (str): The backend to use, either "kornia" or "fastgeodis".
@@ -494,129 +494,137 @@ if __name__ == '__main__':
     # Test Calls for all functions and classes
     # ---------------------------
 
+    n_test_epochs = 10
+
     # Setup for tests
-    n_batch, h, w, n_classes = 4, 128, 128, 3
-    test_logits = torch.randn(n_batch, n_classes, h, w)
-    test_mask = torch.randint(0, n_classes, (n_batch, h, w))
-    binary_logits = torch.randn(n_batch, 1, h, w)
-    binary_mask = torch.randint(0, 2, (n_batch, h, w))
+    n_batch, h, w, n_classes = 14, 128, 128, 11
 
-    print("--- Testing Utility Functions ---")
-    test_one_hot = one_hot(test_mask, n_classes)
-    print(f"one_hot output shape: {test_one_hot.shape}")
-    test_sobel_grad = sobel_grad(torch.randn(1, 1, h, w))
-    print(f"sobel_grad output shape: {test_sobel_grad.shape}")
-    test_soft_boundary = make_soft_boundary(torch.rand(1, 1, h, w))
-    print(f"make_soft_boundary output shape: {test_soft_boundary.shape}")
+    for n in range(n_test_epochs):
 
-    print("\n--- Testing DistanceTransform2D ---")
-    dt_kornia = DistanceTransform2D(backend="kornia")
-    dt_fastgeodis = DistanceTransform2D(backend="fastgeodis")
-    binary_map = (test_mask[:, None, :, :] == 1).float()
-    print(f"DistanceTransform2D (kornia) EDT: {dt_kornia.edt(binary_map).mean().item():.4f}")
-    print(f"DistanceTransform2D (fastgeodis) EDT: {dt_fastgeodis.edt(binary_map).mean().item():.4f}")
-    print(f"DistanceTransform2D (kornia) SDT: {dt_kornia.signed_distance(binary_map).mean().item():.4f}")
-    print(f"DistanceTransform2D (fastgeodis) SDT: {dt_fastgeodis.signed_distance(binary_map).mean().item():.4f}")
 
-    print("\n--- Testing Individual Loss Components (via LossFactory) ---")
-    dice_loss_fn = LossFactory.create('dice')
-    iou_loss_fn = LossFactory.create('iou')
-    focal_loss_fn = LossFactory.create('focal', alpha=0.5, gamma=3.0)
-    tversky_loss_fn = LossFactory.create('tversky', alpha=0.3, beta=0.7)
-    ce_loss_fn = LossFactory.create('ce')
-    boundary_sdf_loss_fn = LossFactory.create('boundary_sdf', dt_backend="fastgeodis")
-    soft_chamfer_loss_fn = LossFactory.create('soft_chamfer', dt_backend="fastgeodis")
+        test_logits = torch.randn(n_batch, n_classes, h, w)
+        test_mask = torch.randint(0, n_classes, (n_batch, h, w))
+        test_mask = one_hot(test_mask, n_classes)
+        binary_logits = torch.randn(n_batch, n_classes, h, w)
+        binary_mask = torch.randint(0, 2, (n_batch, h, w))
 
-    print(f"Dice Loss: {dice_loss_fn(test_logits, test_mask).item():.4f}")
-    print(f"IoU Loss: {iou_loss_fn(test_logits, test_mask).item():.4f}")
-    print(f"Focal Loss: {focal_loss_fn(test_logits, test_mask).item():.4f}")
-    print(f"Tversky Loss: {tversky_loss_fn(test_logits, test_mask).item():.4f}")
-    print(f"Cross-Entropy Loss: {ce_loss_fn(test_logits, test_mask).item():.4f}")
-    print(f"Boundary SDF Loss: {boundary_sdf_loss_fn(test_logits, test_mask).item():.4f}")
-    print(f"Soft Chamfer Loss: {soft_chamfer_loss_fn(test_logits, test_mask).item():.4f}")
+        print("--- Testing Utility Functions ---")
+        test_one_hot = one_hot(test_mask, n_classes)
+        print(f"one_hot output shape: {test_one_hot.shape}")
+        test_sobel_grad = sobel_grad(torch.randn(1, 1, h, w))
+        print(f"sobel_grad output shape: {test_sobel_grad.shape}")
+        test_soft_boundary = make_soft_boundary(torch.rand(1, 1, h, w))
+        print(f"make_soft_boundary output shape: {test_soft_boundary.shape}")
 
-    print("\n--- Testing DiceLoss with a perfect prediction ---")
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, h, w).long()
-    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-    perfect_loss = dice_loss_fn(perfect_pred, perfect_target).item()
-    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-    assert perfect_loss < 1e-5, "DiceLoss for perfect prediction is not near zero!"
+        print("\n--- Testing DistanceTransform2D ---")
+        dt_kornia = DistanceTransform2D(backend="kornia")
+        dt_fastgeodis = DistanceTransform2D(backend="fastgeodis")
+        # binary_map = (test_mask[:, None, :, :] == 1).float()
+        binary_map = test_mask.float()
+        print(f"DistanceTransform2D (kornia) EDT: {dt_kornia.edt(binary_map).mean().item():.4f}")
+        print(f"DistanceTransform2D (fastgeodis) EDT: {dt_fastgeodis.edt(binary_map).mean().item():.4f}")
+        print(f"DistanceTransform2D (kornia) SDT: {dt_kornia.signed_distance(binary_map).mean().item():.4f}")
+        print(f"DistanceTransform2D (fastgeodis) SDT: {dt_fastgeodis.signed_distance(binary_map).mean().item():.4f}")
 
-    print("\n--- Testing IoULoss with a perfect prediction ---")
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, h, w).long()
-    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-    perfect_loss = iou_loss_fn(perfect_pred, perfect_target).item()
-    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-    assert perfect_loss < 1e-5, "IoULoss for perfect prediction is not near zero!"
+        print("\n--- Testing Individual Loss Components (via LossFactory) ---")
+        dice_loss_fn = LossFactory.create('dice')
+        iou_loss_fn = LossFactory.create('iou')
+        focal_loss_fn = LossFactory.create('focal', alpha=0.5, gamma=3.0)
+        tversky_loss_fn = LossFactory.create('tversky', alpha=0.3, beta=0.7)
+        ce_loss_fn = LossFactory.create('ce')
+        boundary_sdf_loss_fn = LossFactory.create('boundary_sdf', dt_backend="fastgeodis")
+        soft_chamfer_loss_fn = LossFactory.create('soft_chamfer', dt_backend="fastgeodis")
 
-    print("\n--- Testing FocalLoss with a perfect prediction ---")
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, h, w).long()
-    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-    perfect_loss = focal_loss_fn(perfect_pred, perfect_target).item()
-    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-    assert perfect_loss < 1e-5, "FocalLoss for perfect prediction is not near zero!"
+        print(f"Dice Loss: {dice_loss_fn(test_logits, test_mask).item():.4f}")
+        print(f"IoU Loss: {iou_loss_fn(test_logits, test_mask).item():.4f}")
+        print(f"Focal Loss: {focal_loss_fn(test_logits, test_mask).item():.4f}")
+        print(f"Tversky Loss: {tversky_loss_fn(test_logits, test_mask).item():.4f}")
+        print(f"Cross-Entropy Loss: {ce_loss_fn(test_logits, test_mask).item():.4f}")
+        print(f"Boundary SDF Loss: {boundary_sdf_loss_fn(test_logits, test_mask).item():.4f}")
+        print(f"Soft Chamfer Loss: {soft_chamfer_loss_fn(test_logits, test_mask).item():.4f}")
 
-    print("\n--- Testing TverskyLoss with a perfect prediction ---")
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, h, w).long()
-    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-    perfect_loss = tversky_loss_fn(perfect_pred, perfect_target).item()
-    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-    assert perfect_loss < 1e-5, "TverskyLoss for perfect prediction is not near zero!"
+        print("\n--- Testing DiceLoss with a perfect prediction ---")
+        perfect_pred = torch.zeros(1, n_classes, h, w)
+        perfect_target = torch.zeros(1, h, w).long()
+        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+        perfect_loss = dice_loss_fn(perfect_pred, perfect_target).item()
+        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+        assert perfect_loss < 1e-5, "DiceLoss for perfect prediction is not near zero!"
 
-    print("\n--- Testing CrossEntropyLoss with a perfect prediction ---")
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, h, w).long()
-    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-    perfect_loss = ce_loss_fn(perfect_pred, perfect_target).item()
-    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-    assert perfect_loss < 1e-5, "CrossEntropyLoss for perfect prediction is not near zero!"
+        print("\n--- Testing IoULoss with a perfect prediction ---")
+        perfect_pred = torch.zeros(1, n_classes, h, w)
+        perfect_target = torch.zeros(1, h, w).long()
+        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+        perfect_loss = iou_loss_fn(perfect_pred, perfect_target).item()
+        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+        assert perfect_loss < 1e-5, "IoULoss for perfect prediction is not near zero!"
 
-    # Boundary SDF Loss
-    print("\n--- Testing BoundarySDFLoss with perfect prediction ---")
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, h, w).long()
-    # Set logits for class 0 to be very high, predicting the correct class
-    perfect_pred[0, 0, :, :] = 100.0
-    perfect_target[0, :, :] = 0
-    perfect_sdf_loss = boundary_sdf_loss_fn(perfect_pred, perfect_target).item()
-    print(f"Boundary SDF Loss for perfect prediction: {perfect_sdf_loss:.6f}")
-    assert perfect_sdf_loss < 1e-5, "Boundary SDF Loss for perfect prediction is not near zero!"
+        print("\n--- Testing FocalLoss with a perfect prediction ---")
+        perfect_pred = torch.zeros(1, n_classes, h, w)
+        perfect_target = torch.zeros(1, h, w).long()
+        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+        perfect_loss = focal_loss_fn(perfect_pred, perfect_target).item()
+        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+        assert perfect_loss < 1e-5, "FocalLoss for perfect prediction is not near zero!"
 
-    print("\n--- Testing SoftChamferLoss with a perfect prediction ---")
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, h, w).long()
-    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-    perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-    perfect_loss = soft_chamfer_loss_fn(perfect_pred, perfect_target).item()
-    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-    assert perfect_loss < 1e-5, "SoftChamferLoss for perfect prediction is not near zero!"
+        print("\n--- Testing TverskyLoss with a perfect prediction ---")
+        perfect_pred = torch.zeros(1, n_classes, h, w)
+        perfect_target = torch.zeros(1, h, w).long()
+        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+        perfect_loss = tversky_loss_fn(perfect_pred, perfect_target).item()
+        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+        assert perfect_loss < 1e-5, "TverskyLoss for perfect prediction is not near zero!"
 
-    print("\n--- Testing HybridLoss Class ---")
-    loss_config_multi = {
-        'ce': {'weight': 0.5},
-        'dice': {'weight': 0.5},
-        'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
-    }
-    hybrid_loss_multi = HybridLoss(loss_config_multi)
-    hybrid_total_loss_multi = hybrid_loss_multi(test_logits, test_mask)
-    print(f"HybridLoss (multi-class) total loss: {hybrid_total_loss_multi.item():.4f}")
+        print("\n--- Testing CrossEntropyLoss with a perfect prediction ---")
+        perfect_pred = torch.zeros(1, n_classes, h, w)
+        perfect_target = torch.zeros(1, h, w).long()
+        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+        perfect_loss = ce_loss_fn(perfect_pred, perfect_target).item()
+        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+        assert perfect_loss < 1e-5, "CrossEntropyLoss for perfect prediction is not near zero!"
 
-    loss_config_binary = {
-        'bce': {'weight': 0.4},
-        'ce': {'weight': 0.4},
-        'tversky': {'weight': 0.6},
-        'dice': {'weight': 0.5},
-        'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
-    }
-    hybrid_loss_binary = HybridLoss(loss_config_binary)
-    hybrid_total_loss_binary = hybrid_loss_binary(binary_logits, binary_mask)
-    print(f"HybridLoss (binary) total loss: {hybrid_total_loss_binary.item():.4f}")
+        # Boundary SDF Loss
+        print("\n--- Testing BoundarySDFLoss with perfect prediction ---")
+        perfect_pred = torch.zeros(1, n_classes, h, w)
+        perfect_target = torch.zeros(1, h, w).long()
+        # Set logits for class 0 to be very high, predicting the correct class
+        perfect_pred[0, 0, :, :] = 100.0
+        perfect_target[0, :, :] = 0
+        perfect_sdf_loss = boundary_sdf_loss_fn(perfect_pred, perfect_target).item()
+        print(f"Boundary SDF Loss for perfect prediction: {perfect_sdf_loss:.6f}")
+        assert perfect_sdf_loss < 1e-5, "Boundary SDF Loss for perfect prediction is not near zero!"
+
+        print("\n--- Testing SoftChamferLoss with a perfect prediction ---")
+        perfect_pred = torch.zeros(1, n_classes, h, w)
+        perfect_target = torch.zeros(1, h, w).long()
+        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
+        perfect_loss = soft_chamfer_loss_fn(perfect_pred, perfect_target).item()
+        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+        assert perfect_loss < 1e-5, "SoftChamferLoss for perfect prediction is not near zero!"
+
+        print("\n--- Testing HybridLoss Class ---")
+        loss_config_multi = {
+            'ce': {'weight': 0.5},
+            'dice': {'weight': 0.5},
+            'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
+        }
+        hybrid_loss_multi = HybridLoss(loss_config_multi)
+        hybrid_total_loss_multi = hybrid_loss_multi(test_logits, test_mask)
+        print(f"HybridLoss (multi-class) total loss: {hybrid_total_loss_multi.item():.4f}")
+
+        loss_config_binary = {
+            'bce': {'weight': 0.4},
+            'ce': {'weight': 0.4},
+            'tversky': {'weight': 0.6},
+            'dice': {'weight': 0.5},
+            'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
+        }
+        hybrid_loss_binary = HybridLoss(loss_config_binary)
+        hybrid_total_loss_binary = hybrid_loss_binary(binary_logits, binary_mask)
+        print(f"HybridLoss (binary) total loss: {hybrid_total_loss_binary.item():.4f}")
