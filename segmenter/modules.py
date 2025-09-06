@@ -240,8 +240,6 @@ class DiceLoss(BaseLoss):
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
         self._check_params(predicted, target)
-        scores = self._shape_scores(predicted, target)
-        self._check_params(predicted, target)
         scores = self._shape_scores(predicted, target).sum(dim=0)
 
         tp = scores[0]
@@ -251,38 +249,12 @@ class DiceLoss(BaseLoss):
 
         return 1 - dice
 
-        #
-        # num_classes = max(predicted.shape[1], 2)
-        #
-        # probs = F.softmax(predicted, dim=1)
-        # if target.shape[1] == 1:
-        #     target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
-        # else:
-        #     target_onehot = target.to(predicted.dtype)
-        # # Vectorized calculation
-        # intersection = (probs * target_onehot).sum(dim=(2, 3))
-        # union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3)))
-        # dice_score = (2.0 * intersection + EPSILON) / (union + EPSILON)
-        # return 1 - dice_score.mean()
-
 
 class IoULoss(BaseLoss):
     """Calculates the Intersection over Union (IoU) Loss."""
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        # num_classes = max(predicted.shape[1], 2)
-        # probs = F.softmax(predicted, dim=1)
-        # if target.shape[1] == 1:
-        #     target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
-        # else:
-        #     target_onehot = target.to(predicted.dtype)
-        # # Vectorized calculation
-        # intersection = (probs * target_onehot).sum(dim=(2, 3))
-        # union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))) - intersection
-        # iou_score = (intersection + EPSILON) / (union + EPSILON)
-        # return 1 - iou_score.mean()
-        self._check_params(predicted, target)
-        scores = self._shape_scores(predicted, target)
+
         self._check_params(predicted, target)
         scores = self._shape_scores(predicted, target).sum(dim=0)
 
@@ -306,6 +278,7 @@ class FocalLoss(BaseLoss):
             target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
         else:
             target_onehot = target.to(predicted.dtype)
+
         pt = torch.where(target_onehot == 1, probs, 1 - probs)
         focal_term = alpha * (1 - pt) ** gamma
         bce = -torch.log(pt + EPSILON)
@@ -316,21 +289,17 @@ class TverskyLoss(BaseLoss):
     """Calculates the Tversky Loss."""
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(predicted.shape[1], 2)
-
+        self._check_params(predicted, target)
+        scores = self._shape_scores(predicted, target).sum(dim=0)
         alpha = self.kwargs.get('alpha', 0.5)
         beta = self.kwargs.get('beta', 0.5)
-        probs = F.softmax(predicted, dim=1)
-        if target.shape[1] == 1:
-            target_oh = one_hot(target, num_classes=num_classes).to(predicted.dtype)
-        else:
-            target_oh = target.to(predicted.dtype)
-        # Vectorized calculation over all dimensions
-        TP = (probs * target_oh).sum(dim=(0, 2, 3))
-        FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))
-        FN = ((1 - probs) * target_oh).sum(dim=(0, 2, 3))
-        tversky = (TP + EPSILON) / (TP + alpha * FP + beta * FN + EPSILON)
-        return 1.0 - tversky.mean()
+
+        tp = scores[0]
+        fp = scores[1]
+        fn = scores[2]
+
+        tversky = (tp + EPSILON) / (tp + alpha * fp + beta * fn + EPSILON)
+        return 1.0 - tversky
 
 
 class BoundarySDFLoss(BaseLoss):
@@ -346,11 +315,13 @@ class BoundarySDFLoss(BaseLoss):
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         num_classes = max(predicted.shape[1], 2)
         is_one_class = (predicted.shape[1] == 1)
+
         probs = F.softmax(predicted, dim=1)
         if target.shape[1] == 1:
             target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
         else:
             target_onehot = target.to(predicted.dtype)
+
         loss = 0.0
         for c in range(num_classes):
             gt_c = target_onehot[:, c:c + 1]
@@ -361,7 +332,10 @@ class BoundarySDFLoss(BaseLoss):
             # Penalize the difference between prediction and ground truth,
             # weighted by the absolute signed distance. This ensures zero loss
             # for a perfect match, regardless of the SDF value.
-            loss += (sdt_c.abs() * (probs[:, c:c + 1] - gt_c).abs()).mean()
+            loss_c = (sdt_c.abs() * (probs[:, c:c + 1] - gt_c).abs()).mean()
+            if torch.isnan(loss_c).any():
+                loss_c = torch.zeros_like(loss_c)
+            loss += loss_c
 
             if is_one_class:
                 break
@@ -424,7 +398,10 @@ class SoftChamferLoss(BaseLoss):
             # Chamfer-style symmetric loss terms
             term_pred_to_gt = (e_pred * d_to_gt).sum(dim=(2, 3)) / (e_pred.sum(dim=(2, 3)) + EPSILON)
             term_gt_to_pred = (e_gt * d_to_pred).sum(dim=(2, 3)) / (e_gt.sum(dim=(2, 3)) + EPSILON)
-            loss += 0.5 * (term_pred_to_gt.mean() + term_gt_to_pred.mean())
+            loss_c = 0.5 * (term_pred_to_gt.mean() + term_gt_to_pred.mean())
+            if torch.isnan(loss_c).any():
+                loss_c = torch.zeros_like(loss_c)
+            loss += loss_c
 
         return loss / num_classes
 
