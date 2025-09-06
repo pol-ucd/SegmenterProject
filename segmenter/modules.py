@@ -1,9 +1,32 @@
+"""
+Various Loss functions and related utilities.
+
+Note. The Loss functions below have signatures that are consistent with the type and shape
+of prediction and target tensors used in the processed pipeline.
+
+Target masks are always one hot encoded to be of shape [B, C, H, W]
+Predictions are logits of shape [B, C, H, W]
+
+Where:
+    B = the batch dimension.
+    C = the number of classes.
+    H, W = the image height and width.
+
+Target Masks have type Torch.Long
+Predictions have type Torch.Float
+
+Loss is returned as a single mean loss per batch and class. If the calling function
+needs per sample loss the returned loss should be multiplied by the batch size.
+
+"""
+
 import logging
 from abc import abstractmethod, ABC
-from typing import Optional, Dict, Tuple
+from typing import Dict, Tuple
 
 try:
     import FastGeodis
+
     is_geo_installed = True
 except ImportError:
     is_geo_installed = False
@@ -23,6 +46,7 @@ import torch.nn.functional as F
 # Global Constants
 # ---------------------------
 EPSILON = 1e-6
+
 
 # ---------------------------
 # Utilities
@@ -86,6 +110,7 @@ class DistanceTransform2D:
     Wrapper for different GPU-accelerated 2D distance transform backends.
     Supports Kornia (Euclidean) and FastGeodis (Geodesic with lambda=0 for Euclidean).
     """
+
     def __init__(self, backend: str = "fastgeodis", spacing: Tuple[float, float] = (1.0, 1.0)):
         """
         Args:
@@ -154,62 +179,134 @@ class DistanceTransform2D:
 # Loss Components
 # ---------------------------
 
+class LossException(Exception):
+    def __init__(self, message, errors=None):
+        # Call the base class constructor with the parameters it needs
+        super().__init__(message)
+
+        """ Custom errors that the caller can print from e.errors"""
+        self.errors = errors
+
+
 class BaseLoss(nn.Module, ABC):
     """Abstract base class for all loss functions."""
+
     def __init__(self, **kwargs):
         super().__init__()
         self.kwargs = kwargs
+        self.num_classes = num_classes
 
     @abstractmethod
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Calculates the loss."""
         pass
 
+    def _check_params(self, predicted: torch.Tensor, target: torch.Tensor):
+        try:
+            assert predicted.shape == target.shape
+        except AssertionError:
+            msg = f" Input mismatch, Logits and Target Mask must have the same shape. Logits shape: {predicted.shape}, target mask shape: {target.shape}"
+            raise LossException(msg)
+
+    def _shape_scores(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Calculates the per-class (tp, fn) scores for a predicted and target mask."""
+        (b, c, h, w) = predicted.shape
+        scores = torch.zeros(size=(c, 4), device=predicted.device)
+        probs = F.softmax(predicted, dim=1)
+        if c == 1:
+            predicted_max = (probs > 0.5)
+            target_max = target.float()
+        else:
+            predicted_max = torch.argmax(probs, dim=1)
+            target_max = torch.argmax(target, dim=1)
+
+        denom = b * h * w
+        for i_c in range(c):
+            target_c = (target_max == i_c).float()
+            pred_c = (predicted_max == i_c).float()
+
+            scores[i_c, 0] = (target_c * pred_c).sum() / denom  # tp
+            scores[i_c, 1] = ((1 - target_c) * pred_c).sum() / denom  # fn
+            scores[i_c, 2] = (target_c * (1 - pred_c)).sum() / denom  # fp
+            scores[i_c, 3] = ((1 - target_c) * (1 - pred_c)).sum() / denom  # tn
+
+        return scores
+
 
 class DiceLoss(BaseLoss):
-    """Calculates the multi-class Dice Loss."""
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(pred.shape[1], 2)
+    """
+    Calculates the multi-class Dice Loss.
+    """
 
-        probs = F.softmax(pred, dim=1)
-        if target.shape[1] == 1:
-            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
-        else:
-            target_onehot = target.to(pred.dtype)
-        # Vectorized calculation
-        intersection = (probs * target_onehot).sum(dim=(2, 3))
-        union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3)))
-        dice_score = (2.0 * intersection + EPSILON) / (union + EPSILON)
-        return 1 - dice_score.mean()
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+
+        self._check_params(predicted, target)
+        scores = self._shape_scores(predicted, target)
+        self._check_params(predicted, target)
+        scores = self._shape_scores(predicted, target).sum(dim=0)
+
+        tp = scores[0]
+        fp = scores[1]
+        fn = scores[2]
+        dice = (2 * tp + EPSILON) / (2 * tp + fp + fn + EPSILON)
+
+        return 1 - dice
+
+        #
+        # num_classes = max(predicted.shape[1], 2)
+        #
+        # probs = F.softmax(predicted, dim=1)
+        # if target.shape[1] == 1:
+        #     target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
+        # else:
+        #     target_onehot = target.to(predicted.dtype)
+        # # Vectorized calculation
+        # intersection = (probs * target_onehot).sum(dim=(2, 3))
+        # union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3)))
+        # dice_score = (2.0 * intersection + EPSILON) / (union + EPSILON)
+        # return 1 - dice_score.mean()
 
 
 class IoULoss(BaseLoss):
     """Calculates the Intersection over Union (IoU) Loss."""
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(pred.shape[1], 2)
-        probs = F.softmax(pred, dim=1)
-        if target.shape[1] == 1:
-            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
-        else:
-            target_onehot = target.to(pred.dtype)
-        # Vectorized calculation
-        intersection = (probs * target_onehot).sum(dim=(2, 3))
-        union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))) - intersection
-        iou_score = (intersection + EPSILON) / (union + EPSILON)
-        return 1 - iou_score.mean()
+
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        # num_classes = max(predicted.shape[1], 2)
+        # probs = F.softmax(predicted, dim=1)
+        # if target.shape[1] == 1:
+        #     target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
+        # else:
+        #     target_onehot = target.to(predicted.dtype)
+        # # Vectorized calculation
+        # intersection = (probs * target_onehot).sum(dim=(2, 3))
+        # union = (probs.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))) - intersection
+        # iou_score = (intersection + EPSILON) / (union + EPSILON)
+        # return 1 - iou_score.mean()
+        self._check_params(predicted, target)
+        scores = self._shape_scores(predicted, target)
+        self._check_params(predicted, target)
+        scores = self._shape_scores(predicted, target).sum(dim=0)
+
+        tp = scores[0]
+        fp = scores[1]
+        fn = scores[2]
+        iou = (tp + EPSILON) / (tp + fp + fn + EPSILON)
+
+        return 1 - iou
 
 
 class FocalLoss(BaseLoss):
     """Calculates the Focal Loss."""
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(pred.shape[1], 2)
+
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(predicted.shape[1], 2)
         alpha = self.kwargs.get('alpha', 0.25)
         gamma = self.kwargs.get('gamma', 2.0)
-        probs = F.softmax(pred, dim=1)
+        probs = F.softmax(predicted, dim=1)
         if target.shape[1] == 1:
-            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+            target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
         else:
-            target_onehot = target.to(pred.dtype)
+            target_onehot = target.to(predicted.dtype)
         pt = torch.where(target_onehot == 1, probs, 1 - probs)
         focal_term = alpha * (1 - pt) ** gamma
         bce = -torch.log(pt + EPSILON)
@@ -218,16 +315,17 @@ class FocalLoss(BaseLoss):
 
 class TverskyLoss(BaseLoss):
     """Calculates the Tversky Loss."""
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(pred.shape[1], 2)
+
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(predicted.shape[1], 2)
 
         alpha = self.kwargs.get('alpha', 0.5)
         beta = self.kwargs.get('beta', 0.5)
-        probs = F.softmax(pred, dim=1)
+        probs = F.softmax(predicted, dim=1)
         if target.shape[1] == 1:
-            target_oh = one_hot(target, num_classes=num_classes).to(pred.dtype)
+            target_oh = one_hot(target, num_classes=num_classes).to(predicted.dtype)
         else:
-            target_oh = target.to(pred.dtype)
+            target_oh = target.to(predicted.dtype)
         # Vectorized calculation over all dimensions
         TP = (probs * target_oh).sum(dim=(0, 2, 3))
         FP = (probs * (1 - target_oh)).sum(dim=(0, 2, 3))
@@ -241,18 +339,19 @@ class BoundarySDFLoss(BaseLoss):
     Boundary Loss based on Signed Distance Functions (SDF).
     Penalizes misalignment between predicted and ground truth boundaries.
     """
+
     def __init__(self, dt_backend: str = "fastgeodis", **kwargs):
         super().__init__(**kwargs)
         self.dt = DistanceTransform2D(backend=dt_backend)
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(pred.shape[1], 2)
-        is_one_class = (pred.shape[1] == 1)
-        probs = F.softmax(pred, dim=1)
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(predicted.shape[1], 2)
+        is_one_class = (predicted.shape[1] == 1)
+        probs = F.softmax(predicted, dim=1)
         if target.shape[1] == 1:
-            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+            target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
         else:
-            target_onehot = target.to(pred.dtype)
+            target_onehot = target.to(predicted.dtype)
         loss = 0.0
         for c in range(num_classes):
             gt_c = target_onehot[:, c:c + 1]
@@ -270,11 +369,13 @@ class BoundarySDFLoss(BaseLoss):
 
         return loss / num_classes
 
+
 class SoftChamferLoss(BaseLoss):
     """
     A symmetric soft Chamfer loss that penalizes surface misalignment.
     Uses soft predicted boundaries and GT boundaries based on morphological operations.
     """
+
     def __init__(self, dt_backend: str = "fastgeodis", tau: float = 0.8, band_px: int = 3, **kwargs):
         super().__init__(**kwargs)
         self.dt = DistanceTransform2D(backend=dt_backend)
@@ -282,13 +383,13 @@ class SoftChamferLoss(BaseLoss):
         self.band_px = band_px
         self.pool = nn.MaxPool2d(3, stride=1, padding=1)
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(pred.shape[1], 2)
-        probs = F.softmax(pred, dim=1)
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        num_classes = max(predicted.shape[1], 2)
+        probs = F.softmax(predicted, dim=1)
         if target.shape[1] == 1:
-            target_onehot = one_hot(target, num_classes=num_classes).to(pred.dtype)
+            target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
         else:
-            target_onehot = target.to(pred.dtype)
+            target_onehot = target.to(predicted.dtype)
         loss = 0.0
         for c in range(num_classes):
             p = probs[:, c:c + 1]
@@ -368,6 +469,7 @@ class HybridLoss(nn.Module):
     Combines multiple loss functions with configurable weights.
     The list of losses to use and their weights are passed in a dictionary.
     """
+
     def __init__(self, loss_configs: Dict[str, Dict[str, float]]):
         """
         Args:
@@ -409,84 +511,6 @@ class HybridLoss(nn.Module):
             total_loss += self.weights[name] * current_loss
 
         return total_loss
-
-
-class EarlyStopping:
-    """
-    Early Stopping Implementation to halt training when a metric stops improving.
-    """
-    def __init__(self, patience: int = 5, min_delta: float = 0.0,
-                 mode: str = 'min', verbose: bool = False,
-                 save_path: Optional[str] = None):
-        """
-        Args:
-            patience (int): Number of epochs to wait after last improvement.
-            min_delta (float): Minimum change to qualify as improvement.
-            mode (str): 'min' for loss, 'max' for accuracy or IoU.
-            verbose (bool): If True, logs updates.
-            save_path (str): If set, saves best model to this path.
-        """
-        assert mode in ['min', 'max'], "mode must be 'min' or 'max'"
-        self.patience = patience
-        self.min_delta = min_delta
-        self.mode = mode
-        self.verbose = verbose
-        self.save_path = save_path
-        self.logger = logging.getLogger(self.__class__.__name__)
-
-        self.best_score: Optional[float] = None
-        self.counter: int = 0
-        self.early_stop: bool = False
-        self.best_epoch: Optional[int] = None
-
-        self._init_comparator()
-
-    def _init_comparator(self):
-        """Initializes the comparison logic based on mode."""
-        if self.mode == 'min':
-            self.compare = lambda current, best: current < best - self.min_delta
-            self.best_score = float('inf')
-        else:
-            self.compare = lambda current, best: current > best + self.min_delta
-            self.best_score = float('-inf')
-
-    def __call__(self, current_score: float, model: Optional[nn.Module] = None, epoch: Optional[int] = None):
-        """
-        Evaluates the current score against the best score and updates state.
-        Args:
-            current_score (float): The score from the current epoch.
-            model (Optional[nn.Module]): The model to save if a new best score is found.
-            epoch (Optional[int]): The current epoch number.
-        """
-        if self.best_score is None or self.compare(current_score, self.best_score):
-            self.best_score = current_score
-            self.counter = 0
-            self.best_epoch = epoch
-            if self.verbose:
-                log_message = f"New best score: {current_score:.4f}"
-                if epoch is not None:
-                    log_message += f" at epoch {epoch + 1}"
-                self.logger.info(log_message)
-
-            if self.save_path and model is not None:
-                torch.save(model.state_dict(), self.save_path)
-                if self.verbose:
-                    self.logger.info(f"Model saved to {self.save_path}")
-        else:
-            self.counter += 1
-            if self.verbose:
-                self.logger.info(f"No improvement. Patience: {self.counter}/{self.patience}")
-            if self.counter >= self.patience:
-                self.early_stop = True
-                if self.verbose and epoch is not None:
-                    self.logger.info(f"Early stopping triggered at epoch {epoch + 1}")
-
-    def reset(self):
-        """Resets the state of the EarlyStopping instance."""
-        self.counter = 0
-        self.early_stop = False
-        self.best_score = float('inf') if self.mode == 'min' else float('-inf')
-        self.best_epoch = None
 
 
 if __name__ == '__main__':
@@ -562,7 +586,6 @@ if __name__ == '__main__':
     print(f"Loss for perfect prediction: {perfect_loss:.6f}")
     assert perfect_loss < 1e-5, "FocalLoss for perfect prediction is not near zero!"
 
-
     print("\n--- Testing TverskyLoss with a perfect prediction ---")
     perfect_pred = torch.zeros(1, n_classes, h, w)
     perfect_target = torch.zeros(1, h, w).long()
@@ -621,18 +644,3 @@ if __name__ == '__main__':
     hybrid_loss_binary = HybridLoss(loss_config_binary)
     hybrid_total_loss_binary = hybrid_loss_binary(binary_logits, binary_mask)
     print(f"HybridLoss (binary) total loss: {hybrid_total_loss_binary.item():.4f}")
-
-    print("\n--- Testing EarlyStopping Class ---")
-    es = EarlyStopping(patience=3, min_delta=0.01, verbose=True, mode='min')
-    print("Initial state:")
-    es(0.5)
-    es(0.48)
-    es(0.47)
-    es(0.46)
-    print(f"Early stop flag: {es.early_stop}")
-    es(0.47) # No improvement
-    es(0.48) # No improvement
-    es(0.49) # Trigger early stop
-    print(f"Early stop flag: {es.early_stop}")
-    es.reset()
-    print(f"After reset, early stop flag: {es.early_stop}")

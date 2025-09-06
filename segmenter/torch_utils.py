@@ -312,20 +312,20 @@ class CheckpointManager:
         # if not os.path.exists(filepath):
         #     raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
 
-        json_filepath = filename.replace(".pt", ".json")
+        json_filename = filename.replace(".pt", ".json")
         try:
-            with open(json_filepath, 'r') as fp:
+            with open(json_filename, 'r') as fp:
                 json_data  = json.load(fp)
                 self.best_accuracy = json_data["best_accuracy"]
                 try:
-                    self.patience = json_data["patience"]
-                    self.epochs_without_improvement = json_data["epochs_without_improvement"]
+                    # self.patience = json_data["patience"]
+                    # self.epochs_without_improvement = json_data["epochs_without_improvement"]
                     self.timestamp = json_data["timestamp"]
                 except KeyError:
                     pass
                 self.logger.info(f"Warm start with loss: {self.best_accuracy}")
         except FileNotFoundError:
-            self.logger.warning(f"Checkpoint JSON configuration file not found: {filepath}")
+            self.logger.warning(f"Checkpoint JSON configuration file not found: {json_filename}")
 
         self.logger.info(f"Loading model parameters from checkpoint {filename}")
         # Load the state dictionary and apply it to the model
