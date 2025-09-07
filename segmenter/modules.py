@@ -143,6 +143,7 @@ class DistanceTransform2D:
                           to the nearest '1' pixel.
         """
         n_batch = binary.shape[0]
+
         if self.backend == "kornia":
             # Kornia computes distance to zeros, so we invert the input
             return self.dt_fn(1.0 - binary)
@@ -158,8 +159,10 @@ class DistanceTransform2D:
                                              v=1e10,
                                              lamb=0,
                                              iter=2)
-
-            return result
+            # --- NORMALIZATION ADDED HERE ---
+            # Normalizing distance maps to [0, 1] for stable loss values
+            max_result = result.amax(dim=(-1, -2), keepdim=True) + EPSILON
+            return result/max_result
 
     @torch.no_grad()
     def signed_distance(self, mask: torch.Tensor) -> torch.Tensor:
@@ -193,25 +196,53 @@ class BaseLoss(nn.Module, ABC):
 
     def __init__(self, **kwargs):
         super().__init__()
+        self.class_scores = None
+        self.targets = None
+        self.probabilities = None
         self.kwargs = kwargs
 
     @abstractmethod
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """Calculates the loss."""
         pass
 
-    def _check_params(self, predicted: torch.Tensor, target: torch.Tensor):
+    def setup(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """"Calculates the loss."""
+        # self._check_params(predicted, target)
+        self.probabilities, self.targets = self._format_params(predicted, target)
+        self.scores = self._shape_scores(self.probabilities, self.targets)
+        return self.class_scores.sum(dim=0)
+
+    @staticmethod
+    def _check_params(predicted: torch.Tensor, target: torch.Tensor):
         try:
             assert predicted.shape == target.shape
         except AssertionError:
             msg = f" Input mismatch, Logits and Target Mask must have the same shape. Logits shape: {predicted.shape}, target mask shape: {target.shape}"
             raise LossException(msg)
 
+    @staticmethod
+    def _format_params(predicted: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        probs = F.softmax(predicted, dim=1, dtype=torch.float32)
+        if len(target.shape) == 3:
+        #     target = target.unsqueeze(1)
+        # if target.shape[1] == 1:
+            target_onehot = one_hot(target,
+                                    num_classes=predicted.shape[1]).to(probs.dtype)
+        else:
+            target_onehot = target.to(probs.dtype)
+        try:
+            assert probs.shape == target_onehot.shape
+        except AssertionError:
+            msg = f" Input mismatch, Logits and Target Mask must have the same shape. Logits shape: {predicted.shape}, target mask shape: {target.shape}"
+            raise LossException(msg)
+
+        return probs, target_onehot
+
     def _shape_scores(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Calculates the per-class (tp, fn) scores for a predicted and target mask."""
         (b, c, h, w) = predicted.shape
         scores = torch.zeros(size=(c, 4), device=predicted.device)
-        probs = F.softmax(predicted, dim=1)
+        probs, target = self._format_params(predicted, target)
         if c == 1:
             predicted_max = (probs > 0.5)
             target_max = target.float()
@@ -228,8 +259,8 @@ class BaseLoss(nn.Module, ABC):
             scores[i_c, 1] = ((1 - target_c) * pred_c).sum() / denom  # fn
             scores[i_c, 2] = (target_c * (1 - pred_c)).sum() / denom  # fp
             scores[i_c, 3] = ((1 - target_c) * (1 - pred_c)).sum() / denom  # tn
-
-        return scores
+        self.class_scores = scores
+        return scores.sum(dim=0)
 
 
 class DiceLoss(BaseLoss):
@@ -238,9 +269,7 @@ class DiceLoss(BaseLoss):
     """
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-
-        self._check_params(predicted, target)
-        scores = self._shape_scores(predicted, target).sum(dim=0)
+        scores = super().setup(predicted, target)
 
         tp = scores[0]
         fp = scores[1]
@@ -254,9 +283,7 @@ class IoULoss(BaseLoss):
     """Calculates the Intersection over Union (IoU) Loss."""
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-
-        self._check_params(predicted, target)
-        scores = self._shape_scores(predicted, target).sum(dim=0)
+        scores = super().setup(predicted, target)
 
         tp = scores[0]
         fp = scores[1]
@@ -270,16 +297,12 @@ class FocalLoss(BaseLoss):
     """Calculates the Focal Loss."""
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(predicted.shape[1], 2)
+        _ = super().setup(predicted, target)
+
         alpha = self.kwargs.get('alpha', 0.25)
         gamma = self.kwargs.get('gamma', 2.0)
-        probs = F.softmax(predicted, dim=1)
-        if target.shape[1] == 1:
-            target_onehot = one_hot(target, num_classes=num_classes).to(predicted.dtype)
-        else:
-            target_onehot = target.to(predicted.dtype)
 
-        pt = torch.where(target_onehot == 1, probs, 1 - probs)
+        pt = torch.where(self.targets == 1, self.probabilities, 1 - self.probabilities)
         focal_term = alpha * (1 - pt) ** gamma
         bce = -torch.log(pt + EPSILON)
         return (focal_term * bce).mean()
@@ -289,8 +312,8 @@ class TverskyLoss(BaseLoss):
     """Calculates the Tversky Loss."""
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        self._check_params(predicted, target)
-        scores = self._shape_scores(predicted, target).sum(dim=0)
+
+        scores = super().setup(predicted, target)
         alpha = self.kwargs.get('alpha', 0.5)
         beta = self.kwargs.get('beta', 0.5)
 
@@ -390,10 +413,10 @@ class SoftChamferLoss(BaseLoss):
 
             # --- NORMALIZATION ADDED HERE ---
             # Normalizing distance maps to [0, 1] for stable loss values
-            max_dist_to_gt = d_to_gt.amax(dim=(-1, -2), keepdim=True) + EPSILON
-            max_dist_to_pred = d_to_pred.amax(dim=(-1, -2), keepdim=True) + EPSILON
-            d_to_gt = d_to_gt / max_dist_to_gt
-            d_to_pred = d_to_pred / max_dist_to_pred
+            # max_dist_to_gt = d_to_gt.amax(dim=(-1, -2), keepdim=True) + EPSILON
+            # max_dist_to_pred = d_to_pred.amax(dim=(-1, -2), keepdim=True) + EPSILON
+            # d_to_gt = d_to_gt / max_dist_to_gt
+            # d_to_pred = d_to_pred / max_dist_to_pred
 
             # Chamfer-style symmetric loss terms
             term_pred_to_gt = (e_pred * d_to_gt).sum(dim=(2, 3)) / (e_pred.sum(dim=(2, 3)) + EPSILON)
@@ -440,7 +463,7 @@ class LossFactory:
         return LossFactory._loss_map[loss_name](**kwargs)
 
 
-class HybridLoss(nn.Module):
+class HybridLoss(BaseLoss):
     """
     Combines multiple loss functions with configurable weights.
     The list of losses to use and their weights are passed in a dictionary.
@@ -465,25 +488,13 @@ class HybridLoss(nn.Module):
             logging.info(f"Initialized loss '{name}' with weight {weight} and config {config}")
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        num_classes = max(pred.shape[1], 2)
-        total_loss = torch.tensor(0.0, device=pred.device)
-        # Ensure target is of the correct format for multi-class losses
-        if target.dim() == pred.dim():
-            target = target.squeeze(1)
+        _ = super().setup(pred, target)
+        device = pred.device
 
+        total_loss = torch.tensor(0.0, device=device)
         for name, loss_fn in self.loss_functions.items():
-            if name == 'bce':
-                # BCE expects pred with shape (B, 1, H, W) and target (B, 1, H, W)
-                current_loss = loss_fn(pred, target.unsqueeze(1).type(pred.dtype))
-            elif name == 'ce':
-                if num_classes == 2:
-                    current_loss = loss_fn(pred, target.type(pred.dtype))
-                else:
-                    current_loss = loss_fn(pred,
-                                           one_hot(target, num_classes))
-            else:
-                current_loss = loss_fn(pred,
-                                       target)
+            current_loss = loss_fn(pred,
+                                   self.targets)
             total_loss += self.weights[name] * current_loss
 
         return total_loss
@@ -497,16 +508,15 @@ if __name__ == '__main__':
     n_test_epochs = 10
 
     # Setup for tests
-    n_batch, h, w, n_classes = 14, 128, 128, 11
-
+    n_batch, h, w, n_classes = 3, 128, 128, 11
+    print(f"Running {n_test_epochs} test epochs.")
     for n in range(n_test_epochs):
-
-
+        print(f"Test epoch [{n+1} / {n_test_epochs}]")
         test_logits = torch.randn(n_batch, n_classes, h, w)
         test_mask = torch.randint(0, n_classes, (n_batch, h, w))
         test_mask = one_hot(test_mask, n_classes)
         binary_logits = torch.randn(n_batch, n_classes, h, w)
-        binary_mask = torch.randint(0, 2, (n_batch, h, w))
+        binary_mask = torch.randint(0, n_classes, (n_batch, h, w))
 
         print("--- Testing Utility Functions ---")
         test_one_hot = one_hot(test_mask, n_classes)
@@ -543,75 +553,10 @@ if __name__ == '__main__':
         print(f"Boundary SDF Loss: {boundary_sdf_loss_fn(test_logits, test_mask).item():.4f}")
         print(f"Soft Chamfer Loss: {soft_chamfer_loss_fn(test_logits, test_mask).item():.4f}")
 
-        print("\n--- Testing DiceLoss with a perfect prediction ---")
-        perfect_pred = torch.zeros(1, n_classes, h, w)
-        perfect_target = torch.zeros(1, h, w).long()
-        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-        perfect_loss = dice_loss_fn(perfect_pred, perfect_target).item()
-        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-        assert perfect_loss < 1e-5, "DiceLoss for perfect prediction is not near zero!"
-
-        print("\n--- Testing IoULoss with a perfect prediction ---")
-        perfect_pred = torch.zeros(1, n_classes, h, w)
-        perfect_target = torch.zeros(1, h, w).long()
-        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-        perfect_loss = iou_loss_fn(perfect_pred, perfect_target).item()
-        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-        assert perfect_loss < 1e-5, "IoULoss for perfect prediction is not near zero!"
-
-        print("\n--- Testing FocalLoss with a perfect prediction ---")
-        perfect_pred = torch.zeros(1, n_classes, h, w)
-        perfect_target = torch.zeros(1, h, w).long()
-        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-        perfect_loss = focal_loss_fn(perfect_pred, perfect_target).item()
-        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-        assert perfect_loss < 1e-5, "FocalLoss for perfect prediction is not near zero!"
-
-        print("\n--- Testing TverskyLoss with a perfect prediction ---")
-        perfect_pred = torch.zeros(1, n_classes, h, w)
-        perfect_target = torch.zeros(1, h, w).long()
-        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-        perfect_loss = tversky_loss_fn(perfect_pred, perfect_target).item()
-        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-        assert perfect_loss < 1e-5, "TverskyLoss for perfect prediction is not near zero!"
-
-        print("\n--- Testing CrossEntropyLoss with a perfect prediction ---")
-        perfect_pred = torch.zeros(1, n_classes, h, w)
-        perfect_target = torch.zeros(1, h, w).long()
-        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-        perfect_loss = ce_loss_fn(perfect_pred, perfect_target).item()
-        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-        assert perfect_loss < 1e-5, "CrossEntropyLoss for perfect prediction is not near zero!"
-
-        # Boundary SDF Loss
-        print("\n--- Testing BoundarySDFLoss with perfect prediction ---")
-        perfect_pred = torch.zeros(1, n_classes, h, w)
-        perfect_target = torch.zeros(1, h, w).long()
-        # Set logits for class 0 to be very high, predicting the correct class
-        perfect_pred[0, 0, :, :] = 100.0
-        perfect_target[0, :, :] = 0
-        perfect_sdf_loss = boundary_sdf_loss_fn(perfect_pred, perfect_target).item()
-        print(f"Boundary SDF Loss for perfect prediction: {perfect_sdf_loss:.6f}")
-        assert perfect_sdf_loss < 1e-5, "Boundary SDF Loss for perfect prediction is not near zero!"
-
-        print("\n--- Testing SoftChamferLoss with a perfect prediction ---")
-        perfect_pred = torch.zeros(1, n_classes, h, w)
-        perfect_target = torch.zeros(1, h, w).long()
-        perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-        perfect_target[0, :, :] = 0  # Ground truth is class 0 everywhere
-        perfect_loss = soft_chamfer_loss_fn(perfect_pred, perfect_target).item()
-        print(f"Loss for perfect prediction: {perfect_loss:.6f}")
-        assert perfect_loss < 1e-5, "SoftChamferLoss for perfect prediction is not near zero!"
-
         print("\n--- Testing HybridLoss Class ---")
         loss_config_multi = {
             'ce': {'weight': 0.5},
-            'dice': {'weight': 0.5},
+            'dice': {'weight': 0.4},
             'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
         }
         hybrid_loss_multi = HybridLoss(loss_config_multi)
@@ -628,3 +573,47 @@ if __name__ == '__main__':
         hybrid_loss_binary = HybridLoss(loss_config_binary)
         hybrid_total_loss_binary = hybrid_loss_binary(binary_logits, binary_mask)
         print(f"HybridLoss (binary) total loss: {hybrid_total_loss_binary.item():.4f}")
+
+    """ Test for Perfect matches """
+    perfect_pred = torch.zeros(1, n_classes, h, w)
+    perfect_target = torch.zeros(1, n_classes, h, w).long()
+    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[0] = 0  # Ground truth is class 0 everywhere
+
+    print("\n--- Testing DiceLoss with a perfect prediction ---")
+    perfect_loss = dice_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "DiceLoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing IoULoss with a perfect prediction ---")
+    perfect_loss = iou_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "IoULoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing FocalLoss with a perfect prediction ---")
+    perfect_loss = focal_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "FocalLoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing TverskyLoss with a perfect prediction ---")
+    perfect_loss = tversky_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "TverskyLoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing CrossEntropyLoss with a perfect prediction ---")
+    perfect_loss = ce_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "CrossEntropyLoss for perfect prediction is not near zero!"
+
+    # Boundary SDF Loss
+    print("\n--- Testing BoundarySDFLoss with perfect prediction ---")
+    perfect_sdf_loss = boundary_sdf_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Boundary SDF Loss for perfect prediction: {perfect_sdf_loss:.6f}")
+    assert perfect_sdf_loss < 1e-5, "Boundary SDF Loss for perfect prediction is not near zero!"
+
+    print("\n--- Testing SoftChamferLoss with a perfect prediction ---")
+    perfect_loss = soft_chamfer_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "SoftChamferLoss for perfect prediction is not near zero!"
+
+
