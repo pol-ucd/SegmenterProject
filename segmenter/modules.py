@@ -305,7 +305,6 @@ class FocalLoss(BaseLoss):
         pt = torch.where(self.targets == 1, self.probabilities, 1 - self.probabilities)
         focal_term = alpha * (1 - pt) ** gamma
         bce = -torch.log(pt + EPSILON)
-        print()
         return (focal_term * bce).mean()
 
 
