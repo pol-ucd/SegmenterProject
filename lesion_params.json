@@ -21,7 +21,7 @@
         "n_epochs": 100
     },
     "optimizer": {
-            "learning_rate": 1e-4,
+            "learning_rate": 1e-5,
             "l2_decay_penalty": 1e-5
         },
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",

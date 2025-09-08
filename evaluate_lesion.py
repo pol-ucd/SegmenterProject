@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import pandas as pd
 import torch
-from PIL import Image, ImageFilter
+from PIL import Image
 from sklearn.metrics import f1_score, jaccard_score, precision_score, recall_score
 from torch.nn import functional as F
 from torchvision import transforms
@@ -95,7 +95,8 @@ def main():
         pred_file_name = os.path.splitext(os.path.basename(image_file))[0] + ".png"
         out_name = os.path.join(PRED_PATH, pred_file_name)
 
-        denoised_pred_mask = Image.fromarray(pred_mask_array*255).filter(ImageFilter.ModeFilter(size = 3))
+        # denoised_pred_mask = Image.fromarray(pred_mask_array*255).filter(ImageFilter.ModeFilter(size = 3))
+        denoised_pred_mask = Image.fromarray(pred_mask_array * 255)
         denoised_pred_mask.save(out_name)
 
         """ Now perform all the metrics and save results """
