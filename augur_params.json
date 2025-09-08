@@ -60,11 +60,11 @@
                 "weight": 0.0
             },
             "boundary_sdf": {
-                "weight": 0.3,
+                "weight": 0.2,
                 "dt_backend": "kornia"
             },
             "soft_chamfer": {
-                "weight": 0.3,
+                "weight": 0.2,
                 "dt_backend": "kornia"
             }
         }
