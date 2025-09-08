@@ -3,7 +3,32 @@ from abc import abstractmethod
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
+from torch.nn.modules.utils import _pair
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
+
+
+class MedianPool2d(nn.Module):
+    def __init__(self, kernel_size, stride=1, padding=0):
+        super().__init__()
+        self.k = _pair(kernel_size)
+        self.s = _pair(stride)
+        self.p = _pair(padding)
+
+    def forward(self, x):
+        # x: (B, C, H, W)
+        B, C, H, W = x.shape
+        # unfold → (B, C*k*k, L)
+        patches = F.unfold(x, kernel_size=self.k,
+                               stride=self.s,
+                               padding=self.p)
+        # → (B, C, k*k, L)
+        patches = patches.view(B, C, self.k[0]*self.k[1], -1)
+        # median over window → (B, C, L)
+        med = patches.median(dim=2)[0]
+        # fold back → (B, C, H_out, W_out)
+        H_out = (H + 2*self.p[0] - self.k[0]) // self.s[0] + 1
+        W_out = (W + 2*self.p[1] - self.k[1]) // self.s[1] + 1
+        return med.view(B, C, H_out, W_out)
 
 
 # A custom exception class to handle errors specific to a Segformer-based model.
@@ -22,7 +47,7 @@ class SegformerModelError(Exception):
 """
 Base class for the Segformer models
 """
-class SegformerBinaryClassifierBase(nn.Module):
+class AugurSegformerClassifierBase(nn.Module):
     default_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
 
     def __init__(self, pretrained_model: str = None, num_classes: int = None,
@@ -80,9 +105,10 @@ class CustomSegformerDecodeHead(nn.Module):
 A single-class implementation for semantic segmentation.
 This class is the recommended approach for its correctness and efficiency.
 """
-class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
+class AugurSegformerSegmentation(AugurSegformerClassifierBase):
     def __init__(self, pretrained_model: str = None, num_classes: int = None,
-                 checkpoint_path:str=None):
+                 checkpoint_path:str=None,
+                 k:int=3):
         super().__init__(pretrained_model, num_classes, checkpoint_path)
 
         # Load the full SegformerForSemanticSegmentation model.
@@ -109,6 +135,7 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
             # Final convolution to map features to the desired number of classes.
             nn.Conv2d(256, self.num_classes, kernel_size=1)
         )
+        self.median = MedianPool2d(kernel_size=k, padding=k // 2)
 
         # --- Checkpoint Loading Logic ---
         if self.checkpoint_path:
@@ -145,17 +172,5 @@ class SegformerBinarySegmentation(SegformerBinaryClassifierBase):
                                mode='bilinear',
                                align_corners=False)
 
-        return logits
-
-
-
-# class SegformerBinarySegmentation2(SegformerBinarySegmentation):
-#     pass
-#
-#
-# class SegformerBinarySegmentation3(SegformerBinarySegmentation):
-#     pass
-#
-#
-# class SegformerBinarySegmentation4(SegformerBinarySegmentation):
-#     pass
+        # return logits
+        return self.median(logits)   # Smoothed logits

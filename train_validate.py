@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from segmenter.data import (split_images_and_masks,
                             SemanticSegmentationDatasetAugmentor,
                             SemanticSegmentationDatasetBasic)
-from segmenter.models import SegformerBinarySegmentation
+from segmenter.models import AugurSegformerSegmentation
 from segmenter.modules import HybridLoss
 from segmenter.torch_utils import RunManager, CheckpointManager
 
@@ -71,8 +71,8 @@ def main():
     """
     Setup the model 
     """
-    model = SegformerBinarySegmentation(pretrained_model=pretrained_model,
-                                        num_classes=num_classes)
+    model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
+                                       num_classes=num_classes)
     latest_checkpoint = None
     try:
         # Get the list of saved checkpoints

@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from segmenter.data import SemanticSegmentationDatasetBasic
-from segmenter.models import SegformerBinarySegmentation
+from segmenter.models import AugurSegformerSegmentation
 from segmenter.modules import HybridLoss
 from segmenter.torch_utils import RunManager
 
@@ -57,7 +57,7 @@ def main():
 
     logger.info(f"Validation batches: {len(val_loader)}")
 
-    model = SegformerBinarySegmentation(num_classes=num_classes)
+    model = AugurSegformerSegmentation(num_classes=num_classes)
     model.load_state_dict(torch.load("best_dice_model.pth", map_location=device))
     model.to(device)
 

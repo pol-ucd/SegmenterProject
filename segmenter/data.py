@@ -616,7 +616,7 @@ class HDF5ImageDataset(Dataset):
             mask_tensor = F.hflip(mask_tensor)
 
         # Random Rotation
-        angle = transforms.RandomRotation.get_params(degrees=(-45, 45))
+        angle = transforms.RandomRotation.get_params(degrees=[-45, 45])
         image_pil = F.rotate(image_pil, angle, interpolation=Image.BILINEAR)
         mask_tensor = F.rotate(mask_tensor, angle, interpolation=Image.NEAREST)
 
