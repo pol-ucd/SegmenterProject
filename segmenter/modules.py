@@ -301,11 +301,19 @@ class FocalLoss(BaseLoss):
 
         alpha = self.kwargs.get('alpha', 0.25)
         gamma = self.kwargs.get('gamma', 2.0)
+        focal = torch.zeros(1, device=predicted.device)
 
-        pt = torch.where(self.targets == 1, self.probabilities, 1 - self.probabilities)
-        focal_term = alpha * (1 - pt) ** gamma
-        bce = -torch.log(pt + EPSILON)
-        return (focal_term * bce).mean()
+        n_classes = target.shape[1]
+
+        for c in range(n_classes):
+            pt = torch.where(self.targets[:,c,:,:] == c,
+                             self.probabilities[:,c,:,:],
+                             1 - self.probabilities[:,c,:,:])
+
+            focal_term = alpha * (1 - pt) ** gamma
+            bce = -torch.log(pt + EPSILON)
+            focal += (focal_term * bce).mean()
+        return focal.mean()
 
 
 class TverskyLoss(BaseLoss):
@@ -509,6 +517,35 @@ if __name__ == '__main__':
 
     # Setup for tests
     n_batch, h, w, n_classes = 3, 128, 128, 11
+    print("\n--- Creating Individual Components ---")
+    dice_loss_fn = LossFactory.create('dice')
+    iou_loss_fn = LossFactory.create('iou')
+    focal_loss_fn = LossFactory.create('focal', alpha=0.5, gamma=3.0)
+    tversky_loss_fn = LossFactory.create('tversky', alpha=0.3, beta=0.7)
+    ce_loss_fn = LossFactory.create('ce')
+    boundary_sdf_loss_fn = LossFactory.create('boundary_sdf', dt_backend="kornia")
+    soft_chamfer_loss_fn = LossFactory.create('soft_chamfer', dt_backend="kornia")
+
+    loss_config_binary = {
+        'bce': {'weight': 0.4},
+        'ce': {'weight': 0.4},
+        'tversky': {'weight': 0.6},
+        'dice': {'weight': 0.5},
+        'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
+    }
+    hybrid_loss_binary = HybridLoss(loss_config_binary)
+
+    loss_config_multi = {
+        'ce': {'weight': 0.5},
+        'dice': {'weight': 0.4},
+        'focal': {'weight': 0.5, 'alpha': 1.0, 'gamma': 3.0},
+        'boundary_sdf': {'weight': 0.1, 'dt_backend': 'kornia'}
+    }
+    hybrid_loss_multi = HybridLoss(loss_config_multi)
+
+    dt_kornia = DistanceTransform2D(backend="kornia")
+    dt_fastgeodis = DistanceTransform2D(backend="fastgeodis")
+
     print(f"Running {n_test_epochs} test epochs.")
     for n in range(n_test_epochs):
         print(f"Test epoch [{n+1} / {n_test_epochs}]")
@@ -527,8 +564,6 @@ if __name__ == '__main__':
         print(f"make_soft_boundary output shape: {test_soft_boundary.shape}")
 
         print("\n--- Testing DistanceTransform2D ---")
-        dt_kornia = DistanceTransform2D(backend="kornia")
-        dt_fastgeodis = DistanceTransform2D(backend="fastgeodis")
         # binary_map = (test_mask[:, None, :, :] == 1).float()
         binary_map = test_mask.float()
         print(f"DistanceTransform2D (kornia) EDT: {dt_kornia.edt(binary_map).mean().item():.4f}")
@@ -536,14 +571,6 @@ if __name__ == '__main__':
         print(f"DistanceTransform2D (kornia) SDT: {dt_kornia.signed_distance(binary_map).mean().item():.4f}")
         print(f"DistanceTransform2D (fastgeodis) SDT: {dt_fastgeodis.signed_distance(binary_map).mean().item():.4f}")
 
-        print("\n--- Testing Individual Loss Components (via LossFactory) ---")
-        dice_loss_fn = LossFactory.create('dice')
-        iou_loss_fn = LossFactory.create('iou')
-        focal_loss_fn = LossFactory.create('focal', alpha=0.5, gamma=3.0)
-        tversky_loss_fn = LossFactory.create('tversky', alpha=0.3, beta=0.7)
-        ce_loss_fn = LossFactory.create('ce')
-        boundary_sdf_loss_fn = LossFactory.create('boundary_sdf', dt_backend="fastgeodis")
-        soft_chamfer_loss_fn = LossFactory.create('soft_chamfer', dt_backend="fastgeodis")
 
         print(f"Dice Loss: {dice_loss_fn(test_logits, test_mask).item():.4f}")
         print(f"IoU Loss: {iou_loss_fn(test_logits, test_mask).item():.4f}")
@@ -554,31 +581,19 @@ if __name__ == '__main__':
         print(f"Soft Chamfer Loss: {soft_chamfer_loss_fn(test_logits, test_mask).item():.4f}")
 
         print("\n--- Testing HybridLoss Class ---")
-        loss_config_multi = {
-            'ce': {'weight': 0.5},
-            'dice': {'weight': 0.4},
-            'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
-        }
-        hybrid_loss_multi = HybridLoss(loss_config_multi)
         hybrid_total_loss_multi = hybrid_loss_multi(test_logits, test_mask)
         print(f"HybridLoss (multi-class) total loss: {hybrid_total_loss_multi.item():.4f}")
 
-        loss_config_binary = {
-            'bce': {'weight': 0.4},
-            'ce': {'weight': 0.4},
-            'tversky': {'weight': 0.6},
-            'dice': {'weight': 0.5},
-            'boundary_sdf': {'weight': 0.1, 'dt_backend': 'fastgeodis'}
-        }
-        hybrid_loss_binary = HybridLoss(loss_config_binary)
         hybrid_total_loss_binary = hybrid_loss_binary(binary_logits, binary_mask)
         print(f"HybridLoss (binary) total loss: {hybrid_total_loss_binary.item():.4f}")
 
+    # ------------------------------
     """ Test for Perfect matches """
-    perfect_pred = torch.zeros(1, n_classes, h, w)
-    perfect_target = torch.zeros(1, n_classes, h, w).long()
-    perfect_pred[0, 0, :, :] = 100.0  # Set logits for class 0 to be very high
-    perfect_target[0] = 0  # Ground truth is class 0 everywhere
+    # ------------------------------
+    perfect_pred = torch.zeros(n_batch, n_classes, h, w)
+    perfect_target = torch.zeros(n_batch, n_classes, h, w).long()
+    perfect_pred[:n_batch, 0, :, :] = 100.0  # Set logits for class 0 to be very high
+    perfect_target[:n_batch] = 0  # Ground truth is class 0 everywhere
 
     print("\n--- Testing DiceLoss with a perfect prediction ---")
     perfect_loss = dice_loss_fn(perfect_pred, perfect_target).item()
@@ -601,7 +616,8 @@ if __name__ == '__main__':
     assert perfect_loss < 1e-5, "TverskyLoss for perfect prediction is not near zero!"
 
     print("\n--- Testing CrossEntropyLoss with a perfect prediction ---")
-    perfect_loss = ce_loss_fn(perfect_pred, perfect_target).item()
+    perfect_loss = ce_loss_fn(perfect_pred,
+                              perfect_target.float()).item()
     print(f"Loss for perfect prediction: {perfect_loss:.6f}")
     assert perfect_loss < 1e-5, "CrossEntropyLoss for perfect prediction is not near zero!"
 
@@ -613,6 +629,11 @@ if __name__ == '__main__':
 
     print("\n--- Testing SoftChamferLoss with a perfect prediction ---")
     perfect_loss = soft_chamfer_loss_fn(perfect_pred, perfect_target).item()
+    print(f"Loss for perfect prediction: {perfect_loss:.6f}")
+    assert perfect_loss < 1e-5, "SoftChamferLoss for perfect prediction is not near zero!"
+
+    print("\n--- Testing HybridLoss with a perfect prediction ---")
+    perfect_loss = hybrid_loss_multi(perfect_pred, perfect_target).item()
     print(f"Loss for perfect prediction: {perfect_loss:.6f}")
     assert perfect_loss < 1e-5, "SoftChamferLoss for perfect prediction is not near zero!"
 
