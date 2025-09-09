@@ -100,7 +100,7 @@ def main():
         denoised_pred_mask.save(out_name)
 
         """ Now perform all the metrics and save results """
-        logger.info(f"Processing: {pred_file_name}")
+        logger.info(f"Processing: {pred_fi
 
         """ Flatten everything so we can use regular SKLearn metrics"""
         predicted = np.array(denoised_pred_mask).reshape(-1)
