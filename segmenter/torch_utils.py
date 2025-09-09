@@ -229,12 +229,19 @@ class RunManager2:
                  logger: logging.Logger = None):
         self.logger = logger if logger is not None else logging.getLogger(__name__)
 
-        self.device = get_default_device()
+        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.config = self._load_config(config_path)
+        self.n_gpus = self.config['max_gpu']
+        if  self.n_gpus > torch.cuda.device_count():
+            self.n_gpus = torch.cuda.device_count()
 
         model_class = get_module_class(self.config['model'])
         self.model = model_class(self.config['model']['params'])
 
+        if self.n_gpus > 1:
+            self.logger.info(f"Using {torch.cuda.device_count()} GPUs")
+            self.model = torch.nn.DataParallel(self.model)
+        self.model.to(self.device)
         """ Here """
 
         self.device = next(self.model.parameters()).device
