@@ -66,7 +66,7 @@ def main():
     n_epochs = run_params['n_epochs']
 
     """ Optimiser settings """
-    opt_params = params['optimizer']
+    opt_params = params['optimizer']['params']
     learning_rate = opt_params['learning_rate']
     l2_decay_penalty = opt_params['l2_decay_penalty']
 
