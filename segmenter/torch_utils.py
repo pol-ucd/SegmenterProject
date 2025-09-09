@@ -1,6 +1,7 @@
 """
 Utilities to help with PyTorch
 """
+import importlib
 import json
 import logging
 import os
@@ -8,7 +9,7 @@ from datetime import datetime
 
 import numpy as np
 import torch
-from torch import autocast
+from torch import autocast, nn
 
 from segmenter.modules import LossFactory, HybridLoss
 
@@ -196,6 +197,158 @@ class RunManager:
             total_metrics['iou'] = np.mean(total_iou_loss)
 
         return total_metrics
+
+
+def get_module_class(class_name: str) -> nn.Module:
+    """
+    Parse a string name of a module.class and return the module and class
+    as a tuple after checking everything is valid.
+    :param class_name: a string name of a module.class e.g segmenter.models.AugurSegformerSegmentation
+    :return: the class ( with the importlib already performed so the class can be directly instantiated)
+    """
+    module_name, class_name = class_name.rsplit('.', maxsplit=1)
+    try:
+        module = importlib.import_module(module_name)
+        class_ = getattr(module, class_name)
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError(f"Module {module_name} not found")
+    return class_
+
+"""
+class RunManager
+
+Manages the training and evaluation loop for a PyTorch model.
+
+    This class is parameterized via a JSON configuration file, dynamically
+    instantiating the model, optimizer, criterion, and data loaders.
+
+"""
+class RunManager2:
+    def __init__(self,
+                 config_path: str = None,
+                 logger: logging.Logger = None):
+        self.logger = logger if logger is not None else logging.getLogger(__name__)
+
+        self.device = get_default_device()
+        self.config = self._load_config(config_path)
+
+        model_class = get_module_class(self.config['model'])
+        self.model = model_class(self.config['model']['params'])
+
+        """ Here """
+
+        self.device = next(self.model.parameters()).device
+        self.dice_loss_fn = LossFactory.create('dice')
+        self.iou_loss_fn = LossFactory.create('iou')
+
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.scaler = scaler
+        self.scheduler = scheduler
+
+        self.train_loader = train_loader
+
+        if eval_loader is None and train_loader is None:
+            raise ValueError('Please provide at least one valid training or validation data loader')
+        self.eval_loader = eval_loader
+
+        if save_preds is True and save_preds_path is not None:
+            self.save_preds = save_preds
+            self.save_preds_path = save_preds_path
+        else:
+            self.save_preds = False
+
+    def _load_config(self, config_path):
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Configuration file not found at: {config_path}")
+        with open(config_path, 'r') as f:
+            return json.load(f)
+
+
+    def train(self, **train_params: object) -> dict[str, float]:
+        """
+        Trains one epoch using the data provided in self.train_loader
+        :return: total loss and dice score
+        """
+
+        self.model.train()
+        total_loss = []
+        total_dice_loss = []
+        total_iou_loss = []
+        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
+
+        for images, masks in self.train_loader:
+
+            if images.device != self.device:
+                images = images.to(self.device)
+
+            if masks.device != self.device:
+                masks = masks.to(self.device)
+
+
+            with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+                logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
+
+                loss = self.criterion(logits, masks) # Mask: [B, H, W]
+                total_loss += [loss.item()]
+                total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
+                total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
+
+            self.optimizer.zero_grad()
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward() # Fails on MPS, works on CPU/CUDA
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
+        if self.scheduler is not None:
+            self.scheduler.step()
+
+        total_metrics['loss'] = np.mean(total_loss)
+        total_metrics['dice'] = np.mean(total_dice_loss)
+        total_metrics['iou'] = np.mean(total_iou_loss)
+
+        return total_metrics
+
+    def evaluate(self, **eval_params: object) -> dict[str, float]:
+        """
+        Evaluate using the data provided in self.eval_loader
+        :return: total loss and dice score
+        """
+
+        self.model.eval()
+        total_loss = []
+        total_dice_loss = []
+        total_iou_loss = []
+        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
+
+        with torch.no_grad():
+            for images, masks in self.eval_loader:
+                if images.device != self.device:
+                    images = images.to(self.device)
+
+                if masks.device != self.device:
+                    masks = masks.to(self.device)
+
+                with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+                    logits = self.model(pixel_values=images)
+                    loss = self.criterion(logits, masks)
+
+                    total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
+                    total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
+                    total_loss += [loss.item()]
+
+                if self.save_preds is True and self.save_preds_path is not None:
+                    print("Saving predictions is not implemented yet")
+
+            total_metrics['loss'] = np.mean(total_loss)
+            total_metrics['dice'] = np.mean(total_dice_loss)
+            total_metrics['iou'] = np.mean(total_iou_loss)
+
+        return total_metrics
+
+
 
 
 class CheckpointError(Exception):

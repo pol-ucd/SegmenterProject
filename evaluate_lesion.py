@@ -23,7 +23,7 @@ PRED_TYPE = ".png"
 
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"  # Huggingface backbone model
 num_classes = 2     # Not_lesion = 0, Lesion = 1
-model_checkpoint = "../segmenter/checkpoint/model_lesion_segmentation_20250908_170504.pt"
+model_checkpoint = "../segmenter/checkpoint/model_lesion_segmentation_20250909_095157.pt"
 
 image_size=(512, 512)           # The backbone Huggingface model expects images of this size
 mean = (0.485, 0.456, 0.406)    # Use standard image_net values for normalising
@@ -100,7 +100,7 @@ def main():
         denoised_pred_mask.save(out_name)
 
         """ Now perform all the metrics and save results """
-        logger.info(f"Processing: {pred_fi
+        logger.info(f"Processing: {pred_file_name}")
 
         """ Flatten everything so we can use regular SKLearn metrics"""
         predicted = np.array(denoised_pred_mask).reshape(-1)

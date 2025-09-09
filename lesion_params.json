@@ -1,6 +1,6 @@
 {
     "model": {
-        "name": "SegformerForSemanticSegmentation",
+        "name": "segmenter.models.AugurSegformerSegmentation",
         "params": {
           "num_labels": 2,
             "id2label": {
@@ -41,9 +41,9 @@
                 "weight": 0.0
             },
             "focal": {
-                "weight": 1.0,
+                "weight": 0.5,
                 "alpha": 0.25,
-                "gamma": 3.0
+                "gamma": 2.0
             },
             "tversky": {
                 "weight": 0.0
