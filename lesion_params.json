@@ -38,7 +38,7 @@
         "function": "HybridLoss",
         "loss_params": {
             "ce": {
-                "weight": 0.1
+                "weight": 0.0
             },
             "dice": {
                 "weight": 0.0
