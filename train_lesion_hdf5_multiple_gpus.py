@@ -1,5 +1,4 @@
 import glob
-import json
 import logging
 import os
 import sys
@@ -33,17 +32,6 @@ def main():
     else:
         params_file = "lesion_params.json"
 
-
-    # --- Load parameters from JSON file ---
-    try:
-        with open(params_file, 'r') as f:
-            params = json.load(f)
-    except FileNotFoundError:
-        logger.error(f"Error: {params_file} file not found. Please ensure it is in the same directory.")
-        return
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON from {params_file}: {e}")
-        return
 
     pretrained_model = params['model']['pretrained_model']
     checkpoint_path = params['checkpoints']['path']

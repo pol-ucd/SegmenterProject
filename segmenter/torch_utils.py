@@ -235,20 +235,20 @@ class RunManager2:
         if  self.n_gpus > torch.cuda.device_count():
             self.n_gpus = torch.cuda.device_count()
 
-        model_class = get_module_class(self.config['model'])
+        model_class = get_module_class(self.config['model']['name'])
         self.model = model_class(self.config['model']['params'])
 
         if self.n_gpus > 1:
             self.logger.info(f"Using {torch.cuda.device_count()} GPUs")
             self.model = torch.nn.DataParallel(self.model)
         self.model.to(self.device)
+
+        optimizer_class = get_module_class(self.config['optimizer']['name'])
+        params = self.config['optimizer']['params']
+        self.optimizer = optimizer_class(params=self.model.parameters(), **params)
+
         """ Here """
 
-        self.device = next(self.model.parameters()).device
-        self.dice_loss_fn = LossFactory.create('dice')
-        self.iou_loss_fn = LossFactory.create('iou')
-
-        self.optimizer = optimizer
         self.criterion = criterion
         self.scaler = scaler
         self.scheduler = scheduler
@@ -264,6 +264,9 @@ class RunManager2:
             self.save_preds_path = save_preds_path
         else:
             self.save_preds = False
+
+        self.dice_loss_fn = LossFactory.create('dice')
+        self.iou_loss_fn = LossFactory.create('iou')
 
     def _load_config(self, config_path):
         if not os.path.exists(config_path):

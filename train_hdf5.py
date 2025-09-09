@@ -222,7 +222,7 @@ def main():
 
         # scheduler.step(epoch + 1)
 
-        stop_training = cp_manager.save(model, 1 - val_miou)
+        stop_training = cp_manager.save(model, 1 - val_loss)
         if stop_training:
             logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
             break
