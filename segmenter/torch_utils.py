@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from torch import autocast, nn
 
-from segmenter.modules import LossFactory, HybridLoss, VideoLightingAugmentation
+from segmenter.modules import LossFactory, HybridLoss, ImageLightingAugmentation
 
 # Pre-define a mapping of class names to their actual classes
 # This avoids needing a separate factory file
@@ -120,7 +120,8 @@ class RunManager:
         Trains one epoch using the data provided in self.train_loader
         :return: total loss and dice score
         """
-        light_aug = VideoLightingAugmentation().to(self.device)
+        light_aug = ImageLightingAugmentation().to(self.device)
+
         self.model.train()
         total_loss = []
         total_dice_loss = []
@@ -248,9 +249,12 @@ class RunManager2:
         params = self.config['optimizer']['params']
         self.optimizer = optimizer_class(params=self.model.parameters(), **params)
 
+        loss_fn_class = get_module_class(self.config['loss_function']['name'])
+        params = self.config['loss_function']['params']
+        self.loss_fn = loss_fn_class(**params)
+
         """ Here """
 
-        self.criterion = criterion
         self.scaler = scaler
         self.scheduler = scheduler
 
@@ -300,7 +304,7 @@ class RunManager2:
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
 
-                loss = self.criterion(logits, masks) # Mask: [B, H, W]
+                loss = self.loss_fn(logits, masks) # Mask: [B, H, W]
                 total_loss += [loss.item()]
                 total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
                 total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
@@ -344,7 +348,7 @@ class RunManager2:
 
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     logits = self.model(pixel_values=images)
-                    loss = self.criterion(logits, masks)
+                    loss = self.loss_fn(logits, masks)
 
                     total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
                     total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]

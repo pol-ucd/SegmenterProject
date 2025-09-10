@@ -120,7 +120,6 @@ class PairedSpatialAug(nn.Module):
         video: Tensor (B, 3, T, H, W)
         mask:  Tensor (B, 1, T, H, W)
         """
-        print("PairedSpatialAug: ", video.shape, mask.shape)
         # 1. Concatenate image + mask channels
         combined = torch.cat([video, mask], dim=1)  # (B, 4, T, H, W)
 
@@ -134,7 +133,7 @@ class PairedSpatialAug(nn.Module):
         return vid_aug, mask_aug
 
 
-class VideoLightingAugmentation(nn.Module):
+class ImageLightingAugmentation(nn.Module):
     def __init__(
         self,
         brightness: tuple = (0.7, 1.3),
@@ -157,16 +156,17 @@ class VideoLightingAugmentation(nn.Module):
         """
         super().__init__()
         # VideoSequential applies the same random parameters to all frames in a clip
-        self.augment = K.VideoSequential(
+        self.augment = K.ImageSequential(
             K.ColorJitter(brightness=brightness,
                           contrast=contrast,
                           saturation=saturation,
-                          hue=hue,             p=p_jitter),
-            K.RandomGamma(gamma=gamma,                    p=p_gamma),
+                          hue=hue,
+                          p=p_jitter),
+            K.RandomGamma(gamma=gamma,
+                          p=p_gamma),
             K.RandomChannelShuffle(p=p_shuffle),
-            K.RandomErasing(scale=erase_scale,            p=p_erase),
-            data_format="BCTHW",  # Expect input shape (B, C, T, H, W)
-            same_on_frame=True    # same params across time dimension
+            K.RandomErasing(scale=erase_scale,
+                            p=p_erase)
         )
 
     def forward(self, video: torch.Tensor) -> torch.Tensor:
