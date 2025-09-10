@@ -120,7 +120,7 @@ class RunManager:
         Trains one epoch using the data provided in self.train_loader
         :return: total loss and dice score
         """
-
+        light_aug = VideoLightingAugmentation().to(self.device)
         self.model.train()
         total_loss = []
         total_dice_loss = []
@@ -135,6 +135,7 @@ class RunManager:
             if masks.device != self.device:
                 masks = masks.to(self.device)
 
+            images = light_aug(images)
 
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
@@ -286,8 +287,6 @@ class RunManager2:
         total_dice_loss = []
         total_iou_loss = []
         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
-
-        light_aug = VideoLightingAugmentation().to(self.device)
 
         for images, masks in self.train_loader:
 

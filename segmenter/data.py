@@ -566,7 +566,9 @@ class HDF5ImageDataset(Dataset):
     dynamic training/test splits. It handles augmentations for the training set.
     """
 
-    def __init__(self, hdf5_path, indices, is_train_split, image_size=(512, 512), n_augment=0):
+    def __init__(self, hdf5_path, indices, is_train_split,
+                 image_size=(512, 512), n_augment=0,
+                 light_control: nn.Module = None):
         """
         Initializes the dataset.
 
@@ -583,6 +585,7 @@ class HDF5ImageDataset(Dataset):
         self.is_train_split = is_train_split
         self.image_size = image_size
         self.n_augment = n_augment
+        self.light_control = light_control
 
         # Initialize h5py file and dataset references to None
         self.hdf5_file = None
@@ -609,6 +612,8 @@ class HDF5ImageDataset(Dataset):
 
     def _apply_augmentations(self, image_pil, mask_tensor):
         """Applies a single set of random augmentations to an image and mask pair."""
+        if self.is_train_split and self.light_control is not None:
+            image_pil = self.light_control(image_pil)
 
         # Random Horizontal Flip
         if torch.rand(1) < 0.5:

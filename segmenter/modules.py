@@ -96,6 +96,44 @@ def make_soft_boundary(prob: torch.Tensor, tau: float = 1.0) -> torch.Tensor:
     return e / (e.amax(dim=(-1, -2), keepdim=True) + EPSILON)
 
 
+class PairedSpatialAug(nn.Module):
+    def __init__(self,
+                 degrees: float = 10.0,
+                 translate: tuple = (0.1, 0.1),
+                 scale: tuple = (0.9, 1.1),
+                 p: float = 0.5):
+        super().__init__()
+        # random affine will be applied consistently across frames
+        self.affine = K.VideoSequential(
+            K.RandomAffine(
+                degrees=degrees,
+                translate=translate,
+                scale=scale,
+                p=p
+            ),
+            data_format="BCTHW",
+            same_on_frame=True
+        )
+
+    def forward(self, video: torch.Tensor, mask: torch.Tensor):
+        """
+        video: Tensor (B, 3, T, H, W)
+        mask:  Tensor (B, 1, T, H, W)
+        """
+        print("PairedSpatialAug: ", video.shape, mask.shape)
+        # 1. Concatenate image + mask channels
+        combined = torch.cat([video, mask], dim=1)  # (B, 4, T, H, W)
+
+        # 2. Apply spatial augmentation
+        augmented = self.affine(combined)           # still (B, 4, T, H, W)
+
+        # 3. Split them back
+        vid_aug  = augmented[:, :3]
+        mask_aug = augmented[:, 3:].round()         # round if mask is binary
+
+        return vid_aug, mask_aug
+
+
 class VideoLightingAugmentation(nn.Module):
     def __init__(
         self,
