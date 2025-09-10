@@ -4,6 +4,7 @@ import platform
 import h5py
 import numpy as np
 import torch
+import torch.nn as nn
 from PIL import Image
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader
 from torchvision import transforms
