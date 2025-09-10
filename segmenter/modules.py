@@ -31,16 +31,11 @@ try:
 except ImportError:
     is_geo_installed = False
 
-try:
-    import kornia
-except ImportError:
-    if not is_geo_installed:
-        msg = f"Install kornia or FastGeodis packages required for GPU distance transform."
-        raise ImportError(msg)
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import kornia
+import kornia.augmentation as K
 
 # ---------------------------
 # Global Constants
@@ -99,6 +94,63 @@ def make_soft_boundary(prob: torch.Tensor, tau: float = 1.0) -> torch.Tensor:
     e = sobel_grad(prob)
     # Normalize per-map to [0,1] for stable weighting
     return e / (e.amax(dim=(-1, -2), keepdim=True) + EPSILON)
+
+
+class VideoLightingAugmentation(nn.Module):
+    def __init__(
+        self,
+        brightness: tuple = (0.7, 1.3),
+        contrast:   tuple = (0.7, 1.3),
+        saturation: tuple = (0.7, 1.3),
+        hue:        tuple = (-0.1, 0.1),
+        gamma:      tuple = (0.8, 1.2),
+        erase_scale:tuple = (0.02, 0.08),
+        p_jitter:   float = 0.5,
+        p_gamma:    float = 0.5,
+        p_shuffle:  float = 0.2,
+        p_erase:    float = 0.3
+    ):
+        """
+        Args:
+            brightness, contrast, saturation, hue: ranges for ColorJitter.
+            gamma: range for RandomGamma.
+            erase_scale: min/max area ratio for RandomErasing.
+            p_*: probability of applying each transform.
+        """
+        super().__init__()
+        # VideoSequential applies the same random parameters to all frames in a clip
+        self.augment = K.VideoSequential(
+            K.ColorJitter(brightness=brightness,
+                          contrast=contrast,
+                          saturation=saturation,
+                          hue=hue,             p=p_jitter),
+            K.RandomGamma(gamma=gamma,                    p=p_gamma),
+            K.RandomChannelShuffle(p=p_shuffle),
+            K.RandomErasing(scale=erase_scale,            p=p_erase),
+            data_format="BCTHW",  # Expect input shape (B, C, T, H, W)
+            same_on_frame=True    # same params across time dimension
+        )
+
+    def forward(self, video: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            video: Tensor of shape (B, C, T, H, W), values in [0,1] or [0,255].
+        Returns:
+            Augmented video tensor, same shape as input.
+        """
+        # If your video is in [0,255], convert to float in [0,1] first:
+        orig_dtype = video.dtype
+        if video.dtype != torch.float32:
+            video = video.float() / 255.0
+
+        # Apply lighting augmentations
+        augmented = self.augment(video)
+
+        # Convert back to original dtype/range
+        if orig_dtype != torch.float32:
+            augmented = (augmented * 255.0).to(orig_dtype)
+        return augmented
+
 
 
 # ---------------------------

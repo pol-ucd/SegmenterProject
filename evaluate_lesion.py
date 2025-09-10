@@ -2,7 +2,9 @@ import glob
 import logging
 import os
 import sys
+from enum import Enum
 
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -14,16 +16,29 @@ from tqdm import tqdm
 
 from segmenter.models import AugurSegformerSegmentation
 
+
+class Colours(Enum):
+    """
+    Colours for contours, use BGR format for OpenCV
+    """
+    green = (0, 255, 0)
+    blue = (255, 0, 0)
+    yellow = (255, 255, 0)
+    red = (0, 0, 255)
+
+
 IMAGE_PATH = "../polyp_data/Classica/images/val"
 MASK_PATH = "../polyp_data/Classica/masks/val"
 IMAGE_PATTERN = "*.png"
 MASK_PATTERN = "*.png"
 PRED_PATH = "../polyp_data/Classica/predictions/val"
 PRED_TYPE = ".png"
+OVERLAY_PATH = "../polyp_data/Classica/overlays/val"
+OVERLAY_TYPE = ".png"
 
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"  # Huggingface backbone model
 num_classes = 2     # Not_lesion = 0, Lesion = 1
-model_checkpoint = "../segmenter/checkpoint/model_lesion_segmentation_20250909_204001.pt"
+model_checkpoint = "../segmenter/checkpoint/model_lesion_segmentation_20250910_073251.pt"
 
 image_size=(512, 512)           # The backbone Huggingface model expects images of this size
 mean = (0.485, 0.456, 0.406)    # Use standard image_net values for normalising
@@ -39,6 +54,42 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+
+def detect_and_draw_contours(original_pil: Image.Image,
+                             mask_pil: Image.Image,
+                             contour_color=Colours.green.value,
+                             thickness=2) -> Image.Image:
+    """
+    Detects contours from a binary mask and overlays them on the original image using PIL.
+
+    Parameters:
+        original_pil (PIL.Image): The original RGB image.
+        mask_pil (PIL.Image): The binary mask image (mode 'L').
+        contour_color (tuple): BGR color for the contour (default green).
+        thickness (int): Thickness of the contour lines.
+
+    Returns:
+        PIL.Image: Image with contours drawn.
+    """
+    # Convert PIL images to NumPy arrays
+    original_np = np.array(original_pil)
+    mask_np = np.array(mask_pil)
+
+    # Ensure mask is binary
+    _, binary_mask = cv2.threshold(mask_np, 127, 255, cv2.THRESH_BINARY)
+
+    # Find contours using OpenCV
+    contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Draw contours on a copy of the original image
+    contour_overlay = original_np.copy()
+    cv2.drawContours(contour_overlay, contours, -1, contour_color, thickness)
+
+    # Convert back to PIL
+    result_pil = Image.fromarray(contour_overlay)
+
+    return result_pil
 
 
 def main():
@@ -98,6 +149,21 @@ def main():
         # denoised_pred_mask = Image.fromarray(pred_mask_array*255).filter(ImageFilter.ModeFilter(size = 3))
         denoised_pred_mask = Image.fromarray(pred_mask_array * 255)
         denoised_pred_mask.save(out_name)
+
+        # Overlay original mask (green) and predicted mask (yellow)
+        overlay_pil = detect_and_draw_contours(image_pil,
+                                               mask_pil,
+                                               contour_color=Colours.green.value,
+                                               thickness=3)
+
+        overlay_pil = detect_and_draw_contours(overlay_pil,
+                                               denoised_pred_mask,
+                                               contour_color=Colours.yellow.value,
+                                               thickness=3)
+
+        # Save or show result
+        out_name = os.path.join(OVERLAY_PATH, pred_file_name)
+        overlay_pil.save(out_name)
 
         """ Now perform all the metrics and save results """
         logger.info(f"Processing: {pred_file_name}")

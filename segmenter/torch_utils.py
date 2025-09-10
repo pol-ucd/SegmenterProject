@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from torch import autocast, nn
 
-from segmenter.modules import LossFactory, HybridLoss
+from segmenter.modules import LossFactory, HybridLoss, VideoLightingAugmentation
 
 # Pre-define a mapping of class names to their actual classes
 # This avoids needing a separate factory file
@@ -287,6 +287,8 @@ class RunManager2:
         total_iou_loss = []
         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
 
+        light_aug = VideoLightingAugmentation().to(self.device)
+
         for images, masks in self.train_loader:
 
             if images.device != self.device:
@@ -294,7 +296,7 @@ class RunManager2:
 
             if masks.device != self.device:
                 masks = masks.to(self.device)
-
+            images = light_aug(images)
 
             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                 logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
