@@ -4,7 +4,6 @@ import platform
 import h5py
 import numpy as np
 import torch
-import torch.nn as nn
 from PIL import Image
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader
 from torchvision import transforms
@@ -569,7 +568,7 @@ class HDF5ImageDataset(Dataset):
 
     def __init__(self, hdf5_path, indices, is_train_split,
                  image_size=(512, 512), n_augment=0,
-                 light_control: nn.Module = None):
+                 light_control: torch.nn.Module = None):
         """
         Initializes the dataset.
 
