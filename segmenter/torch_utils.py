@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 import torch
 from torch import autocast, nn
+from torch.amp import GradScaler
 
 from segmenter.modules import LossFactory, HybridLoss, ImageLightingAugmentation
 
@@ -234,15 +235,27 @@ class RunManager2:
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.config = self._load_config(config_path)
         self.n_gpus = self.config['max_gpu']
-        if  self.n_gpus > torch.cuda.device_count():
+        if self.n_gpus > torch.cuda.device_count():
             self.n_gpus = torch.cuda.device_count()
+            self.logger.warning(f"The number of GPUs requested: {self.config['max_gpu']} exceeds the number of "
+                                f"available GPUs: {self.n_gpus}. Using {self.n_gpus} available GPUs.")
+
+        """
+        Only use GradScaler if we have CUDA
+        """
+        do_grad_scaling = self.config['do_grad_scaling']
+        self.scaler = None
+        if torch.cuda.is_available() and do_grad_scaling:
+            self.scaler = GradScaler()
+            self.logger.info("Using GradScaler for gradient scaling")
 
         model_class = get_module_class(self.config['model']['name'])
         self.model = model_class(self.config['model']['params'])
+        self.logger.info(f"Using model {self.config['model']['name']}")
 
         if self.n_gpus > 1:
-            self.logger.info(f"Using {torch.cuda.device_count()} GPUs")
             self.model = torch.nn.DataParallel(self.model)
+            self.logger.info(f"Using torch.nn.DataParallel on {self.n_gpus} GPUs")
         self.model.to(self.device)
 
         optimizer_class = get_module_class(self.config['optimizer']['name'])
@@ -255,7 +268,6 @@ class RunManager2:
 
         """ Here """
 
-        self.scaler = scaler
         self.scheduler = scheduler
 
         self.train_loader = train_loader

@@ -51,7 +51,8 @@
             512,
             512
         ],
-        "n_epochs": 100
+        "n_epochs": 100,
+        "do_grad_scaling": true
     },
     "optimizer": {
             "name": "torch.optim.AdamW",
@@ -63,7 +64,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "lighting_model_lesion_segmentation",
+        "prefix": "lighting_v2_model_lesion_segmentation",
         "patience": 20,
         "min_delta": 0.00001
     },

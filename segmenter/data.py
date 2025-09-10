@@ -5,6 +5,7 @@ import h5py
 import numpy as np
 import torch
 from PIL import Image
+from torch.nn.functional import conv2d
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.transforms import functional as F
@@ -542,6 +543,59 @@ from torchvision.transforms import functional as F
 #         except Exception as e:
 #             raise CheckpointError(f"An error occurred while saving the Checkpoint: {e}")
 
+def get_gaussian_kernel2d(kernel_size: int, sigma: float, device):
+    """Generate a 2D Gaussian kernel."""
+    # Create 1D Gaussian
+    coords = torch.arange(kernel_size, dtype=torch.float32, device=device) - (kernel_size - 1) / 2
+    g = torch.exp(- (coords**2) / (2 * sigma * sigma))
+    g = g / g.sum()
+    # Outer product to get 2D kernel
+    kernel2d = g[:, None] @ g[None, :]
+    return kernel2d
+
+def shading_correction_pure_torch(
+    img: torch.Tensor,
+    sigma: float = 50.0,
+    eps: float = 1e-6) -> torch.Tensor:
+    """
+    Flat-field shading correction using pure PyTorch conv2d.
+
+    Args:
+        img: Tensor (C, H, W) or (B, C, H, W), float32 in [0, 255].
+        sigma: blur σ in pixels.
+        eps: small offset.
+
+    Returns:
+        Corrected tensor, same shape/dtype as input.
+    """
+    # 1. Ensure 4D batch
+    batched = img.unsqueeze(0) if img.ndim == 3 else img
+    B, C, H, W = batched.shape
+
+    # 2. Create Gaussian kernel
+    k = int(6 * sigma + 1)
+    if k % 2 == 0:
+        k += 1
+    kernel2d = get_gaussian_kernel2d(k, sigma, device=batched.device)
+    # reshape for depthwise conv: (C, 1, k, k)
+    kernel4d = kernel2d.expand(C, 1, k, k)
+
+    # 3. Add eps
+    float_img = batched + eps
+
+    # 4. Estimate illumination via depthwise convolution
+    illum = conv2d(float_img, weight=kernel4d, groups=C, padding=k//2)
+
+    # 5. Mean over spatial dims
+    mean_illum = illum.mean(dim=(-2, -1), keepdim=True)
+
+    # 6. Correct shading
+    corrected = float_img / illum * mean_illum
+
+    # 7. Clamp and restore dims
+    corrected = torch.clamp(corrected, 0.0, 255.0)
+    return corrected.squeeze(0) if img.dim() == 3 else corrected
+
 
 def get_num_samples_from_hdf5(hdf5_path):
     """
@@ -586,6 +640,7 @@ class HDF5ImageDataset(Dataset):
         self.image_size = image_size
         self.n_augment = n_augment
         self.light_control = light_control
+        self.sigma = 30.0
 
         # Initialize h5py file and dataset references to None
         self.hdf5_file = None
@@ -679,6 +734,7 @@ class HDF5ImageDataset(Dataset):
 
         # Convert image to Tensor (C, H, W) and normalize
         image_tensor = F.to_tensor(image_pil)
+        image_tensor = shading_correction_pure_torch(image_tensor, sigma=self.sigma)
 
         # Final conversion of mask to Long Tensor for loss functions
         mask_tensor = mask_tensor.to(torch.long)
