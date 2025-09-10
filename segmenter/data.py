@@ -667,8 +667,8 @@ class HDF5ImageDataset(Dataset):
 
     def _apply_augmentations(self, image_pil, mask_tensor):
         """Applies a single set of random augmentations to an image and mask pair."""
-        if self.is_train_split and self.light_control is not None:
-            image_pil = self.light_control(image_pil)
+        # if self.is_train_split and self.light_control is not None:
+        #     image_pil = self.light_control(image_pil)
 
         # Random Horizontal Flip
         if torch.rand(1) < 0.5:
