@@ -142,8 +142,8 @@ def main():
     """
     Setup the model 
     """
-    # model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
-    model = AugurSegformerSegmentation(pretrained_model=None,
+    model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
+    # model = AugurSegformerSegmentation(pretrained_model=None,
                                        num_classes=num_classes)
 
     latest_checkpoint = None
