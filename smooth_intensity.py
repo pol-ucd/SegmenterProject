@@ -19,16 +19,47 @@ How It Works
 
 Adjust the σ parameters and blending weights to match your surgical camera’s characteristics.
 """
+import numbers
 import os
 
 import cv2
 import numpy as np
+from PIL import ImageFilter, Image
+
+
+class GaussianSmoothing(object):
+    def __init__(self, radius):
+        if isinstance(radius, numbers.Number):
+            self.min_radius = radius
+            self.max_radius = radius
+        elif isinstance(radius, list):
+            if len(radius) != 2:
+                raise Exception(
+                    "`radius` should be a number or a list of two numbers")
+            if radius[1] < radius[0]:
+                raise Exception(
+                    "radius[0] should be <= radius[1]")
+            self.min_radius = radius[0]
+            self.max_radius = radius[1]
+        else:
+            raise Exception(
+                "`radius` should be a number or a list of two numbers")
+
+    def __call__(self, image):
+        radius = np.random.uniform(self.min_radius, self.max_radius)
+        return image.filter(ImageFilter.GaussianBlur(radius))
 
 
 def shading_correction(img, sigma=50, eps=1e-6):
     """Flat-field shading correction."""
+    # float_img = img.astype(np.float32) + eps
+    # illum = cv2.GaussianBlur(float_img, (0, 0), sigma)
+    illum = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    blurred = GaussianSmoothing(radius=sigma)(Image.fromarray(illum))
+
+    illum = cv2.cvtColor(np.array(blurred), cv2.COLOR_RGB2BGR).astype(np.float32) + eps
+
     float_img = img.astype(np.float32) + eps
-    illum = cv2.GaussianBlur(float_img, (0, 0), sigma)
     corrected = (float_img/ illum) * np.mean(illum)
     return np.clip(corrected, 0, 255).astype(np.uint8)
 
@@ -92,7 +123,7 @@ def preprocess_pipeline(img_path, out_path=None):
     # 1. Load BGR image
     img = cv2.imread(img_path)
     # 2. Flat-field correction
-    flat = shading_correction(img, sigma=60)
+    flat = shading_correction(img, sigma=50)
     final = flat.copy()
 
     # # 3. Homomorphic filter - convert 3D -> 2D gray image first for DFT
@@ -116,8 +147,8 @@ def preprocess_pipeline(img_path, out_path=None):
 if __name__ == "__main__":
     image_dir = "/Users/polmacaonghusa/Documents/Projects/polyp_data/Classica/images/val"
     out_dir = "/Users/polmacaonghusa/Documents/Projects/polyp_data/Classica/images/compensated"
-    input_path = os.path.join(image_dir, "170104.png")
-    output_path = os.path.join(out_dir, "170104_normalized_endoscope.png")
+    input_path = os.path.join(image_dir, "170103.png")
+    output_path = os.path.join(out_dir, "170103_normalized_endoscope.png")
     result = preprocess_pipeline(input_path, output_path)
     # To visualize with OpenCV (BGR→RGB):
     # cv2.imshow("Normalized", result); cv2.waitKey(0)
