@@ -64,7 +64,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "lighting_v0_model_lesion_segmentation",
+        "prefix": "lighting_v1_model_lesion_segmentation",
         "patience": 20,
         "min_delta": 0.00001
     },
