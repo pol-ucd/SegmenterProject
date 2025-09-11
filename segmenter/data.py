@@ -668,7 +668,7 @@ class HDF5ImageDataset(Dataset):
     def _apply_augmentations(self, image_pil, mask_tensor):
         """Applies a single set of random augmentations to an image and mask pair."""
         # if self.is_train_split and self.light_control is not None:
-        #     image_pil = self.light_control(image_pil)
+        image_pil = self.light_control(image_pil)
 
         # Random Horizontal Flip
         if torch.rand(1) < 0.5:
@@ -734,7 +734,7 @@ class HDF5ImageDataset(Dataset):
 
         # Convert image to Tensor (C, H, W) and normalize
         image_tensor = F.to_tensor(image_pil)
-        image_tensor = shading_correction_pure_torch(image_tensor, sigma=self.sigma)
+        # image_tensor = shading_correction_pure_torch(image_tensor, sigma=self.sigma)
 
         # Final conversion of mask to Long Tensor for loss functions
         mask_tensor = mask_tensor.to(torch.long)
