@@ -99,7 +99,8 @@ def main():
             indices=train_indices,
             is_train_split=True,
             image_size=image_size,
-            n_augment=n_augments
+            n_augment=n_augments,
+            light_control=False,
         ))
 
 
@@ -108,7 +109,8 @@ def main():
             indices=test_indices,
             is_train_split=False,
             image_size=image_size,
-            n_augment=0
+            n_augment=0,
+            light_control=False
         ))
 
         n_records += len_hdf5
@@ -140,7 +142,8 @@ def main():
     """
     Setup the model 
     """
-    model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
+    # model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
+    model = AugurSegformerSegmentation(pretrained_model=None,
                                        num_classes=num_classes)
 
     latest_checkpoint = None

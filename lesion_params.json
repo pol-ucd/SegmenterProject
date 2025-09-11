@@ -46,12 +46,12 @@
         "num_classes": 2,
         "batch_size": 8,
         "num_workers": 16,
-        "n_augments": 1,
+        "n_augments": 2,
         "image_size": [
             512,
             512
         ],
-        "n_epochs": 100,
+        "n_epochs": 200,
         "do_grad_scaling": true
     },
     "optimizer": {

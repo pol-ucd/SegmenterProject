@@ -6,13 +6,11 @@ from datetime import datetime
 from pathlib import Path
 
 import torch
-from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
 from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
-from segmenter.models import AugurSegformerSegmentation
 from segmenter.modules import HybridLoss
-from segmenter.torch_utils import RunManager, CheckpointManager
+from segmenter.torch_utils import CheckpointManager, RunManager2
 
 
 def main():
@@ -33,38 +31,6 @@ def main():
         params_file = "lesion_params.json"
 
 
-    pretrained_model = params['model']['pretrained_model']
-    checkpoint_path = params['checkpoints']['path']
-    checkpoint_prefix = params['checkpoints']['prefix']
-    checkpoint_patience = params['checkpoints']['patience']
-    checkpoint_min_delta = params['checkpoints']['min_delta']
-    if not os.path.isdir(checkpoint_path):
-        logger.info(
-            f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
-        checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
-
-    """ Configure the run """
-    run_params = params['run']
-    test_split = run_params['test_split']
-    num_classes = run_params['num_classes']
-    batch_size = run_params['batch_size']
-    num_workers = run_params['num_workers']
-    n_augments = run_params['n_augments']
-    image_size = tuple(run_params['image_size'])
-    n_epochs = run_params['n_epochs']
-
-    """ Optimiser settings """
-    opt_params = params['optimizer']
-    learning_rate = opt_params['learning_rate']
-    l2_decay_penalty = opt_params['l2_decay_penalty']
-
-    """ Data settings """
-    hdf5_path = params["datasets"]["hdf5_dir"]
-    hdf5_files = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]]
-    logger.info(f"Loaded parameters: {params}")
-
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    logger.info(f"Using {device} device for model training.")
 
 
     """ Load datasets for test and training """
@@ -125,12 +91,6 @@ def main():
                                    prefix=checkpoint_prefix,
                                    patience=checkpoint_patience,
                                    min_delta=checkpoint_min_delta)
-    """
-    Setup the model 
-    """
-    model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
-                                       num_classes=num_classes)
-
     latest_checkpoint = None
     try:
         # Get the list of saved checkpoints
@@ -144,7 +104,6 @@ def main():
     except FileNotFoundError as e:
         logger.info(f"Unable to load checkpoint {e}")
 
-    model.to(device)
     loss_params = params['loss']
     loss_fn = HybridLoss(loss_params['loss_params'])
 
@@ -169,24 +128,8 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
 
 
-    """
-    Only use GradScaler if we have CUDA
-    """
-    scaler = None
-    if torch.cuda.is_available():
-        scaler = GradScaler()
 
-
-
-    trainer = RunManager(model,
-                         optimizer,
-                         criterion=loss_fn,
-                         scaler=scaler,
-                         scheduler=scheduler,
-                         train_loader=train_loader,
-                         eval_loader=test_loader,
-                         save_preds=False,
-                         save_preds_path="",
+    trainer = RunManager2(
                          config_path=params_file
                          )
     train_params = {}
