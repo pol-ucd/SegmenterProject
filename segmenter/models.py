@@ -65,7 +65,10 @@ class AugurSegformerClassifierBase(nn.Module):
         self.pretrained_model = pretrained_model
         self.checkpoint_path = checkpoint_path
         self.num_classes = num_classes or 1
-        self.config = SegformerConfig.from_pretrained(self.pretrained_model)
+        if self.pretrained_model is not None:
+            self.config = SegformerConfig.from_pretrained(self.pretrained_model)
+        else:
+            self.config = SegformerConfig()
         self.base_model = None
         if checkpoint_path:
             self.load_model(checkpoint_path)
@@ -114,11 +117,14 @@ class AugurSegformerSegmentation(AugurSegformerClassifierBase):
         # Load the full SegformerForSemanticSegmentation model.
         # Set `ignore_mismatched_sizes=True` because we will replace the
         # final classification layer, which will have a different output size.
-        self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-            self.pretrained_model,
-            config=self.config,
-            ignore_mismatched_sizes=True
-        )
+        if self.pretrained_model is not None:
+            self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+                self.pretrained_model,
+                config=self.config,
+                ignore_mismatched_sizes=True
+            )
+        else:
+            self.base_model = SegformerForSemanticSegmentation(config=self.config)
 
         # Get the number of channels from the previous layer to properly
         # define the input to our new classifier.
