@@ -38,6 +38,7 @@ OVERLAY_TYPE = ".png"
 
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"  # Huggingface backbone model
 num_classes = 2     # Not_lesion = 0, Lesion = 1
+# model_checkpoint = "../segmenter/checkpoint/tversky_clean_model_lesion_segmentation_20250913_102742.pt"
 model_checkpoint = "../segmenter/checkpoint/lighting_clean_model_lesion_segmentation_20250912_173722.pt"
 
 image_size=(512, 512)           # The backbone Huggingface model expects images of this size
