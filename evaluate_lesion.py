@@ -128,6 +128,7 @@ def main():
                "iou": [],
                "precision": [],
                "recall": []}
+
     for image_file, mask_file in tqdm(zip(image_list, mask_list)):
         image_pil = Image.open(image_file).convert("RGB")
         mask_pil = Image.open(mask_file).convert("L")
