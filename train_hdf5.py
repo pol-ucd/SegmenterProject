@@ -160,8 +160,8 @@ def main():
         logger.info(f"Unable to load checkpoint {e}")
 
     model.to(device)
-    loss_params = params['loss']
-    loss_fn = HybridLoss(loss_params['loss_params'])
+    loss_params = params['loss_function']
+    loss_fn = HybridLoss(loss_params['params'])
 
     # Initial freeze all parameters of the model
     # logger.info("Freezing encoder layers...")
