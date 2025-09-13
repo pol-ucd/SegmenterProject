@@ -44,7 +44,7 @@ def main():
     except json.JSONDecodeError as e:
         logger.error(f"Error decoding JSON from {params_file}: {e}")
         return
-    print(params_file)
+
 
     pretrained_model = params['pretrained_model']
     checkpoint_path = params['checkpoints']['path']
@@ -79,7 +79,6 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using {device} device for model training.")
 
-    sys.exit()
     """ Load datasets for test and training """
     # Now we correctly split the indices and create new datasets
     train_datasets = []

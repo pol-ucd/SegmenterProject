@@ -70,38 +70,6 @@
         "patience": 20,
         "min_delta": 0.00001
     },
-    "loss": {
-        "function": "HybridLoss",
-        "loss_params": {
-            "ce": {
-                "weight": 0.1
-            },
-            "dice": {
-                "weight": 0.0
-            },
-            "focal": {
-                "weight": 0.0,
-                "alpha": 0.25,
-                "gamma": 2.0
-            },
-            "tversky": {
-                "weight": 1.0,
-                "alpha": 0.7,
-                "beta": 0.3
-            },
-            "iou": {
-                "weight": 0.0
-            },
-            "boundary_sdf": {
-                "weight": 0.1,
-                "dt_backend": "kornia"
-            },
-            "soft_chamfer": {
-                "weight": 0.1,
-                "dt_backend": "kornia"
-            }
-        }
-    },
     "scheduler": {
         "name": "CosineAnnealingLR",
         "T_max": 50
