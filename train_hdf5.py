@@ -54,7 +54,7 @@ def main():
         logger.info(
             f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
-    sys.exit()
+
     """ Configure the run """
     run_params = params['run']
     test_split = run_params['test_split']
@@ -78,7 +78,7 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using {device} device for model training.")
 
-
+    sys.exit()
     """ Load datasets for test and training """
     # Now we correctly split the indices and create new datasets
     train_datasets = []
