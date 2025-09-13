@@ -44,6 +44,7 @@ def main():
     except json.JSONDecodeError as e:
         logger.error(f"Error decoding JSON from {params_file}: {e}")
         return
+    print(params_file)
 
     pretrained_model = params['pretrained_model']
     checkpoint_path = params['checkpoints']['path']
