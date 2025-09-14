@@ -39,7 +39,10 @@ OVERLAY_TYPE = ".png"
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"  # Huggingface backbone model
 num_classes = 2     # Not_lesion = 0, Lesion = 1
 # model_checkpoint = "../segmenter/checkpoint/tversky_clean_model_lesion_segmentation_20250913_102742.pt"
-model_checkpoint = "../segmenter/checkpoint/lighting_clean_model_lesion_segmentation_20250912_173722.pt"
+# model_checkpoint = "../segmenter/checkpoint/lighting_clean_model_lesion_segmentation_20250912_173722.pt"
+# model_checkpoint = "../segmenter/checkpoint/tversky_boundary_model_lesion_segmentation_20250914_072154.pt"
+model_checkpoint = "../segmenter/checkpoint/tversky_only_model_lesion_segmentation_20250914_071831.pt"
+
 
 image_size=(512, 512)           # The backbone Huggingface model expects images of this size
 mean = (0.485, 0.456, 0.406)    # Use standard image_net values for normalising
@@ -128,8 +131,10 @@ def main():
                "iou": [],
                "precision": [],
                "recall": []}
-
+    loop_count = 0
     for image_file, mask_file in tqdm(zip(image_list, mask_list)):
+        if loop_count > 999:
+            break
         image_pil = Image.open(image_file).convert("RGB")
         mask_pil = Image.open(mask_file).convert("L")
         mask_size = mask_pil.size
@@ -178,6 +183,7 @@ def main():
         metrics['iou'].append(jaccard_score(expected, predicted, average='macro'))
         metrics['precision'].append(precision_score(expected, predicted, average='macro'))
         metrics['recall'].append(recall_score(expected, predicted, average='macro'))
+        loop_count += 1
 
     pd.DataFrame(metrics).to_csv("evaluation_metrics.csv")
 
