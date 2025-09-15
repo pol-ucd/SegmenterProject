@@ -20,12 +20,12 @@
                 "weight": 0.0
             },
             "focal": {
-                "weight": 0.0,
+                "weight": 1.0,
                 "alpha": 0.25,
                 "gamma": 2.0
             },
             "tversky": {
-                "weight": 1.0,
+                "weight": 0.0,
                 "alpha": 0.7,
                 "beta": 0.3
             },
@@ -66,7 +66,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "10_classica_tversky_only_lesion_segmentation",
+        "prefix": "10_classica_focal_only_lesion_segmentation",
         "patience": 20,
         "min_delta": 0.00001
     },
