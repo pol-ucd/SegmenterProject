@@ -25,7 +25,7 @@
                 "gamma": 2.0
             },
             "tversky": {
-                "weight": 0.0,
+                "weight": 1.0,
                 "alpha": 0.7,
                 "beta": 0.3
             },
