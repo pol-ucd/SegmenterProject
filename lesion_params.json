@@ -44,7 +44,7 @@
     },
     "run": {
         "max_gpu": 2,
-        "test_split": 0.2,
+        "test_split": 0.3,
         "num_classes": 2,
         "batch_size": 8,
         "num_workers": 16,
@@ -66,7 +66,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "20_classica_tversky_only_lesion_segmentation",
+        "prefix": "30_classica_tversky_only_lesion_segmentation",
         "patience": 20,
         "min_delta": 0.00001
     },
