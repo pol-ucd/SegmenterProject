@@ -148,8 +148,8 @@ def main():
             classica_test_indices = shuffled_indices[int(len(classica_names) * test_split):]
             classica_names_np = np.array(classica_names)
             classica_test_names = classica_names_np[classica_test_indices]
-            classica_train_names = classica_names_np[classica_train_indices]
-            train_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_train_names]
+            # classica_train_names = classica_names_np[classica_train_indices]
+            train_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_test_names]
             test_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_test_names]
             train_indices = torch.LongTensor(train_indices)
             test_indices = torch.LongTensor(test_indices)
