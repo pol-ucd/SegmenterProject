@@ -66,7 +66,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "focal_with_boundary_lesion_segmentation",
+        "prefix": "0_classica_focal_with_boundary_lesion_segmentation",
         "patience": 20,
         "min_delta": 0.00001
     },
