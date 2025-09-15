@@ -40,8 +40,8 @@ mask_pattern = "*.png"
 Setup models for inference
 """
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"
-model_prefixes = ["focal_only", "focal_with_boundary",
-                  "tversky_only", "tversky_with_boundary"]
+model_prefixes = ["10_classica_focal_only",
+                  "10_classica_tversky_only"]
 
 """
 Parameters for image preprocessing as model input 
@@ -146,7 +146,7 @@ def main():
         pred_type = ".png"
         overlay_path = f"../polyp_data/Classica/overlays/val_{pred_prefix}"
         overlay_type = ".png"
-        model_checkpoint = f"../segmenter/checkpoint/{pred_prefix}_model_lesion_segmentation.pt"
+        model_checkpoint = f"../segmenter/checkpoint/{pred_prefix}_lesion_segmentation.pt"
         check_path_and_clear(pred_path, pred_type)
         check_path_and_clear(overlay_path, overlay_type)
 

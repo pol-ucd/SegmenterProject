@@ -20,12 +20,12 @@
                 "weight": 0.0
             },
             "focal": {
-                "weight": 1.0,
+                "weight": 0.0,
                 "alpha": 0.25,
                 "gamma": 2.0
             },
             "tversky": {
-                "weight": 0.0,
+                "weight": 1.0,
                 "alpha": 0.7,
                 "beta": 0.3
             },
@@ -44,7 +44,7 @@
     },
     "run": {
         "max_gpu": 2,
-        "test_split": 0.1,
+        "test_split": 0.2,
         "num_classes": 2,
         "batch_size": 8,
         "num_workers": 16,
