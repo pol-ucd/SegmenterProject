@@ -31,17 +31,37 @@ IMAGE_PATH = "../polyp_data/Classica/images/val"
 MASK_PATH = "../polyp_data/Classica/masks/val"
 IMAGE_PATTERN = "*.png"
 MASK_PATTERN = "*.png"
-PRED_PATH = "../polyp_data/Classica/predictions/val"
-PRED_TYPE = ".png"
-OVERLAY_PATH = "../polyp_data/Classica/overlays/val"
-OVERLAY_TYPE = ".png"
+
+pred_prefix = "focal_only"
+# pred_prefix = "tversky_only"
+# pred_path = "tversky_boundary"
+
+pred_path = f"../polyp_data/Classica/predictions/val_{pred_prefix}"
+pred_type = ".png"
+overlay_path = f"../polyp_data/Classica/overlays/val_{pred_prefix}"
+overlay_type = ".png"
+model_checkpoint = f"../segmenter/checkpoint/{pred_prefix}_model_lesion_segmentation_20250914_072154.pt"
 
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"  # Huggingface backbone model
 num_classes = 2     # Not_lesion = 0, Lesion = 1
-# model_checkpoint = "../segmenter/checkpoint/tversky_clean_model_lesion_segmentation_20250913_102742.pt"
-# model_checkpoint = "../segmenter/checkpoint/lighting_clean_model_lesion_segmentation_20250912_173722.pt"
+
 # model_checkpoint = "../segmenter/checkpoint/tversky_boundary_model_lesion_segmentation_20250914_072154.pt"
-model_checkpoint = "../segmenter/checkpoint/tversky_only_model_lesion_segmentation_20250914_071831.pt"
+# PRED_PATH = "../polyp_data/Classica/predictions/val_tversky_with_boundary"
+# PRED_TYPE = ".png"
+# OVERLAY_PATH = "../polyp_data/Classica/overlays/val_tversky_with_boundary"
+# OVERLAY_TYPE = ".png"
+
+# model_checkpoint = "../segmenter/checkpoint/tversky_only_model_lesion_segmentation_20250914_071831.pt"
+# PRED_PATH = "../polyp_data/Classica/predictions/val_tversky_only"
+# PRED_TYPE = ".png"
+# OVERLAY_PATH = "../polyp_data/Classica/overlays/val_tversky_only"
+# OVERLAY_TYPE = ".png"
+
+# model_checkpoint = "../segmenter/checkpoint/focal_only_lesion_segmentation_20250914_183704.pt"
+# PRED_PATH = "../polyp_data/Classica/predictions/val_focal_only"
+# PRED_TYPE = ".png"
+# OVERLAY_PATH = "../polyp_data/Classica/overlays/val_focal_only"
+# OVERLAY_TYPE = ".png"
 
 
 image_size=(512, 512)           # The backbone Huggingface model expects images of this size
@@ -58,6 +78,13 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+def check_path_and_clear(path: str, pattern: str):
+    if os.path.exists(path):
+        for f in glob.glob(pattern):
+            os.remove(f)
+    else:
+        os.makedirs(path)
 
 
 def detect_and_draw_contours(original_pil: Image.Image,
@@ -98,6 +125,9 @@ def detect_and_draw_contours(original_pil: Image.Image,
 
 def main():
     logger = logging.getLogger(__name__)
+
+    check_path_and_clear(pred_path, pred_type)
+    check_path_and_clear(overlay_path, overlay_type)
 
     image_list, mask_list = load_data(logger)
 
@@ -151,7 +181,7 @@ def main():
         pred_mask_array = resize_fn(pred_mask).squeeze(0).cpu().numpy().astype(np.uint8)
 
         pred_file_name = os.path.splitext(os.path.basename(image_file))[0] + ".png"
-        out_name = os.path.join(PRED_PATH, pred_file_name)
+        out_name = os.path.join(pred_path, pred_file_name)
 
         # denoised_pred_mask = Image.fromarray(pred_mask_array*255).filter(ImageFilter.ModeFilter(size = 3))
         denoised_pred_mask = Image.fromarray(pred_mask_array * 255)
@@ -169,7 +199,7 @@ def main():
                                                thickness=3)
 
         # Save or show result
-        out_name = os.path.join(OVERLAY_PATH, pred_file_name)
+        out_name = os.path.join(overlay_path, pred_file_name)
         overlay_pil.save(out_name)
 
         """ Now perform all the metrics and save results """
