@@ -140,8 +140,17 @@ def main():
         with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
             original_name_hdf = hdf['original_name']
             original_name_np = np.array([h.decode('utf-8') for h in original_name_hdf])
-            train_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_names]
-            test_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_names]
+
+            rng = np.random.default_rng(42)
+            shuffled_indices = rng.permutation(len(classica_names))
+            """ Only add test_split % to the training set """
+            classica_train_indices = shuffled_indices[:int(len(classica_names) * test_split)]
+            classica_test_indices = shuffled_indices[int(len(classica_names) * test_split):]
+            classica_names_np = np.array(classica_names)
+            classica_test_names = classica_names_np[classica_test_indices]
+            classica_train_names = classica_names_np[classica_train_indices]
+            train_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_train_names]
+            test_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_test_names]
             train_indices = torch.LongTensor(train_indices)
             test_indices = torch.LongTensor(test_indices)
 
