@@ -26,8 +26,8 @@
             },
             "tversky": {
                 "weight": 1.0,
-                "alpha": 0.7,
-                "beta": 0.3
+                "alpha": 0.8,
+                "beta": 0.2
             },
             "iou": {
                 "weight": 0.0

@@ -18,6 +18,49 @@ from tqdm import tqdm
 from segmenter.data import get_num_samples_from_hdf5
 from segmenter.models import AugurSegformerSegmentation
 
+classica_names = ['01.png', '02.png', '05.png', '05182023_171203.png', '1013468013.png',
+                  '1014670912-ass2.png', '1014670912.png', '10262023_142726.png', '1028851774.png',
+                  '10302023_120402.png', '10302023_120901.png', '1040434567.png', '1061442455.png',
+                  '1065516909.png', '107949968.png', '1084008061.png', '1105807382.png', '1120606001.png',
+                  '1180608049.png', '12192023_193441.png', '1249860204.png', '1251528661.png',
+                  '1321881235.png', '1370388080.png', '13845452.png', '1387851265.png', '1399586236-ass2.png',
+                  '1399586236.png', '1474607936.png', '1508973689.png', '1521359056.png', '1567384095.png',
+                  '16062023_1.png', '16090101.png', '16090102.png', '16090201.png', '16090301.png',
+                  '16090401.png', '16090403.png', '16090501.png', '16090601.png', '16090602.png',
+                  '16090701.png', '16090901.png', '16091001.png', '16091101.png', '16091201.png', '16091301.png',
+                  '16091401.png', '16091402.png', '16091601.png', '16091801.png', '16091802.png', '16091901.png',
+                  '16092001.png', '16092101.png', '16092102.png', '16092201.png', '16092301.png', '16092401.png',
+                  '16092501.png', '16092601.png', '16092701.png', '16092801.png', '16093001.png', '16093101.png',
+                  '16093201.png', '16093301.png', '16093401.png', '16093501.png', '16093601.png', '16093701.png',
+                  '16093801.png', '1628446929.png', '170101.png', '170102.png', '170103.png', '170104.png',
+                  '170108.png', '170109.png', '170110.png', '171245830.png', '1783345236.png', '1792998993.png',
+                  '18078369.png', '1810823168.png', '1900025002.png', '1902791310.png', '2136784449.png',
+                  '2189953076.png', '2250960458.png', '225602854.png', '2275449896.png', '228865380.png',
+                  '2317004287.png', '2364792262.png', '2394014758.png', '2395724121.png', '2421910406.png',
+                  '2441596969.png', '2443311490.png', '2472636703.png', '2473690117.png', '2486397623.png',
+                  '2495375922.png', '252971098.png', '2529883711.png', '2535259739.png', '2567912066.png',
+                  '2613069662.png', '2624989663.png', '2738202439.png', '2742950888.png', '280111445.png',
+                  '2819213769.png', '2857256799.png', '2872439574.png', '2901309315.png', '2986309540.png',
+                  '3014914240.png', '307631163.png', '3085924945.png', '3089001819.png', '3267962182.png',
+                  '3272896089.png', '328309737.png', '3299431987.png', '3317328509.png', '3323937101.png',
+                  '3360888566.png', '3366591515.png', '3367664281.png', '3372990809.png', '3430084361.png',
+                  '3431381547.png', '3479712599-ass2.png', '3479712599.png', '3521412980.png', '35485434.png',
+                  '3597727100.png', '3605407893.png', '3630237943.png', '3639539128.png', '3704101606.png',
+                  '3727603818.png', '3734795729.png', '3744440603.png', '3748519529.png', '3755357963.png',
+                  '3788048503.png', '3801559388.png', '3842700551.png', '3861726478.png', '3997056794.png',
+                  '4006888708.png', '4038565078.png', '405183445.png', '4055844607.png', '4083104944.png',
+                  '410309938.png', '4209107693.png', '4223363606.png', '4243043869.png', '4252141892.png',
+                  '432381542.png', '44789482.png', '448602072.png', '452919406.png', '531885378.png',
+                  '566507557.png', '596694107.png', '641224979.png', '672718769.png', '806365608.png',
+                  '895818311.png', '920985152.png', '921260366.png', 'AMST_0001.png', 'AMST_0002.png',
+                  'AMST_0019.png', 'Copy of Video One.png', 'Copy of Video Three.png', 'IBM_32.png',
+                  'IBM_35.png', 'IBM_36.png', 'IBM_38.png', 'IBM_4.png', 'IBM_42.png', 'IBM_45.png',
+                  'IBM_47.png', 'IBM_48.png', 'IBM_50.png', 'IBM_52.png', 'IBM_53.png', 'IBM_54.png',
+                  'IBM_8.png', 'MMUH_DTIF_0058.png', 'MMUH_DTIF_0094.png', 'MMUH_DTIF_0095.png',
+                  'MMUH_DTIF_0096.png', 'MMUH_DTIF_0100.png', 'MMUH_DTIF_0101.png', 'MMUH_DTIF_0103.png',
+                  'REINERO__01092024_173849.png', 'Video TEM 22.4.png', 'WAT_DTIF_0005.png',
+                  'WAT_DTIF_0007.png', 'WAT_DTIF_0008.png', 'WAT_DTIF_0010.png', 'ch1_video_01.png']
+
 
 class Colours(Enum):
     """
@@ -40,8 +83,7 @@ mask_pattern = "*.png"
 Setup models for inference
 """
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"
-model_prefixes = ["10_classica_focal_only",
-                  "10_classica_tversky_only"]
+model_prefixes = ["20_classica_tversky_only"]
 
 """
 Parameters for image preprocessing as model input 
@@ -63,7 +105,7 @@ logging.basicConfig(
 
 def get_classica_test_train_names():
     hdf5_files = ["../polyp_data/data/all_data.h5"]
-    test_split = 0.1
+    test_split = 0.2
 
     classica_names = sorted(glob.glob("../polyp_data/Classica/images/val/*.png"))
     classica_names = [os.path.basename(name) for name in classica_names]
@@ -71,20 +113,28 @@ def get_classica_test_train_names():
     for hdf5_file in hdf5_files:
         len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
         # Ensure reproducibility of training and test with a fixed seed
-        torch.manual_seed(42)
-        shuffled_indices = torch.randperm(len_hdf5)
-        test_indices = shuffled_indices[:int(len_hdf5 * test_split)]
-        train_indices = shuffled_indices[int(len_hdf5 * test_split):]
+
+
 
         with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
             original_name_hdf = hdf['original_name']
             original_name_np = np.array([h.decode('utf-8') for h in original_name_hdf])
+
+            rng = np.random.default_rng(42)
+            shuffled_indices = rng.permutation(len(classica_names))
+            """ Only add test_split % to the training set """
+
+            classica_test_indices = shuffled_indices[int(len(classica_names) * test_split):]
+            classica_names_np = np.array(classica_names)
+            classica_test_names = classica_names_np[classica_test_indices]
+
+            train_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_test_names]
+            test_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_test_names]
+
             train_names = original_name_np[train_indices]
             test_names = original_name_np[test_indices]
 
-        test_classica = [name for name in test_names if name in classica_names]
-        train_classica = [name for name in train_names if name in classica_names]
-        return test_classica, train_classica
+        return test_names, train_names
 
 def check_path_and_clear(path: str, pattern: str):
     if os.path.exists(path):
