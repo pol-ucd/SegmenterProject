@@ -66,7 +66,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "0_classica_tversky_only_lesion_segmentation",
+        "prefix": "10_classica_tversky_only_lesion_segmentation",
         "patience": 20,
         "min_delta": 0.00001
     },
