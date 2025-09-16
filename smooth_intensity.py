@@ -25,6 +25,7 @@ import os
 import cv2
 import numpy as np
 from PIL import ImageFilter, Image
+from skimage import exposure
 
 
 class GaussianSmoothing(object):
@@ -118,26 +119,71 @@ def detail_enhancement(img, d=2, sigma_color=75, sigma_space=75):
     result = cv2.addWeighted(detail, 0.6, base, 0.4, 0)
     return np.clip(result, 0, 255).astype(np.uint8)
 
+def find_tools(image: np.ndarray) -> np.ndarray:
+    # Step 1: Preprocessing
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    equalized = cv2.equalizeHist(gray)
+    blurred = cv2.GaussianBlur(equalized, (5, 5), 0)
+
+    # Step 2: Initial Mask via Otsu Thresholding
+    _, initial_mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Step 3: Fluid Detection using HSV Color Segmentation
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # Define fluid color range (example range, may need tuning)
+    lower_fluid_color = np.array([0, 0, 50])
+    upper_fluid_color = np.array([180, 50, 255])
+    fluid_mask = cv2.inRange(hsv, lower_fluid_color, upper_fluid_color)
+
+    # Remove fluid regions from initial mask
+    tool_mask = cv2.bitwise_and(initial_mask, cv2.bitwise_not(fluid_mask))
+
+    # Step 4: Morphological Refinement
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    cleaned_mask = cv2.morphologyEx(tool_mask, cv2.MORPH_OPEN, kernel)
+    final_mask = cv2.morphologyEx(cleaned_mask, cv2.MORPH_CLOSE, kernel)
+    return final_mask
+
+def match_histogram(src: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Match src histogram to ref."""
+    matched = exposure.match_histograms(src, ref, multichannel=True)
+    return (matched * 255).astype(np.uint8)
+
+def gray_world(img: np.ndarray) -> np.ndarray:
+    """Simple Gray World color constancy."""
+    # Compute average per channel
+    avg_b, avg_g, avg_r = np.mean(img[:, :, 0]), np.mean(img[:, :, 1]), np.mean(img[:, :, 2])
+    avg_gray = (avg_b + avg_g + avg_r) / 3
+    # Scale     each channel
+    img[:, :, 0] = np.clip(img[:, :, 0] * (avg_gray / avg_b), 0, 255)
+    img[:, :, 1] = np.clip(img[:, :, 1] * (avg_gray / avg_g), 0, 255)
+    img[:, :, 2] = np.clip(img[:, :, 2] * (avg_gray / avg_r), 0, 255)
+    return img.astype(np.uint8)
+
+
+def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8,8)) -> np.ndarray:
+    """Apply CLAHE on the L-channel of LAB."""
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+    cl = clahe.apply(l)
+    lab = cv2.merge([cl, a, b])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
+
 
 def preprocess_pipeline(img_path, out_path=None):
-    # 1. Load BGR image
     img = cv2.imread(img_path)
-    # 2. Flat-field correction
-    # flat = shading_correction(img, sigma=50)
-    # ssr = flat.copy()
+    img_gw = gray_world(img)
+    final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8,8))
 
-    # # 3. Homomorphic filter - convert 3D -> 2D gray image first for DFT
-    # flat = cv2.cvtColor(np.float32(img), cv2.COLOR_BGR2GRAY).astype(np.float32)
-    homo = homomorphic_filter(img, sigma=30)
-
-    ssr = single_scale_retinex(homo, sigma=75)
-
-    final = shading_correction(ssr, sigma=50)
-
-    # 6. Save or return
     if out_path:
         cv2.imwrite(out_path, final)
     return final
+
+
 
 
 if __name__ == "__main__":

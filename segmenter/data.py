@@ -2,6 +2,7 @@ import numbers
 import os
 import platform
 
+import cv2
 import h5py
 import numpy as np
 import torch
@@ -11,6 +12,32 @@ from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.transforms import functional as F
 
+
+def gray_world(img: np.ndarray) -> np.ndarray:
+    """Simple Gray World color constancy."""
+    # Compute average per channel
+    avg_b, avg_g, avg_r = np.mean(img[:, :, 0]), np.mean(img[:, :, 1]), np.mean(img[:, :, 2])
+    avg_gray = (avg_b + avg_g + avg_r) / 3
+    # Scale     each channel
+    img[:, :, 0] = np.clip(img[:, :, 0] * (avg_gray / avg_b), 0, 255)
+    img[:, :, 1] = np.clip(img[:, :, 1] * (avg_gray / avg_g), 0, 255)
+    img[:, :, 2] = np.clip(img[:, :, 2] * (avg_gray / avg_r), 0, 255)
+    return img.astype(np.uint8)
+
+
+def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8,8)) -> np.ndarray:
+    """Apply CLAHE on the L-channel of LAB."""
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+    cl = clahe.apply(l)
+    lab = cv2.merge([cl, a, b])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+def preprocess_image_pipeline(image: np.ndarray):
+    img_gw = gray_world(image)
+    final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8,8))
+    return final
 
 def get_num_samples_from_hdf5(hdf5_path):
     """
@@ -61,7 +88,8 @@ class HDF5ImageDataset(Dataset):
 
     def __init__(self, hdf5_path, indices, is_train_split,
                  image_size=(512, 512), n_augment=0,
-                 light_control: Boolean = True):
+                 light_control: Boolean = True,
+                 intensity_control: Boolean = True,):
         """
         Initializes the dataset.
 
@@ -80,6 +108,7 @@ class HDF5ImageDataset(Dataset):
         self.n_augment = n_augment
         self.light_control = light_control
         self.sigma = 30.0
+        self.intensity_control = intensity_control
 
         # Initialize h5py file and dataset references to None
         self.hdf5_file = None
@@ -157,7 +186,8 @@ class HDF5ImageDataset(Dataset):
         # Load image and mask as NumPy arrays
         image_np = self.images[original_idx]
         mask_np = self.masks[original_idx]
-        # original_shape = tuple(self.original_shapes[original_idx])
+        if self.intensity_control:
+            image_np = preprocess_image_pipeline(image_np)
 
         # Convert NumPy arrays to PIL Images for easy transformation
         image_pil = Image.fromarray(image_np).convert("RGB")
