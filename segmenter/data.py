@@ -125,8 +125,9 @@ class HDF5ImageDataset(Dataset):
         mask_tensor = F.resized_crop(mask_tensor, i, j, h, w, self.image_size, interpolation=Image.NEAREST)
 
         # Color Augmentations (applied only to image)
-        color_jitter = transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
-        image_pil = color_jitter(image_pil)
+        if torch.rand(1) < 0.5:
+            color_jitter = transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
+            image_pil = color_jitter(image_pil)
 
         return image_pil, mask_tensor
 
