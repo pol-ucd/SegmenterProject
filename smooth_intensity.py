@@ -105,7 +105,7 @@ def single_scale_retinex(img, sigma=30):
     return ssr.astype(np.uint8)
 
 
-def detail_enhancement(img, d=9, sigma_color=75, sigma_space=75):
+def detail_enhancement(img, d=2, sigma_color=75, sigma_space=75):
     """
     Edge-preserving decomposition:
     base = bilateralFilter(img), detail = img/base, recombine.
@@ -123,20 +123,16 @@ def preprocess_pipeline(img_path, out_path=None):
     # 1. Load BGR image
     img = cv2.imread(img_path)
     # 2. Flat-field correction
-    flat = shading_correction(img, sigma=50)
-    final = flat.copy()
+    # flat = shading_correction(img, sigma=50)
+    # ssr = flat.copy()
 
     # # 3. Homomorphic filter - convert 3D -> 2D gray image first for DFT
-    # flat = cv2.cvtColor(np.float32(flat), cv2.COLOR_BGR2GRAY).astype(np.float32)
-    # homo = homomorphic_filter(flat, sigma=30)
-    # final = homo.copy()
-    #
-    # 4. Single-Scale Retinex
-    # homo = img.copy()
-    # ssr = single_scale_retinex(homo, sigma=30)
-    # final = ssr.copy()
-    # 5. Detail enhancement
-    # final = detail_enhancement(ssr, d=5, sigma_color=75, sigma_space=75)
+    # flat = cv2.cvtColor(np.float32(img), cv2.COLOR_BGR2GRAY).astype(np.float32)
+    homo = homomorphic_filter(img, sigma=30)
+
+    ssr = single_scale_retinex(homo, sigma=75)
+
+    final = shading_correction(ssr, sigma=50)
 
     # 6. Save or return
     if out_path:
@@ -147,8 +143,8 @@ def preprocess_pipeline(img_path, out_path=None):
 if __name__ == "__main__":
     image_dir = "/Users/polmacaonghusa/Documents/Projects/polyp_data/Classica/images/val"
     out_dir = "/Users/polmacaonghusa/Documents/Projects/polyp_data/Classica/images/compensated"
-    input_path = os.path.join(image_dir, "170103.png")
-    output_path = os.path.join(out_dir, "170103_normalized_endoscope.png")
+    input_path = os.path.join(image_dir, "12192023_193441.png")
+    output_path = os.path.join(out_dir, "12192023_193441normalized_endoscope.png")
     result = preprocess_pipeline(input_path, output_path)
     # To visualize with OpenCV (BGR→RGB):
     # cv2.imshow("Normalized", result); cv2.waitKey(0)
