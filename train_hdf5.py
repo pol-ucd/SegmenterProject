@@ -144,13 +144,18 @@ def main():
             rng = np.random.default_rng(42)
             shuffled_indices = rng.permutation(len(classica_names))
             """ Only add test_split % to the training set """
-            classica_train_indices = shuffled_indices[:int(len(classica_names) * test_split)]
+            # classica_train_indices = shuffled_indices[:int(len(classica_names) * test_split)]
             classica_test_indices = shuffled_indices[int(len(classica_names) * test_split):]
             classica_names_np = np.array(classica_names)
             classica_test_names = classica_names_np[classica_test_indices]
 
-            train_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_test_names]
-            test_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_test_names]
+            # train_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_test_names]
+            # test_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_test_names]
+            shuffled_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_test_names]
+            len_shuffled = len(shuffled_indices)
+            test_indices = shuffled_indices[:int(len_shuffled * test_split)]
+            train_indices = shuffled_indices[int(len_shuffled * test_split):]
+
             train_indices = torch.LongTensor(train_indices)
             test_indices = torch.LongTensor(test_indices)
 
