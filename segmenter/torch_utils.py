@@ -463,7 +463,7 @@ class CheckpointManager:
             with open(json_filepath, 'w') as fp:
                 json.dump(json_data, fp, sort_keys=True, indent=4)
 
-            self.logger.info(f"Checkpoint saved: {filepath} with accuracy: {current_accuracy:.4f}")
+            self.logger.info(f"Checkpoint saved: {filepath} with score: {current_accuracy:.4f}")
         else:
             # No significant improvement, increment the counter
             self.epochs_without_improvement += 1
