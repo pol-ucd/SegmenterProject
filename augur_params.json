@@ -31,14 +31,14 @@
         "n_epochs": 300
     },
     "optimizer": {
-            "learning_rate": 1e-4,
+            "learning_rate": 1e-5,
             "l2_decay_penalty": 1e-5
         },
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
         "prefix": "model_augur_segmentation",
-        "patience": 7,
+        "patience": 20,
         "min_delta": 0.0001
     },
     "loss": {
