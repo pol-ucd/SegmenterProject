@@ -1,10 +1,12 @@
 from abc import abstractmethod
 
 import torch
+from monai.networks.nets import UNet, SwinUNETR
 from torch import nn as nn
 from torch.nn import functional as F
 from torch.nn.modules.utils import _pair
-from transformers import SegformerConfig, SegformerForSemanticSegmentation
+# Import the SegFormer model from the transformers library
+from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
 
 class MedianPool2d(nn.Module):
@@ -43,7 +45,70 @@ class SegformerModelError(Exception):
         super().__init__(self.message)
 
 
+class SegmentationModelWrapper(nn.Module):
+    """
+    A smart wrapper class to handle different medical image segmentation models
+    transparently, encapsulating their unique initialization and ensuring a
+    consistent interface for training and benchmarking.
+    """
 
+    def __init__(self, model_name: str, in_channels: int, out_channels: int, **kwargs):
+        super().__init__()
+        self.model_name = model_name.lower()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+        self._initialize_model(**kwargs)
+
+    def _initialize_model(self, **kwargs):
+        if self.model_name == 'nnunet':
+            self.model = UNet(
+                spatial_dims=2,
+                in_channels=self.in_channels,
+                out_channels=self.out_channels,
+                channels=(16, 32, 64, 128, 256),
+                strides=(2, 2, 2, 2),
+                num_res_units=2
+            )
+        elif self.model_name == 'transunet':
+            # Use MONAI's SwinUNETR as an alternative since it's a similar transformer-based UNet.
+            self.model = SwinUNETR(
+                img_size=(kwargs.get('img_dim', 224), kwargs.get('img_dim', 224)),
+                in_channels=self.in_channels,
+                out_channels=self.out_channels,
+                feature_size=48
+            )
+        elif self.model_name == 'segformer':
+            # Instantiate SegFormer using the transformers library.
+            # We use a pre-trained model and adjust the number of output labels.
+            try:
+                self.model = SegformerForSemanticSegmentation.from_pretrained(
+                    "nvidia/segformer-b0-finetuned-ade-512-512",
+                    num_labels=self.out_channels,
+                    ignore_mismatched_sizes=True
+                )
+            except OSError:
+                print("Could not load pre-trained model, initializing from config.")
+                config = SegformerConfig.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+                config.num_labels = self.out_channels
+                self.model = SegformerForSemanticSegmentation(config)
+        elif self.model_name == 'hrnet_cbam':
+            raise NotImplementedError("HRNet+CBAM implementation needs a dedicated library or custom code.")
+        else:
+            raise ValueError(f"Unsupported model name: {self.model_name}")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # SegFormer from Hugging Face expects a dictionary input
+        if self.model_name == 'segformer':
+            # SegFormer's output is a dictionary. We only need the logits.
+            return self.model(pixel_values=x).logits
+        return self.model(x)
+
+    def get_model(self):
+        return self.model
+
+    def __repr__(self):
+        return f"SegmentationModelWrapper(model_name='{self.model_name}', model={self.model.__class__.__name__})"
 """
 Base class for the Segformer models
 """
@@ -180,3 +245,31 @@ class AugurSegformerSegmentation(AugurSegformerClassifierBase):
 
         # return logits
         return self.median(logits)   # Smoothed logits
+
+
+# Assume you have your data loaders and loss function
+# from your_dataset import MedicalImageDataset
+
+# Step 1: Instantiate the models consistently using the wrapper
+# model_nnunet = SegmentationModelWrapper(model_name='nnunet', in_channels=1, out_channels=2)
+# model_transunet = SegmentationModelWrapper(model_name='transunet', in_channels=1, out_channels=2, img_dim=256)
+# model_segformer = SegmentationModelWrapper(model_name='segformer', in_channels=1, out_channels=2)
+# model_hrnet_cbam = SegmentationModelWrapper(model_name='hrnet_cbam', in_channels=1, out_channels=2)
+
+# For demonstration, let's use the nnU-Net example
+model = SegmentationModelWrapper(model_name='nnunet', in_channels=1, out_channels=2)
+
+# Step 2: Set up the training loop
+# optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+# loss_function = DiceCELoss(to_onehot_y=True, softmax=True)
+
+# # Dummy data for illustration
+# input_tensor = torch.randn(4, 1, 224, 224)
+# target_tensor = torch.randint(0, 2, (4, 1, 224, 224)).float()
+
+# # Step 3: Use the wrapper in a unified way
+# output = model(input_tensor)
+# loss = loss_function(output, target_tensor)
+# loss.backward()
+# optimizer.step()
+# print(f"Loss with {model.model_name}: {loss.item()}")

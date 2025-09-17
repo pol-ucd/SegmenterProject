@@ -19,6 +19,7 @@ How It Works
 
 Adjust the σ parameters and blending weights to match your surgical camera’s characteristics.
 """
+import glob
 import numbers
 import os
 
@@ -177,10 +178,11 @@ def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8,8)) -> np.nda
 def preprocess_pipeline(img_path, out_path=None):
     img = cv2.imread(img_path)
     img_gw = gray_world(img)
-    final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8,8))
-
+    img_ic = shading_correction(img_gw)
+    final = apply_clahe(img_ic, clip_limit=5.0, tile_grid_size=(8,8))
+    out_img = np.concatenate([img, final], axis=1)
     if out_path:
-        cv2.imwrite(out_path, final)
+        cv2.imwrite(out_path, out_img)
     return final
 
 
@@ -189,8 +191,11 @@ def preprocess_pipeline(img_path, out_path=None):
 if __name__ == "__main__":
     image_dir = "/Users/polmacaonghusa/Documents/Projects/polyp_data/Classica/images/val"
     out_dir = "/Users/polmacaonghusa/Documents/Projects/polyp_data/Classica/images/compensated"
-    input_path = os.path.join(image_dir, "12192023_193441.png")
-    output_path = os.path.join(out_dir, "12192023_193441normalized_endoscope.png")
-    result = preprocess_pipeline(input_path, output_path)
-    # To visualize with OpenCV (BGR→RGB):
-    # cv2.imshow("Normalized", result); cv2.waitKey(0)
+    images = sorted(glob.glob(os.path.join(image_dir, "*.png")))
+
+    for image in images:
+        basename = os.path.basename(image)
+        input_path = os.path.join(image_dir, basename)
+        output_path = os.path.join(out_dir, basename)
+        result = preprocess_pipeline(input_path, output_path)
+

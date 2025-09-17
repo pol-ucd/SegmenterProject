@@ -13,6 +13,15 @@ from torchvision import transforms
 from torchvision.transforms import functional as F
 
 
+def sharpening_kernel(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
+    if kernel is None:
+        kernel = np.array([[-1, -1, -1],
+                           [-1, 9, -1],
+                           [-1, -1, -1]])
+    sharpened_cv2_kernel = cv2.filter2D(img, -1, kernel)
+    return sharpened_cv2_kernel.astype(np.uint8)
+
+
 def gray_world(img: np.ndarray) -> np.ndarray:
     """Simple Gray World color constancy."""
     # Compute average per channel
@@ -25,7 +34,7 @@ def gray_world(img: np.ndarray) -> np.ndarray:
     return img.astype(np.uint8)
 
 
-def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8,8)) -> np.ndarray:
+def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8, 8)) -> np.ndarray:
     """Apply CLAHE on the L-channel of LAB."""
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
@@ -34,10 +43,13 @@ def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8,8)) -> np.nda
     lab = cv2.merge([cl, a, b])
     return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
+
 def preprocess_image_pipeline(image: np.ndarray):
-    img_gw = gray_world(image)
-    final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8,8))
+    img_sharp = sharpening_kernel(image)
+    img_gw = gray_world(img_sharp)
+    final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8, 8))
     return final
+
 
 def get_num_samples_from_hdf5(hdf5_path):
     """
@@ -89,7 +101,7 @@ class HDF5ImageDataset(Dataset):
     def __init__(self, hdf5_path, indices, is_train_split,
                  image_size=(512, 512), n_augment=0,
                  light_control: Boolean = True,
-                 intensity_control: Boolean = True,):
+                 intensity_control: Boolean = True, ):
         """
         Initializes the dataset.
 

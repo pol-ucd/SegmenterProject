@@ -16,6 +16,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from segmenter.data import get_num_samples_from_hdf5
+from segmenter.data import preprocess_image_pipeline
 from segmenter.models import AugurSegformerSegmentation
 
 classica_names = ['01.png', '02.png', '05.png', '05182023_171203.png', '1013468013.png',
@@ -83,7 +84,11 @@ mask_pattern = "*.png"
 Setup models for inference
 """
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"
-model_prefixes = ["20_classica_tversky_only"]
+model_prefixes = [
+                  "base_tversky",
+                  "base_smooth_intensity_tversky"
+]
+smooth_intensity = True
 
 """
 Parameters for image preprocessing as model input 
@@ -91,6 +96,7 @@ Parameters for image preprocessing as model input
 image_size=(512, 512)           # The backbone Huggingface model expects images of this size
 mean = (0.485, 0.456, 0.406)    # Use standard image_net values for normalising
 std = (0.229, 0.224, 0.225)
+test_split = 1.0
 
 # Configure logging to write to a file and the console
 LOG_FILE = 'classica_evaluation.log'
@@ -105,15 +111,12 @@ logging.basicConfig(
 
 def get_classica_test_train_names():
     hdf5_files = ["../polyp_data/data/all_data.h5"]
-    test_split = 0.2
 
     classica_names = sorted(glob.glob("../polyp_data/Classica/images/val/*.png"))
     classica_names = [os.path.basename(name) for name in classica_names]
 
     for hdf5_file in hdf5_files:
         len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
-        # Ensure reproducibility of training and test with a fixed seed
-
 
 
         with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
@@ -124,7 +127,7 @@ def get_classica_test_train_names():
             shuffled_indices = rng.permutation(len(classica_names))
             """ Only add test_split % to the training set """
 
-            classica_test_indices = shuffled_indices[int(len(classica_names) * test_split):]
+            classica_test_indices = shuffled_indices[:int(len(classica_names) * test_split)]
             classica_names_np = np.array(classica_names)
             classica_test_names = classica_names_np[classica_test_indices]
 
@@ -238,6 +241,11 @@ def main():
                 continue
 
             image_pil = Image.open(image_file).convert("RGB")
+            image_original = image_pil.copy()
+            if smooth_intensity:
+                image_pil_np = np.array(image_pil)
+                image_pil_np = preprocess_image_pipeline(image_pil_np)
+                image_pil = Image.fromarray(image_pil_np)
             mask_pil = Image.open(mask_file).convert("L")
             mask_size = mask_pil.size
             mask = np.array(mask_pil)
@@ -262,7 +270,7 @@ def main():
             denoised_pred_mask.save(out_name)
 
             # Overlay original mask (green) and predicted mask (yellow)
-            overlay_pil = detect_and_draw_contours(image_pil,
+            overlay_pil = detect_and_draw_contours(image_original,
                                                    mask_pil,
                                                    contour_color=Colours.green.value,
                                                    thickness=3)
