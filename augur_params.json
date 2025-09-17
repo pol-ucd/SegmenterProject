@@ -28,7 +28,7 @@
             512,
             512
         ],
-        "n_epochs": 100
+        "n_epochs": 300
     },
     "optimizer": {
             "learning_rate": 1e-4,
@@ -45,10 +45,10 @@
         "function": "HybridLoss",
         "loss_params": {
             "ce": {
-                "weight": 0.05
+                "weight": 0.1
             },
             "dice": {
-                "weight": 1.0
+                "weight": 0.0
             },
             "focal": {
                 "weight": 0.0,
@@ -56,17 +56,19 @@
                 "gamma": 2.0
             },
             "tversky": {
-                "weight": 0.0
+                "weight": 1.0,
+                "alpha": 0.8,
+                "beta": 0.2
             },
             "iou": {
                 "weight": 0.0
             },
             "boundary_sdf": {
-                "weight": 0.05,
+                "weight": 0.0,
                 "dt_backend": "kornia"
             },
             "soft_chamfer": {
-                "weight": 0.05,
+                "weight": 0.0,
                 "dt_backend": "kornia"
             }
         }
