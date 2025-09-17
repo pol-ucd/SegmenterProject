@@ -19,7 +19,6 @@ Loss is returned as a single mean loss per batch and class. If the calling funct
 needs per sample loss the returned loss should be multiplied by the batch size.
 
 """
-
 import logging
 from abc import abstractmethod, ABC
 from typing import Dict, Tuple
