@@ -173,19 +173,26 @@ def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8,8)) -> np.nda
     return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
+def sharpening_kernel(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
+    if kernel is None:
+        kernel = np.array([[-1, -1, -1],
+                           [-1, 9, -1],
+                           [-1, -1, -1]])
+    sharpened_cv2_kernel = cv2.filter2D(img, -1, kernel)
+    return sharpened_cv2_kernel.astype(np.uint8)
 
 
 def preprocess_pipeline(img_path, out_path=None):
     img = cv2.imread(img_path)
-    img_gw = gray_world(img)
-    img_ic = shading_correction(img_gw)
-    final = apply_clahe(img_ic, clip_limit=5.0, tile_grid_size=(8,8))
+    img_sharp = sharpening_kernel(img)
+    img_gw = gray_world(img_sharp)
+    # img_ic = shading_correction(img_gw)
+    # final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8,8))
+    final =  img_gw.copy()
     out_img = np.concatenate([img, final], axis=1)
     if out_path:
         cv2.imwrite(out_path, out_img)
     return final
-
-
 
 
 if __name__ == "__main__":

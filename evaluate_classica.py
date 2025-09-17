@@ -85,7 +85,7 @@ Setup models for inference
 """
 pretrained_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 model_prefixes = [
-                  "base_tversky",
+                  # "base_tversky",
                   "base_smooth_intensity_tversky"
 ]
 smooth_intensity = True
@@ -322,7 +322,6 @@ def load_data(logger):
             logger.error(f"Missing {len(missing_images)} images: : {', '.join(missing_images)}")
         raise ValueError(f"There are missing images and/or masks. Please check the logs.")
     return image_list, mask_list
-
 
 if __name__=="__main__":
     logger = logging.getLogger(__name__)
