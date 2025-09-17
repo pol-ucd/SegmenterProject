@@ -47,7 +47,9 @@ def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8, 8)) -> np.nd
 def preprocess_image_pipeline(image: np.ndarray):
     img_sharp = sharpening_kernel(image)
     img_gw = gray_world(img_sharp)
+
     # final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8, 8))
+
     return img_gw
 
 
