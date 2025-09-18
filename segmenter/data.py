@@ -7,7 +7,6 @@ import h5py
 import numpy as np
 import torch
 from PIL import Image, ImageFilter
-from sympy.logic.boolalg import Boolean
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.transforms import functional as F
@@ -101,9 +100,7 @@ class HDF5ImageDataset(Dataset):
     """
 
     def __init__(self, hdf5_path, indices, is_train_split,
-                 image_size=(512, 512), n_augment=0,
-                 light_control: Boolean = True,
-                 intensity_control: Boolean = True, ):
+                 image_size=(512, 512), n_augment=0):
         """
         Initializes the dataset.
 
@@ -120,9 +117,8 @@ class HDF5ImageDataset(Dataset):
         self.is_train_split = is_train_split
         self.image_size = image_size
         self.n_augment = n_augment
-        self.light_control = light_control
         self.sigma = 30.0
-        self.intensity_control = intensity_control
+
 
         # Initialize h5py file and dataset references to None
         self.hdf5_file = None
@@ -151,6 +147,18 @@ class HDF5ImageDataset(Dataset):
         """Applies a single set of random augmentations to an image and mask pair."""
         # if self.is_train_split and self.light_control is not None:
         #     image_pil = self.light_control(image_pil)
+
+        # Apply CLAHE to image only
+        img_np = np.array(image_pil)
+        lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+
+        clahe_obj = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        cl_l = clahe_obj.apply(l)
+
+        l_processed = cv2.merge((cl_l, a, b))
+        processed_np = cv2.cvtColor(l_processed, cv2.COLOR_LAB2RGB)
+        image_pil = Image.fromarray(processed_np)
 
         # Random Horizontal Flip
         if torch.rand(1) < 0.5:

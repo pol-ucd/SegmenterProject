@@ -165,9 +165,7 @@ def main():
             indices=train_indices,
             is_train_split=True,
             image_size=image_size,
-            n_augment=n_augments,
-            light_control=False,
-            intensity_control=False
+            n_augment=n_augments
         ))
 
 
@@ -176,9 +174,7 @@ def main():
             indices=test_indices,
             is_train_split=False,
             image_size=image_size,
-            n_augment=0,
-            light_control=False,
-            intensity_control=False
+            n_augment=0
         ))
 
         n_records += len_hdf5
