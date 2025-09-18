@@ -167,6 +167,7 @@ def main():
             image_size=image_size,
             n_augment=n_augments,
             light_control=False,
+            intensity_control=False
         ))
 
 
@@ -176,7 +177,8 @@ def main():
             is_train_split=False,
             image_size=image_size,
             n_augment=0,
-            light_control=False
+            light_control=False,
+            intensity_control=False
         ))
 
         n_records += len_hdf5
