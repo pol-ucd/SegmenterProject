@@ -56,12 +56,12 @@
                 "gamma": 2.0
             },
             "tversky": {
-                "weight": 1.0,
+                "weight": 0.0,
                 "alpha": 0.8,
                 "beta": 0.2
             },
             "iou": {
-                "weight": 0.0
+                "weight": 1.0
             },
             "boundary_sdf": {
                 "weight": 0.0,
