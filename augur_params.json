@@ -37,7 +37,7 @@
     "pretrained_model": "nvidia/segformer-b4-finetuned-ade-512-512",
     "checkpoints": {
         "path": "../segmenter/checkpoint",
-        "prefix": "model_augur_segmentation",
+        "prefix": "augur_segmentation",
         "patience": 20,
         "min_delta": 0.0001
     },
