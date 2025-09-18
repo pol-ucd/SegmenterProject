@@ -143,11 +143,8 @@ class HDF5ImageDataset(Dataset):
         else:
             return len(self.split_indices)
 
-    def _apply_augmentations(self, image_pil, mask_tensor):
-        """Applies a single set of random augmentations to an image and mask pair."""
-        # if self.is_train_split and self.light_control is not None:
-        #     image_pil = self.light_control(image_pil)
-
+    @staticmethod
+    def _normalise_image(image_pil):
         # Apply CLAHE to image only
         img_np = np.array(image_pil)
         lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB)
@@ -158,8 +155,10 @@ class HDF5ImageDataset(Dataset):
 
         l_processed = cv2.merge((cl_l, a, b))
         processed_np = cv2.cvtColor(l_processed, cv2.COLOR_LAB2RGB)
-        image_pil = Image.fromarray(processed_np)
+        return Image.fromarray(processed_np)
 
+    def _apply_augmentations(self, image_pil, mask_tensor):
+        """Applies a single set of random augmentations to an image and mask pair."""
         # Random Horizontal Flip
         if torch.rand(1) < 0.5:
             image_pil = F.hflip(image_pil)
@@ -208,16 +207,14 @@ class HDF5ImageDataset(Dataset):
         # Load image and mask as NumPy arrays
         image_np = self.images[original_idx]
         mask_np = self.masks[original_idx]
-        if self.intensity_control:
-            image_np = preprocess_image_pipeline(image_np)
 
         # Convert NumPy arrays to PIL Images for easy transformation
         image_pil = Image.fromarray(image_np).convert("RGB")
         # Convert masks to float32 for geometric transformations
         mask_tensor = torch.from_numpy(mask_np.astype(np.float32))
 
-        if self.light_control:
-            image_pil = GaussianSmoothing(radius=50)(image_pil)
+        # Normalise the image light intensity using CLAHE
+        image_pil = self._normalise_image(image_pil)
 
         if augment_step > 0:
             # Apply augmentations if this is an augmented sample
