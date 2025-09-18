@@ -89,7 +89,6 @@ acs-*.bib
 # endnotes
 *.ent
 
-# fixme
 *.lox
 
 # feynmf/feynmp
@@ -162,8 +161,6 @@ acs-*.bib
 
 # knitr
 *-concordance.tex
-# TODO Uncomment the next line if you use knitr and want to ignore its generated tikz files
-# *.tikz
 *-tikzDictionary
 
 # latexindent will create succesive backup files by default
@@ -260,7 +257,6 @@ pythontex-files-*/
 *.hst
 *.ver
 
-# easy-todo
 *.lod
 
 # xcolor

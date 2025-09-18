@@ -48,7 +48,6 @@ def extract_masks(path_imgs, path_jsons, path_mask_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    #TODO: Convert file paths into configuration options and/or command line parameters
     train_imgs = sorted(glob(TRAIN_IMGS))
     train_jsons = sorted(glob(TRAIN_JSONS))
     print(f"Found {len(train_imgs)} training images")
