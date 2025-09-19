@@ -169,7 +169,7 @@ class RunManager:
                                        dim=1).argmax(dim=1)
                 exp_masks = masks.argmax(dim=1)
                 b_m = self._scores(pred_masks, exp_masks)
-                total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
+                total_metrics = {key: b_m[key] for key in total_metrics.keys()}
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -215,10 +215,11 @@ class RunManager:
                     # print("PRED_MASKS !!!  :", pred_masks.shape)
                     # print("MASKS !!!  :", masks.shape)
                     b_m = self._scores(pred_masks, exp_masks)
-                    total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
+                    total_metrics = {key: b_m[key] for key in total_metrics.keys()}
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     print("Saving predictions is not implemented yet")
+                print("total_metrics: ", total_metrics)
 
             total_metrics['loss'] = np.mean(total_loss)
 
