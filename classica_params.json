@@ -75,4 +75,4 @@
     },
     "datasets": {
         "hdf5_dir": "../segmenter/data",
-        "hdf5_files": ["Classica
+        "hdf5_files": ["Classica"]
