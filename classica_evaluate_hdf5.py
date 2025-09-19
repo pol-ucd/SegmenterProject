@@ -315,20 +315,21 @@ def main():
                 if stop_training:
                     logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
                     if test_split > 0:
-                        metrics['loss'] = val_loss
                         metrics["dice"] = val_dice + train_dice
                         metrics["iou"] = val_iou + train_iou
                         metrics["precision"] = val_precision + train_precision
                         metrics["recall"] = val_recall + train_recall
                     else:
-                        metrics['loss'] = val_loss
                         metrics["dice"] = val_dice
                         metrics["iou"] = val_iou
                         metrics["precision"] = val_precision
                         metrics["recall"] = val_recall
                     break
 
-    pd.DataFrame(metrics).to_csv(f"classica_evaluate_metrics_{timestamp}.csv")
+    try:
+        pd.DataFrame(metrics).to_csv(f"classica_evaluate_metrics_{timestamp}.csv")
+    except Exception as e:
+        logger.error(f"Error saving scores to CSV. The following exception was detected:{e}")
 
 if __name__ == "__main__":
     # --- Logging Setup ---

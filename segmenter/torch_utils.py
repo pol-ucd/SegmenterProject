@@ -121,7 +121,7 @@ class RunManager:
                    "iou": [],
                    "precision": [],
                    "recall": []}
-        b, c, h, w = predicted_mask.shape
+        b, _, _ = predicted_mask.shape
 
         predicted_mask = predicted_mask.cpu().detach().numpy()
         expected_mask = expected_mask.cpu().detach().numpy()
