@@ -219,7 +219,6 @@ class RunManager:
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     print("Saving predictions is not implemented yet")
-                print("total_metrics: ", total_metrics)
 
             total_metrics['loss'] = np.mean(total_loss)
 
