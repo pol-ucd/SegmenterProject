@@ -169,6 +169,10 @@ class RunManager:
                                        dim=1).argmax(dim=1)
                 exp_masks = masks.argmax(dim=1)
                 b_m = self._scores(pred_masks, exp_masks)
+                for k,v in total_metrics.items():
+                    print(f"Training {k}: {v}")
+                print(b_m)
+
                 total_metrics = {key: value.append(b_m[key])
                                  for key, value in total_metrics.items() if key != "loss"}
 
