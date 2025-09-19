@@ -216,8 +216,6 @@ class RunManager:
                     b_m = self._scores(pred_masks, exp_masks)
                     for k, v in total_metrics.items():
                         v += b_m[k]
-                        print(f"Key: [{k}]: Value [{v}]")
-
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     print("Saving predictions is not implemented yet")
