@@ -147,9 +147,8 @@ def main():
 
     with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
         original_names_hdf = hdf['original_name']
-        print(original_names_hdf)
-    original_names = np.array([h.decode('utf-8') for h in original_names_hdf])
-    n_records = len(original_names)
+        original_names = np.array([h.decode('utf-8') for h in original_names_hdf])
+        n_records = len(original_names)
 
     for test_split in test_sizes:
 
