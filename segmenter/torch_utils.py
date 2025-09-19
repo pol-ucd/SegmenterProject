@@ -129,10 +129,10 @@ class RunManager:
             predicted = predicted_mask[batch].reshape(-1)
             expected = expected_mask[batch].reshape(-1)
 
-            metrics['dice'].append(f1_score(expected, predicted, average='macro'))
-            metrics['iou'].append(jaccard_score(expected, predicted, average='macro'))
-            metrics['precision'].append(precision_score(expected, predicted, average='macro'))
-            metrics['recall'].append(recall_score(expected, predicted, average='macro'))
+            metrics['dice'].append(f1_score(expected, predicted, average='macro', zero_division=0))
+            metrics['iou'].append(jaccard_score(expected, predicted, average='macro', zero_division=0))
+            metrics['precision'].append(precision_score(expected, predicted, average='macro', zero_division=0))
+            metrics['recall'].append(recall_score(expected, predicted, average='macro', zero_division=0))
 
         return metrics
 
@@ -148,7 +148,7 @@ class RunManager:
 
         self.model.train()
         total_loss = []
-        total_metrics = {}
+        total_metrics = {"dice": [], "iou": [], "precision": [], "recall": []}
 
         for images, masks in self.train_loader:
 
@@ -169,7 +169,7 @@ class RunManager:
                                        dim=1).argmax(dim=1)
                 exp_masks = masks.argmax(dim=1)
                 b_m = self._scores(pred_masks, exp_masks)
-                total_metrics = {key: b_m[key] for key in total_metrics.keys()}
+                total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -194,7 +194,7 @@ class RunManager:
 
         self.model.eval()
         total_loss = []
-        total_metrics = {}
+        total_metrics = {"dice": [], "iou": [], "precision": [], "recall": []}
 
         with torch.no_grad():
             for images, masks in self.eval_loader:
@@ -215,7 +215,7 @@ class RunManager:
                     # print("PRED_MASKS !!!  :", pred_masks.shape)
                     # print("MASKS !!!  :", masks.shape)
                     b_m = self._scores(pred_masks, exp_masks)
-                    total_metrics = {key: b_m[key] for key in total_metrics.keys()}
+                    total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     print("Saving predictions is not implemented yet")
