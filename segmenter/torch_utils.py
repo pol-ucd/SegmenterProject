@@ -167,7 +167,8 @@ class RunManager:
                 total_loss += [loss.item()]
                 pred_masks = F.softmax(logits,
                                        dim=1).argmax(dim=1)
-                b_m = self._scores(pred_masks, masks)
+                exp_masks = masks.argmax(dim=1)
+                b_m = self._scores(pred_masks, exp_masks)
                 total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
             self.optimizer.zero_grad()
@@ -210,9 +211,10 @@ class RunManager:
 
                     pred_masks = F.softmax(logits,
                                            dim=1).argmax(dim=1)
-                    print("PRED_MASKS !!!  :", pred_masks.shape)
-                    print("MASKS !!!  :", masks.shape)
-                    b_m = self._scores(pred_masks, masks)
+                    exp_masks = masks.argmax(dim=1)
+                    # print("PRED_MASKS !!!  :", pred_masks.shape)
+                    # print("MASKS !!!  :", masks.shape)
+                    b_m = self._scores(pred_masks, exp_masks)
                     total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
                 if self.save_preds is True and self.save_preds_path is not None:
