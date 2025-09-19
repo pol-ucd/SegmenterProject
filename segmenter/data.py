@@ -111,6 +111,7 @@ class HDF5ImageDataset(Dataset):
             image_size (tuple): The target size (height, width) for resizing/cropping.
             n_augment (int): The number of augmented versions to create for each
                              training sample.
+
         """
         self.hdf5_path = hdf5_path
         self.split_indices = indices
@@ -124,6 +125,7 @@ class HDF5ImageDataset(Dataset):
         self.hdf5_file = None
         self.images = None
         self.masks = None
+        self.original_names = None
 
     def _open_hdf5_file(self):
         """
@@ -133,7 +135,6 @@ class HDF5ImageDataset(Dataset):
         self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True)
         self.images = self.hdf5_file['images']
         self.masks = self.hdf5_file['masks']
-        # self.original_shapes = self.hdf5_file['original_shapes']
 
     def __len__(self):
         """Returns the number of samples in the current split."""
@@ -231,7 +232,8 @@ class HDF5ImageDataset(Dataset):
         # Final conversion of mask to Long Tensor for loss functions
         mask_tensor = mask_tensor.to(torch.long)
 
-        return image_tensor, mask_tensor  #, original_shape
+        return image_tensor, mask_tensor
+
 
 
 # The rest of the script remains the same, but with the modified usage in the main block.

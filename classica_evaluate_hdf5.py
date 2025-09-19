@@ -2,6 +2,7 @@ import glob
 import json
 import logging
 import os
+import random
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 import torch
+from sklearn.model_selection import KFold
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
@@ -90,6 +92,11 @@ def main():
         logger.error(f"Error decoding JSON from {params_file}: {e}")
         return
 
+    # Control all the random seeds we will use for reproducibility
+    torch.manual_seed(42)
+    np.random.seed(42)
+    random.seed(42)
+
     model_params = params['model']['params']
     pretrained_model = model_params['pretrained_model']
 
@@ -104,7 +111,6 @@ def main():
 
     """ Configure the run """
     run_params = params['run']
-    test_split = run_params['test_split']
     num_classes = run_params['num_classes']
     batch_size = run_params['batch_size']
     num_workers = run_params['num_workers']
@@ -119,7 +125,7 @@ def main():
 
     """ Data settings """
     hdf5_path = params["datasets"]["hdf5_dir"]
-    hdf5_files = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]]
+    hdf5_file = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]][0]
     logger.info(f"Loaded parameters: {params}")
 
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
@@ -130,170 +136,160 @@ def main():
     train_datasets = []
     test_datasets = []
 
-    n_records = 0
-    for hdf5_file in hdf5_files:
+    test_sizes = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    metrics = {"case": [],
+               "test_split": [],
+               "test_iteration": []
+               "dice": [],
+               "iou": [],
+               "precision": [],
+               "recall": []}
+
+    with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
+        original_names_hdf = hdf['original_name']
+    original_names = np.array([h.decode('utf-8') for h in original_names_hdf])
+
+    for test_split in test_sizes:
+        n_records = 0
+        n_iters = 1//test_split
+        kf = KFold(n_splits=n_iters, shuffle=True, random_state=42)
+
         len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
-        # Ensure reproducibility of training and test with a fixed seed
-        # torch.manual_seed(42)
-        # shuffled_indices = torch.randperm(len_hdf5)
-        # test_indices = shuffled_indices[:int(len_hdf5 * test_split)]
-        # train_indices = shuffled_indices[int(len_hdf5 * test_split):]
-        with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
-            original_name_hdf = hdf['original_name']
-            original_name_np = np.array([h.decode('utf-8') for h in original_name_hdf])
+        shuffled_indices = np.random.permutation(len_hdf5)
 
-            rng = np.random.default_rng(42)
-            shuffled_indices = rng.permutation(len(classica_names))
-            """ Only add test_split % to the training set """
-            # classica_train_indices = shuffled_indices[:int(len(classica_names) * test_split)]
-            classica_test_indices = shuffled_indices[int(len(classica_names) * test_split):]
-            classica_names_np = np.array(classica_names)
-            classica_test_names = classica_names_np[classica_test_indices]
+        for idx, (train_index, test_index) in enumerate(kf.split(shuffled_indices)):
+            test_names = original_names[test_index]
+            train_names = original_names[train_index]
 
-            # train_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_test_names]
-            # test_indices = [idx for idx, name in enumerate(original_name_np) if name in classica_test_names]
-            shuffled_indices = [idx for idx, name in enumerate(original_name_np) if name not in classica_test_names]
-            len_shuffled = len(shuffled_indices)
-            test_indices = shuffled_indices[:int(len_shuffled * test_split)]
-            train_indices = shuffled_indices[int(len_shuffled * test_split):]
+            if test_split > 0:
+                final_train_dataset = HDF5ImageDataset(
+                    hdf5_path=hdf5_file,
+                    indices=train_index,
+                    is_train_split=True,
+                    image_size=image_size,
+                    n_augment=n_augments
+                )
+            else:
+                final_train_dataset = None
 
-            train_indices = torch.LongTensor(train_indices)
-            test_indices = torch.LongTensor(test_indices)
+            final_test_dataset = HDF5ImageDataset(
+                hdf5_path=hdf5_file,
+                indices=test_index,
+                is_train_split=False,
+                image_size=image_size,
+                n_augment=0
+            )
 
+            logger.info(f"Starting fold [{idx+1}/{n_iters}] for test split [{test_split}].")
 
-        train_datasets.append(HDF5ImageDataset(
-            hdf5_path=hdf5_file,
-            indices=train_indices,
-            is_train_split=True,
-            image_size=image_size,
-            n_augment=n_augments
-        ))
+            if final_train_dataset is not None:
+                train_loader = DataLoader(
+                    final_train_dataset,
+                    batch_size=batch_size,
+                    shuffle=False, # Already randomly shuffled
+                    num_workers=num_workers
+                )
+            else:
+                train_loader = None
 
+            test_loader = DataLoader(
+                final_test_dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers
+            )
+            logger.info(f"Successfully loaded training and testing dataset for {n_records} records.")
+            if train_loader is not None:
+                logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
+            else:
+                logger.info(f"No training records in this batch.")
+            logger.info(f"Number of batches in the test DataLoader: {len(test_loader)}")
 
-        test_datasets.append(HDF5ImageDataset(
-            hdf5_path=hdf5_file,
-            indices=test_indices,
-            is_train_split=False,
-            image_size=image_size,
-            n_augment=0
-        ))
-
-        n_records += len_hdf5
-    logger.info(f"Using {n_records} total records for training and testing.")
-
-    final_train_dataset = train_datasets[0]
-    final_test_dataset = test_datasets[0]
-
-    train_loader = DataLoader(
-        final_train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers
-    )
-    test_loader = DataLoader(
-        final_test_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers
-    )
-    logger.info(f"Successfully loaded training and testing dataset for {n_records} records.")
-    logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
-    logger.info(f"Number of batches in the test DataLoader: {len(test_loader)}")
-
-    cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
-                                   prefix=checkpoint_prefix,
-                                   patience=checkpoint_patience,
-                                   min_delta=checkpoint_min_delta)
-    """
-    Setup the model 
-    """
-    model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
-    # model = AugurSegformerSegmentation(pretrained_model=None,
-                                       num_classes=num_classes)
-
-    latest_checkpoint = None
-    try:
-        # Get the list of saved checkpoints
-        checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
-        if checkpoints:
-            latest_checkpoint = checkpoints[-1]
-            cp_manager.load(model, latest_checkpoint, device=device)
-            logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
-        else:
-            logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
-    except FileNotFoundError as e:
-        logger.info(f"Unable to load checkpoint {e}")
-
-    model.to(device)
-    loss_params = params['loss_function']
-    loss_fn = HybridLoss(loss_params['params'])
-
-    # Initial freeze all parameters of the model
-    # logger.info("Freezing encoder layers...")
-    # for param in model.base_model.parameters():
-    #     param.requires_grad = False
-    #
-    # # Unfreeze the decoder head and segmentation head because we replaced these
-    # logger.info("Unfreezing decoder and segmentation head...")
-    # for param in model.base_model.decode_head.parameters():
-    #     param.requires_grad = True
-
-    # Only pass the parameters that require gradients to the optimizer
-    optimizer = torch.optim.AdamW(
-        # params=filter(lambda p: p.requires_grad, model.parameters()),
-        params=model.parameters(),
-        lr=learning_rate,
-        # weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
-    )
-
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
+            cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
+                                           prefix=checkpoint_prefix,
+                                           patience=checkpoint_patience,
+                                           min_delta=checkpoint_min_delta)
+            """
+            Setup the model 
+            """
+            model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
+            # model = AugurSegformerSegmentation(pretrained_model=None,
+                                               num_classes=num_classes)
 
 
-    """
-    Only use GradScaler if we have CUDA
-    """
-    scaler = None
-    if torch.cuda.is_available():
-        scaler = GradScaler()
+            try:
+                # Get the list of saved checkpoints
+                checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
+                if checkpoints:
+                    latest_checkpoint = checkpoints[-1]
+                    cp_manager.load(model, latest_checkpoint, device=device)
+                    logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
+                else:
+                    latest_checkpoint = None
+                    logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
+            except FileNotFoundError as e:
+                logger.info(f"Unable to load checkpoint {e}")
+                latest_checkpoint = None
+
+            model.to(device)
+            loss_params = params['loss_function']
+            loss_fn = HybridLoss(loss_params['params'])
+
+            # Only pass the parameters that require gradients to the optimizer
+            optimizer = torch.optim.AdamW(
+                # params=filter(lambda p: p.requires_grad, model.parameters()),
+                params=model.parameters(),
+                lr=learning_rate,
+                # weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
+            )
+
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
+
+            """
+            Only use GradScaler if we have CUDA
+            """
+            scaler = None
+            if torch.cuda.is_available():
+                scaler = GradScaler()
 
 
 
-    trainer = RunManager(model,
-                         optimizer,
-                         criterion=loss_fn,
-                         scaler=scaler,
-                         scheduler=scheduler,
-                         train_loader=train_loader,
-                         eval_loader=test_loader,
-                         save_preds=False,
-                         save_preds_path="",
-                         config_path=params_file
-                         )
-    train_params = {}
-    eval_params = {}
+            trainer = RunManager(model,
+                                 optimizer,
+                                 criterion=loss_fn,
+                                 scaler=scaler,
+                                 scheduler=scheduler,
+                                 train_loader=train_loader,
+                                 eval_loader=test_loader,
+                                 save_preds=False,
+                                 save_preds_path="",
+                                 config_path=params_file
+                                 )
+            train_params = {}
+            eval_params = {}
 
-    for epoch in range(n_epochs):
-        logger.info(f"Epoch {epoch + 1}/{n_epochs}")
+            for epoch in range(n_epochs):
+                logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
-        train_metrics = trainer.train(**train_params)
-        val_metrics = trainer.evaluate(**eval_params)
+                if test_split > 0:
+                    train_metrics = trainer.train(**train_params)
+                    train_loss = train_metrics['loss']
+                    train_miou = train_metrics['iou']
+                    train_dice = train_metrics['dice']
+                    logger.info(
+                        f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
 
-        train_loss = train_metrics['loss']
-        train_miou = train_metrics['iou']
-        train_dice = train_metrics['dice']
-        val_loss = val_metrics['loss']
-        val_miou = val_metrics['iou']
-        val_dice = val_metrics['dice']
+                val_metrics = trainer.evaluate(**eval_params)
+                val_loss = val_metrics['loss']
+                val_miou = val_metrics['iou']
+                val_dice = val_metrics['dice']
+                logger.info(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
 
-        logger.info(f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
-        logger.info(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
-
-        # scheduler.step(epoch + 1)
-
-        stop_training = cp_manager.save(model, 1 - val_miou)
-        if stop_training:
-            logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
-            break
+                stop_training = cp_manager.save(model, 1 - val_miou,
+                                                prefix=f"split_{test_split}_iteration_{idx}")
+                if stop_training:
+                    logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
+                    break
 
 
 if __name__ == "__main__":

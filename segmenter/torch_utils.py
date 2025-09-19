@@ -10,7 +10,6 @@ from datetime import datetime
 import numpy as np
 import torch
 from torch import autocast, nn
-from torch.amp import GradScaler
 
 from segmenter.modules import LossFactory, HybridLoss, ImageLightingAugmentation
 
@@ -226,154 +225,154 @@ Manages the training and evaluation loop for a PyTorch model.
     instantiating the model, optimizer, criterion, and data loaders.
 
 """
-class RunManager2:
-    def __init__(self,
-                 config_path: str = None,
-                 logger: logging.Logger = None):
-        self.logger = logger if logger is not None else logging.getLogger(__name__)
-
-        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-        self.config = self._load_config(config_path)
-        self.n_gpus = self.config['max_gpu']
-        if self.n_gpus > torch.cuda.device_count():
-            self.n_gpus = torch.cuda.device_count()
-            self.logger.warning(f"The number of GPUs requested: {self.config['max_gpu']} exceeds the number of "
-                                f"available GPUs: {self.n_gpus}. Using {self.n_gpus} available GPUs.")
-
-        """
-        Only use GradScaler if we have CUDA
-        """
-        do_grad_scaling = self.config['do_grad_scaling']
-        self.scaler = None
-        if torch.cuda.is_available() and do_grad_scaling:
-            self.scaler = GradScaler()
-            self.logger.info("Using GradScaler for gradient scaling")
-
-        model_class = get_module_class(self.config['model']['name'])
-        self.model = model_class(self.config['model']['params'])
-        self.logger.info(f"Using model {self.config['model']['name']}")
-
-        if self.n_gpus > 1:
-            self.model = torch.nn.DataParallel(self.model)
-            self.logger.info(f"Using torch.nn.DataParallel on {self.n_gpus} GPUs")
-        self.model.to(self.device)
-
-        optimizer_class = get_module_class(self.config['optimizer']['name'])
-        params = self.config['optimizer']['params']
-        self.optimizer = optimizer_class(params=self.model.parameters(), **params)
-
-        loss_fn_class = get_module_class(self.config['loss_function']['name'])
-        params = self.config['loss_function']['params']
-        self.loss_fn = loss_fn_class(**params)
-
-        """ Here """
-
-        self.scheduler = scheduler
-
-        self.train_loader = train_loader
-
-        if eval_loader is None and train_loader is None:
-            raise ValueError('Please provide at least one valid training or validation data loader')
-        self.eval_loader = eval_loader
-
-        if save_preds is True and save_preds_path is not None:
-            self.save_preds = save_preds
-            self.save_preds_path = save_preds_path
-        else:
-            self.save_preds = False
-
-        self.dice_loss_fn = LossFactory.create('dice')
-        self.iou_loss_fn = LossFactory.create('iou')
-
-    def _load_config(self, config_path):
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Configuration file not found at: {config_path}")
-        with open(config_path, 'r') as f:
-            return json.load(f)
-
-
-    def train(self, **train_params: object) -> dict[str, float]:
-        """
-        Trains one epoch using the data provided in self.train_loader
-        :return: total loss and dice score
-        """
-
-        self.model.train()
-        total_loss = []
-        total_dice_loss = []
-        total_iou_loss = []
-        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
-
-        for images, masks in self.train_loader:
-
-            if images.device != self.device:
-                images = images.to(self.device)
-
-            if masks.device != self.device:
-                masks = masks.to(self.device)
-            images = light_aug(images)
-
-            with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-                logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
-
-                loss = self.loss_fn(logits, masks) # Mask: [B, H, W]
-                total_loss += [loss.item()]
-                total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
-                total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
-
-            self.optimizer.zero_grad()
-            if self.scaler is not None:
-                self.scaler.scale(loss).backward() # Fails on MPS, works on CPU/CUDA
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                loss.backward()
-                self.optimizer.step()
-        if self.scheduler is not None:
-            self.scheduler.step()
-
-        total_metrics['loss'] = np.mean(total_loss)
-        total_metrics['dice'] = np.mean(total_dice_loss)
-        total_metrics['iou'] = np.mean(total_iou_loss)
-
-        return total_metrics
-
-    def evaluate(self, **eval_params: object) -> dict[str, float]:
-        """
-        Evaluate using the data provided in self.eval_loader
-        :return: total loss and dice score
-        """
-
-        self.model.eval()
-        total_loss = []
-        total_dice_loss = []
-        total_iou_loss = []
-        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
-
-        with torch.no_grad():
-            for images, masks in self.eval_loader:
-                if images.device != self.device:
-                    images = images.to(self.device)
-
-                if masks.device != self.device:
-                    masks = masks.to(self.device)
-
-                with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-                    logits = self.model(pixel_values=images)
-                    loss = self.loss_fn(logits, masks)
-
-                    total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
-                    total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
-                    total_loss += [loss.item()]
-
-                if self.save_preds is True and self.save_preds_path is not None:
-                    print("Saving predictions is not implemented yet")
-
-            total_metrics['loss'] = np.mean(total_loss)
-            total_metrics['dice'] = np.mean(total_dice_loss)
-            total_metrics['iou'] = np.mean(total_iou_loss)
-
-        return total_metrics
+# class RunManager2:
+#     def __init__(self,
+#                  config_path: str = None,
+#                  logger: logging.Logger = None):
+#         self.logger = logger if logger is not None else logging.getLogger(__name__)
+#
+#         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+#         self.config = self._load_config(config_path)
+#         self.n_gpus = self.config['max_gpu']
+#         if self.n_gpus > torch.cuda.device_count():
+#             self.n_gpus = torch.cuda.device_count()
+#             self.logger.warning(f"The number of GPUs requested: {self.config['max_gpu']} exceeds the number of "
+#                                 f"available GPUs: {self.n_gpus}. Using {self.n_gpus} available GPUs.")
+#
+#         """
+#         Only use GradScaler if we have CUDA
+#         """
+#         do_grad_scaling = self.config['do_grad_scaling']
+#         self.scaler = None
+#         if torch.cuda.is_available() and do_grad_scaling:
+#             self.scaler = GradScaler()
+#             self.logger.info("Using GradScaler for gradient scaling")
+#
+#         model_class = get_module_class(self.config['model']['name'])
+#         self.model = model_class(self.config['model']['params'])
+#         self.logger.info(f"Using model {self.config['model']['name']}")
+#
+#         if self.n_gpus > 1:
+#             self.model = torch.nn.DataParallel(self.model)
+#             self.logger.info(f"Using torch.nn.DataParallel on {self.n_gpus} GPUs")
+#         self.model.to(self.device)
+#
+#         optimizer_class = get_module_class(self.config['optimizer']['name'])
+#         params = self.config['optimizer']['params']
+#         self.optimizer = optimizer_class(params=self.model.parameters(), **params)
+#
+#         loss_fn_class = get_module_class(self.config['loss_function']['name'])
+#         params = self.config['loss_function']['params']
+#         self.loss_fn = loss_fn_class(**params)
+#
+#         """ Here """
+#
+#         self.scheduler = scheduler
+#
+#         self.train_loader = train_loader
+#
+#         if eval_loader is None and train_loader is None:
+#             raise ValueError('Please provide at least one valid training or validation data loader')
+#         self.eval_loader = eval_loader
+#
+#         if save_preds is True and save_preds_path is not None:
+#             self.save_preds = save_preds
+#             self.save_preds_path = save_preds_path
+#         else:
+#             self.save_preds = False
+#
+#         self.dice_loss_fn = LossFactory.create('dice')
+#         self.iou_loss_fn = LossFactory.create('iou')
+#
+#     def _load_config(self, config_path):
+#         if not os.path.exists(config_path):
+#             raise FileNotFoundError(f"Configuration file not found at: {config_path}")
+#         with open(config_path, 'r') as f:
+#             return json.load(f)
+#
+#
+#     def train(self, **train_params: object) -> dict[str, float]:
+#         """
+#         Trains one epoch using the data provided in self.train_loader
+#         :return: total loss and dice score
+#         """
+#
+#         self.model.train()
+#         total_loss = []
+#         total_dice_loss = []
+#         total_iou_loss = []
+#         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
+#
+#         for images, masks in self.train_loader:
+#
+#             if images.device != self.device:
+#                 images = images.to(self.device)
+#
+#             if masks.device != self.device:
+#                 masks = masks.to(self.device)
+#             images = light_aug(images)
+#
+#             with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+#                 logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
+#
+#                 loss = self.loss_fn(logits, masks) # Mask: [B, H, W]
+#                 total_loss += [loss.item()]
+#                 total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
+#                 total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
+#
+#             self.optimizer.zero_grad()
+#             if self.scaler is not None:
+#                 self.scaler.scale(loss).backward() # Fails on MPS, works on CPU/CUDA
+#                 self.scaler.step(self.optimizer)
+#                 self.scaler.update()
+#             else:
+#                 loss.backward()
+#                 self.optimizer.step()
+#         if self.scheduler is not None:
+#             self.scheduler.step()
+#
+#         total_metrics['loss'] = np.mean(total_loss)
+#         total_metrics['dice'] = np.mean(total_dice_loss)
+#         total_metrics['iou'] = np.mean(total_iou_loss)
+#
+#         return total_metrics
+#
+#     def evaluate(self, **eval_params: object) -> dict[str, float]:
+#         """
+#         Evaluate using the data provided in self.eval_loader
+#         :return: total loss and dice score
+#         """
+#
+#         self.model.eval()
+#         total_loss = []
+#         total_dice_loss = []
+#         total_iou_loss = []
+#         total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
+#
+#         with torch.no_grad():
+#             for images, masks in self.eval_loader:
+#                 if images.device != self.device:
+#                     images = images.to(self.device)
+#
+#                 if masks.device != self.device:
+#                     masks = masks.to(self.device)
+#
+#                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+#                     logits = self.model(pixel_values=images)
+#                     loss = self.loss_fn(logits, masks)
+#
+#                     total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
+#                     total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
+#                     total_loss += [loss.item()]
+#
+#                 if self.save_preds is True and self.save_preds_path is not None:
+#                     print("Saving predictions is not implemented yet")
+#
+#             total_metrics['loss'] = np.mean(total_loss)
+#             total_metrics['dice'] = np.mean(total_dice_loss)
+#             total_metrics['iou'] = np.mean(total_iou_loss)
+#
+#         return total_metrics
 
 
 
@@ -428,7 +427,7 @@ class CheckpointManager:
         self.stop_training = False
         self.logger.info(f"Checkpoint manager loaded with prefix: {self.prefix} and timestamp: {self.timestamp}")
 
-    def save(self, model, current_accuracy) -> bool:
+    def save(self, model, current_accuracy, prefix:str=None) -> bool:
         """
         Saves the model checkpoint if the current accuracy is the best seen so far.
 
@@ -448,9 +447,13 @@ class CheckpointManager:
 
             # Generate a timestamp for the filename
             filename = f"{self.prefix}_{self.timestamp}.pt"
+            if prefix is not None:
+                filename = f"{prefix}_{filename}"
             filepath = os.path.join(self.checkpoint_dir, filename)
 
             json_filename =  f"{self.prefix}_{self.timestamp}.json"
+            if prefix is not None:
+                json_filename = f"{prefix}_{json_filename}"
             json_filepath = os.path.join(self.checkpoint_dir, json_filename)
             json_data = {"best_accuracy": current_accuracy,
                          "timestamp": self.timestamp,
