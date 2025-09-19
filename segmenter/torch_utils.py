@@ -207,7 +207,7 @@ class RunManager:
                     logits = self.model(pixel_values=images)
                     loss = self.criterion(logits, masks)
                     total_loss += [loss.item()]
-                    print("LOGITS!!!  :"logits.shape)
+                    print("LOGITS!!!  :", logits.shape)
                     pred_masks = F.softmax(logits,
                                            dim=1).argmax(dim=0)
                     b_m = self._scores(pred_masks, masks)
