@@ -9,7 +9,9 @@ from datetime import datetime
 
 import numpy as np
 import torch
+from sklearn.metrics import f1_score, jaccard_score, precision_score, recall_score
 from torch import autocast, nn
+from torch.nn import functional as F
 
 from segmenter.modules import LossFactory, HybridLoss, ImageLightingAugmentation
 
@@ -114,19 +116,39 @@ class RunManager:
         with open(config_path, 'r') as f:
             return json.load(f)
 
+    def _scores(self, predicted_mask, expected_mask):
+        metrics = {"dice": [],
+                   "iou": [],
+                   "precision": [],
+                   "recall": []}
+        b, c, h, w = predicted_mask.shape
 
-    def train(self, **train_params: object) -> dict[str, float]:
+        predicted_mask = predicted_mask.cpu().detach().numpy()
+        expected_mask = expected_mask.cpu().detach().numpy()
+        for batch in range(b):
+            predicted = predicted_mask[batch].reshape(-1)
+            expected = expected_mask[batch].reshape(-1)
+
+            metrics['dice'].append(f1_score(expected, predicted, average='macro'))
+            metrics['iou'].append(jaccard_score(expected, predicted, average='macro'))
+            metrics['precision'].append(precision_score(expected, predicted, average='macro'))
+            metrics['recall'].append(recall_score(expected, predicted, average='macro'))
+
+        return metrics
+
+
+    def train(self, **train_params: object) -> dict[str, list]:
         """
         Trains one epoch using the data provided in self.train_loader
+
+        aggr
         :return: total loss and dice score
         """
         light_aug = ImageLightingAugmentation().to(self.device)
 
         self.model.train()
         total_loss = []
-        total_dice_loss = []
-        total_iou_loss = []
-        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
+        total_metrics = {}
 
         for images, masks in self.train_loader:
 
@@ -143,8 +165,10 @@ class RunManager:
 
                 loss = self.criterion(logits, masks) # Mask: [B, H, W]
                 total_loss += [loss.item()]
-                total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
-                total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
+                pred_masks = F.softmax(logits,
+                                       dim=1).argmax(dim=1)
+                b_m = self._scores(pred_masks, masks)
+                total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
@@ -158,12 +182,10 @@ class RunManager:
             self.scheduler.step()
 
         total_metrics['loss'] = np.mean(total_loss)
-        total_metrics['dice'] = np.mean(total_dice_loss)
-        total_metrics['iou'] = np.mean(total_iou_loss)
 
         return total_metrics
 
-    def evaluate(self, **eval_params: object) -> dict[str, float]:
+    def evaluate(self, **eval_params: object) -> dict[str, list]:
         """
         Evaluate using the data provided in self.eval_loader
         :return: total loss and dice score
@@ -171,9 +193,7 @@ class RunManager:
 
         self.model.eval()
         total_loss = []
-        total_dice_loss = []
-        total_iou_loss = []
-        total_metrics = {'loss': 0.0, 'dice': 0.0, 'iou': 0.0, 'precision': 0.0, 'recall': 0.0}
+        total_metrics = {}
 
         with torch.no_grad():
             for images, masks in self.eval_loader:
@@ -186,17 +206,16 @@ class RunManager:
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     logits = self.model(pixel_values=images)
                     loss = self.criterion(logits, masks)
-
-                    total_dice_loss += [self.dice_loss_fn(logits, masks.squeeze(1)).item()]
-                    total_iou_loss += [self.iou_loss_fn(logits, masks.squeeze(1)).item()]
                     total_loss += [loss.item()]
+                    pred_masks = F.softmax(logits,
+                                           dim=1).argmax(dim=1)
+                    b_m = self._scores(pred_masks, masks)
+                    total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
                 if self.save_preds is True and self.save_preds_path is not None:
                     print("Saving predictions is not implemented yet")
 
             total_metrics['loss'] = np.mean(total_loss)
-            total_metrics['dice'] = np.mean(total_dice_loss)
-            total_metrics['iou'] = np.mean(total_iou_loss)
 
         return total_metrics
 

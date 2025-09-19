@@ -152,7 +152,7 @@ def main():
 
     for test_split in test_sizes:
 
-        n_iters = 1//test_split if test_split > 0 else 1
+        n_iters = int(1/test_split) if test_split > 0 else 1
 
         folds = []
         if test_split > 0:
@@ -234,7 +234,6 @@ def main():
             # model = AugurSegformerSegmentation(pretrained_model=None,
                                                num_classes=num_classes)
 
-
             try:
                 # Get the list of saved checkpoints
                 checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
@@ -270,8 +269,6 @@ def main():
             if torch.cuda.is_available():
                 scaler = GradScaler()
 
-
-
             trainer = RunManager(model,
                                  optimizer,
                                  criterion=loss_fn,
@@ -292,28 +289,44 @@ def main():
                 if test_split > 0:
                     train_metrics = trainer.train(**train_params)
                     train_loss = train_metrics['loss']
-                    train_miou = train_metrics['iou']
+                    train_iou = train_metrics['iou']
+                    train_miou = np.mean(train_iou)
                     train_dice = train_metrics['dice']
+                    train_mdice = np.mean(train_dice)
+                    train_precision = train_metrics['precision']
+                    train_recall = train_metrics['recall']
                     logger.info(
-                        f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_dice:.4f} | IOU: {train_miou:.4f}")
+                        f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_mdice:.4f} | IOU: {train_miou:.4f}")
 
                 val_metrics = trainer.evaluate(**eval_params)
                 val_loss = val_metrics['loss']
-                val_miou = val_metrics['iou']
+                val_iou = val_metrics['iou']
+                val_miou = np.mean(val_iou)
                 val_dice = val_metrics['dice']
-                logger.info(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_dice:.4f} | IOU: {val_miou:.4f}")
+                val_mdice = np.mean(val_dice)
+                val_precision = val_metrics['precision']
+                val_recall = val_metrics['recall']
+                logger.info(f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_mdice:.4f} | IOU: {val_miou:.4f}")
+
+
 
                 stop_training = cp_manager.save(model, 1 - val_miou,
                                                 prefix=f"split_{test_split}_iteration_{idx}")
                 if stop_training:
                     logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
+                    if test_split > 0:
+                        metrics['loss'] = val_loss
+                        metrics["dice"] = val_dice + train_dice
+                        metrics["iou"] = val_iou + train_iou
+                        metrics["precision"] = val_precision + train_precision
+                        metrics["recall"] = val_recall + train_recall
+                    else:
+                        metrics['loss'] = val_loss
+                        metrics["dice"] = val_dice
+                        metrics["iou"] = val_iou
+                        metrics["precision"] = val_precision
+                        metrics["recall"] = val_recall
                     break
-
-            """ Set to zero until I figure out how to capture them """
-            metrics["dice"] = [0.0]*n_records
-            metrics["iou"] = [0.0]*n_records
-            metrics["precision"] = [0.0]*n_records
-            metrics["recall"] = [0.0]*n_records
 
     pd.DataFrame(metrics).to_csv(f"classica_evaluate_metrics_{timestamp}.csv")
 
