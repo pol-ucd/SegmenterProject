@@ -166,7 +166,7 @@ class RunManager:
                 loss = self.criterion(logits, masks) # Mask: [B, H, W]
                 total_loss += [loss.item()]
                 pred_masks = F.softmax(logits,
-                                       dim=1).argmax(dim=1)
+                                       dim=1).argmax(dim=0)
                 b_m = self._scores(pred_masks, masks)
                 total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
@@ -208,7 +208,7 @@ class RunManager:
                     loss = self.criterion(logits, masks)
                     total_loss += [loss.item()]
                     pred_masks = F.softmax(logits,
-                                           dim=1).argmax(dim=1)
+                                           dim=1).argmax(dim=0)
                     b_m = self._scores(pred_masks, masks)
                     total_metrics = {key: value.append(b_m[key]) for key, value in total_metrics.items()}
 
