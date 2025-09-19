@@ -152,7 +152,8 @@ def main():
 
     for test_split in test_sizes:
 
-        n_iters = 1//test_split
+        n_iters = 1//test_split if test_split > 0 else 1
+
         kf = KFold(n_splits=n_iters, shuffle=True, random_state=42)
 
         len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
