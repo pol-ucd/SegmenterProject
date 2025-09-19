@@ -135,10 +135,6 @@ def main():
     logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
-    # Now we correctly split the indices and create new datasets
-    train_datasets = []
-    test_datasets = []
-
     test_sizes = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     metrics = {"case": [],
                "test_split": [],
@@ -151,6 +147,7 @@ def main():
 
     with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
         original_names_hdf = hdf['original_name']
+        print(original_names_hdf)
     original_names = np.array([h.decode('utf-8') for h in original_names_hdf])
     n_records = len(original_names)
 
