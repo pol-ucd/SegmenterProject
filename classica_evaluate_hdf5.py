@@ -154,20 +154,28 @@ def main():
 
         n_iters = 1//test_split if test_split > 0 else 1
 
-        kf = KFold(n_splits=n_iters, shuffle=True, random_state=42)
+        folds = []
+        if test_split > 0:
+            kf = KFold(n_splits=n_iters, shuffle=True, random_state=42)
 
-        len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
-        shuffled_indices = np.random.permutation(len_hdf5)
+            len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
+            shuffled_indices = np.random.permutation(len_hdf5)
+            for train_index, test_index in kf.split(shuffled_indices):
+                folds.append((train_index, test_index))
+        else:
+            folds = [([],list(range(n_records)))]
 
-        for idx, (train_index, test_index) in enumerate(kf.split(shuffled_indices)):
+
+        for idx, (train_index, test_index) in enumerate(folds):
             test_names = original_names[test_index]
-            train_names = original_names[train_index]
             metrics["case"].append(test_names.tolist())
             metrics["is_test"].append([1] * len(test_names))
-            metrics["case"].append(train_names.tolist())
-            metrics["is_test"].append([0] * len(train_names))
-            metrics["test_split"].append([test_split]*n_records)
-            metrics["test_iteration"].append([idx]*n_records)
+            if test_split > 0:
+                train_names = original_names[train_index]
+                metrics["case"].append(train_names.tolist())
+                metrics["is_test"].append([0] * len(train_names))
+                metrics["test_split"].append([test_split]*n_records)
+                metrics["test_iteration"].append([idx]*n_records)
 
 
 
