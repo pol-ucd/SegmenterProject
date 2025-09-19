@@ -326,6 +326,9 @@ def main():
                         metrics["recall"] = val_recall
                     break
 
+                if test_split == 0:
+                    break
+
     try:
         pd.DataFrame(metrics).to_csv(f"classica_evaluate_metrics_{timestamp}.csv")
     except Exception as e:
