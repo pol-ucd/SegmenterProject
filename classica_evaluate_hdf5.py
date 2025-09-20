@@ -135,7 +135,7 @@ def main():
     logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
-    test_sizes = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    test_sizes = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     metrics = {"case": [],
                "test_split": [],
                "test_iteration": [],

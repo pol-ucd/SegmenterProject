@@ -136,7 +136,6 @@ class RunManager:
 
         return metrics
 
-
     def train(self, **train_params: object) -> dict[str, list]:
         """
         Trains one epoch using the data provided in self.train_loader
@@ -149,41 +148,41 @@ class RunManager:
         self.model.train()
         total_loss = []
         total_metrics = {"dice": [], "iou": [], "precision": [], "recall": []}
+        if self.train_loader is not None:
+            for images, masks in self.train_loader:
 
-        for images, masks in self.train_loader:
+                if images.device != self.device:
+                    images = images.to(self.device)
 
-            if images.device != self.device:
-                images = images.to(self.device)
+                if masks.device != self.device:
+                    masks = masks.to(self.device)
 
-            if masks.device != self.device:
-                masks = masks.to(self.device)
+                images = light_aug(images)
 
-            images = light_aug(images)
+                with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+                    logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
 
-            with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-                logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
+                    loss = self.criterion(logits, masks) # Mask: [B, H, W]
+                    total_loss += [loss.item()]
+                    pred_masks = F.softmax(logits,
+                                           dim=1).argmax(dim=1)
+                    exp_masks = masks.argmax(dim=1)
+                    b_m = self._scores(pred_masks, exp_masks)
+                    for k, v in total_metrics.items():
+                        v += b_m[k]
 
-                loss = self.criterion(logits, masks) # Mask: [B, H, W]
-                total_loss += [loss.item()]
-                pred_masks = F.softmax(logits,
-                                       dim=1).argmax(dim=1)
-                exp_masks = masks.argmax(dim=1)
-                b_m = self._scores(pred_masks, exp_masks)
-                for k, v in total_metrics.items():
-                    v += b_m[k]
+                self.optimizer.zero_grad()
+                if self.scaler is not None:
+                    self.scaler.scale(loss).backward() # Fails on MPS, works on CPU/CUDA
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    loss.backward()
+                    self.optimizer.step()
+            if self.scheduler is not None:
+                self.scheduler.step()
 
-            self.optimizer.zero_grad()
-            if self.scaler is not None:
-                self.scaler.scale(loss).backward() # Fails on MPS, works on CPU/CUDA
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                loss.backward()
-                self.optimizer.step()
-        if self.scheduler is not None:
-            self.scheduler.step()
-
-        total_metrics['loss'] = np.mean(total_loss)
+        total_metrics['loss'] = np.mean(total_loss) if total_loss else None
 
         return total_metrics
 
@@ -197,30 +196,31 @@ class RunManager:
         total_loss = []
         total_metrics = {"dice": [], "iou": [], "precision": [], "recall": []}
 
-        with torch.no_grad():
-            for images, masks in self.eval_loader:
-                if images.device != self.device:
-                    images = images.to(self.device)
+        if self.eval_loader is not None:
+            with torch.no_grad():
+                for images, masks in self.eval_loader:
+                    if images.device != self.device:
+                        images = images.to(self.device)
 
-                if masks.device != self.device:
-                    masks = masks.to(self.device)
+                    if masks.device != self.device:
+                        masks = masks.to(self.device)
 
-                with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-                    logits = self.model(pixel_values=images)
-                    loss = self.criterion(logits, masks)
-                    total_loss += [loss.item()]
+                    with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+                        logits = self.model(pixel_values=images)
+                        loss = self.criterion(logits, masks)
+                        total_loss += [loss.item()]
 
-                    pred_masks = F.softmax(logits,
-                                           dim=1).argmax(dim=1)
-                    exp_masks = masks.argmax(dim=1)
-                    b_m = self._scores(pred_masks, exp_masks)
-                    for k, v in total_metrics.items():
-                        v += b_m[k]
+                        pred_masks = F.softmax(logits,
+                                               dim=1).argmax(dim=1)
+                        exp_masks = masks.argmax(dim=1)
+                        b_m = self._scores(pred_masks, exp_masks)
+                        for k, v in total_metrics.items():
+                            v += b_m[k]
 
-                if self.save_preds is True and self.save_preds_path is not None:
-                    print("Saving predictions is not implemented yet")
+                    if self.save_preds is True and self.save_preds_path is not None:
+                        print("Saving predictions is not implemented yet")
 
-            total_metrics['loss'] = np.mean(total_loss)
+        total_metrics['loss'] = np.mean(total_loss) if total_loss else None
 
         return total_metrics
 
