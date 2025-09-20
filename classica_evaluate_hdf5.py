@@ -125,12 +125,20 @@ def main():
             test_names = original_names[test_index]
             metrics["case"].append(test_names.tolist())
             metrics["is_test"].append([1] * len(test_names))
-            if train_index:
+            if len(train_index) > 0:
                 train_names = original_names[train_index]
                 metrics["case"].append(train_names.tolist())
                 metrics["is_test"].append([0] * len(train_names))
                 metrics["test_split"].append([test_split] * n_records)
                 metrics["test_iteration"].append([idx] * n_records)
+
+            final_test_dataset = HDF5ImageDataset(
+                hdf5_path=hdf5_file,
+                indices=test_index,
+                is_train_split=False,
+                image_size=image_size,
+                n_augment=0
+            )
 
             if len(train_index) > 0:
                 final_train_dataset = HDF5ImageDataset(
@@ -143,13 +151,6 @@ def main():
             else:
                 final_train_dataset = None
 
-            final_test_dataset = HDF5ImageDataset(
-                hdf5_path=hdf5_file,
-                indices=test_index,
-                is_train_split=False,
-                image_size=image_size,
-                n_augment=0
-            )
 
             logger.info(f"Starting fold [{idx + 1}/{n_iters}] for test split [{test_split}].")
 
