@@ -19,7 +19,6 @@ Loss is returned as a single mean loss per batch and class. If the calling funct
 needs per sample loss the returned loss should be multiplied by the batch size.
 
 """
-import logging
 from abc import abstractmethod, ABC
 from typing import Dict, Tuple
 
@@ -508,13 +507,6 @@ class SoftChamferLoss(BaseLoss):
             d_to_gt = self.dt.edt(e_gt_band)
             d_to_pred = self.dt.edt((e_pred > 0.01).float()).detach()
 
-            # --- NORMALIZATION ADDED HERE ---
-            # Normalizing distance maps to [0, 1] for stable loss values
-            # max_dist_to_gt = d_to_gt.amax(dim=(-1, -2), keepdim=True) + EPSILON
-            # max_dist_to_pred = d_to_pred.amax(dim=(-1, -2), keepdim=True) + EPSILON
-            # d_to_gt = d_to_gt / max_dist_to_gt
-            # d_to_pred = d_to_pred / max_dist_to_pred
-
             # Chamfer-style symmetric loss terms
             term_pred_to_gt = (e_pred * d_to_gt).sum(dim=(2, 3)) / (e_pred.sum(dim=(2, 3)) + EPSILON)
             term_gt_to_pred = (e_gt * d_to_pred).sum(dim=(2, 3)) / (e_gt.sum(dim=(2, 3)) + EPSILON)
@@ -582,7 +574,7 @@ class HybridLoss(BaseLoss):
             weight = config.pop('weight', 1.0)
             self.weights[name] = weight
             self.loss_functions[name] = LossFactory.create(name, **config)
-            logging.info(f"Initialized loss '{name}' with weight {weight} and config {config}")
+            # logging.info(f"Initialized loss '{name}' with weight {weight} and config {config}")
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         _ = super().setup(pred, target)
