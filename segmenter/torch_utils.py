@@ -165,7 +165,7 @@ class RunManager:
                     logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
 
                     loss = self.criterion(logits, masks) # Mask: [B, H, W]
-                    total_loss += [loss.item()]
+                    total_loss += [loss.item()/logits.shape[0]]
                     pred_masks = F.softmax(logits,
                                            dim=1).argmax(dim=1)
                     exp_masks = masks.argmax(dim=1)
@@ -210,7 +210,7 @@ class RunManager:
                     with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                         logits = self.model(pixel_values=images)
                         loss = self.criterion(logits, masks)
-                        total_loss += [loss.item()]
+                        total_loss += [loss.item()/logits.shape[0]]
 
                         pred_masks = F.softmax(logits,
                                                dim=1).argmax(dim=1)

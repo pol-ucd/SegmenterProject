@@ -581,13 +581,13 @@ class HybridLoss(BaseLoss):
         device = pred.device
 
         total_loss = torch.tensor(0.0, device=device)
+        total_weight = sum(v for v in self.weights.values())
         for name, loss_fn in self.loss_functions.items():
             current_loss = loss_fn(pred,
                                    self.targets)
             total_loss += self.weights[name] * current_loss
 
-        return total_loss
-
+        return total_loss/total_weight
 
 if __name__ == '__main__':
     # ---------------------------
