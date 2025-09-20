@@ -132,7 +132,7 @@ def main():
                 metrics["test_split"].append([test_split] * n_records)
                 metrics["test_iteration"].append([idx] * n_records)
 
-            if train_index:
+            if len(train_index) > 0:
                 final_train_dataset = HDF5ImageDataset(
                     hdf5_path=hdf5_file,
                     indices=train_index,
@@ -238,6 +238,9 @@ def main():
                                  )
             train_params = {}
             eval_params = {}
+
+            if test_split == 0:
+                n_epochs = 1
 
             for epoch in range(n_epochs):
                 logger.info(f"Epoch {epoch + 1}/{n_epochs}")
