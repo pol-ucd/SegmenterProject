@@ -151,7 +151,6 @@ def main():
             else:
                 final_train_dataset = None
 
-
             logger.info(f"Starting fold [{idx + 1}/{n_iters}] for test split [{test_split}].")
 
             if final_train_dataset is not None:
@@ -240,11 +239,12 @@ def main():
             train_params = {}
             eval_params = {}
 
-            if test_split == 0:
-                n_epochs = 1
 
             for epoch in range(n_epochs):
-                logger.info(f"Epoch {epoch + 1}/{n_epochs}")
+                if test_split == 0:
+                    logger.info(f"Epoch {epoch + 1}/1")
+                else:
+                    logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
                 if test_split > 0:
                     train_metrics = trainer.train(**train_params)
