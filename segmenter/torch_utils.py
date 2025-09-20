@@ -80,7 +80,8 @@ class RunManager:
                  eval_loader=None,
                  save_preds=False,
                  save_preds_path=None,
-                 config_path: str = None):
+                 config_path: str = None,
+                 verbose=False):
         self.device = get_default_device()
         self.config = self._load_config(config_path)
 
@@ -109,6 +110,7 @@ class RunManager:
             self.save_preds_path = save_preds_path
         else:
             self.save_preds = False
+        self.verbose = verbose
 
     def _load_config(self, config_path):
         if not os.path.exists(config_path):
@@ -430,7 +432,8 @@ class CheckpointManager:
     def __init__(self, checkpoint_dir: str,
                  prefix: str ="model_checkpoint",
                  patience: int = 5,
-                 min_delta: float = 0.0):
+                 min_delta: float = 0.0,
+                 verbose=False):
         self.logger = logging.getLogger(self.__class__.__name__)
         # Ensure the checkpoint directory exists and if not, revert to local
         self.checkpoint_dir = checkpoint_dir
@@ -449,7 +452,9 @@ class CheckpointManager:
         self.best_accuracy = float('-inf')  # Initialize with a very low value
         self.epochs_without_improvement = 0
         self.stop_training = False
-        self.logger.info(f"Checkpoint manager loaded with prefix: {self.prefix} and timestamp: {self.timestamp}")
+        self.verbose = verbose
+        if self.verbose:
+            self.logger.info(f"Checkpoint manager loaded with prefix: {self.prefix} and timestamp: {self.timestamp}")
 
     def save(self, model, current_accuracy, prefix:str=None) -> bool:
         """
@@ -489,17 +494,19 @@ class CheckpointManager:
             # Save the model's current best_accuracy for warm restart
             with open(json_filepath, 'w') as fp:
                 json.dump(json_data, fp, sort_keys=True, indent=4)
-
-            self.logger.info(f"Checkpoint saved: {filepath} with score: {current_accuracy:.4f}")
+            if self.verbose:
+                self.logger.info(f"Checkpoint saved: {filepath} with score: {current_accuracy:.4f}")
         else:
             # No significant improvement, increment the counter
             self.epochs_without_improvement += 1
-            self.logger.info(f"No improvement. Epochs without improvement: {self.epochs_without_improvement}")
+            if self.verbose:
+                self.logger.info(f"No improvement. Epochs without improvement: {self.epochs_without_improvement}")
 
         # Check if the patience limit has been reached
         if self.epochs_without_improvement >= self.patience:
             self.stop_training = True
-            self.logger.info(f"Early stopping triggered. Training will be stopped after this epoch.")
+            if self.verbose:
+                self.logger.info(f"Early stopping triggered. Training will be stopped after this epoch.")
 
         return self.stop_training
 
@@ -530,17 +537,20 @@ class CheckpointManager:
                     self.timestamp = json_data["timestamp"]
                 except KeyError:
                     pass
-                self.logger.info(f"Warm start with loss: {self.best_accuracy}")
+                if self.verbose:
+                    self.logger.info(f"Warm start with loss: {self.best_accuracy}")
         except FileNotFoundError:
             self.logger.warning(f"Checkpoint JSON configuration file not found: {json_filename}")
 
-        self.logger.info(f"Loading model parameters from checkpoint {filename}")
+        if self.verbose:
+            self.logger.info(f"Loading model parameters from checkpoint {filename}")
         # Load the state dictionary and apply it to the model
         model.load_state_dict(torch.load(filename,
                                          # map_location=device,
                                          map_location=next(model.parameters()).device,
                                          weights_only=False))
-        self.logger.info(f"Checkpoint loaded successfully from: {filename}")
+        if self.verbose:
+            self.logger.info(f"Checkpoint loaded successfully from: {filename}")
         return model
 
     """ Getters and Setters """
