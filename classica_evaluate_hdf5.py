@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.model_selection import KFold
+from sklearn.model_selection import ShuffleSplit
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
@@ -19,6 +19,20 @@ from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
 from segmenter.models import AugurSegformerSegmentation
 from segmenter.modules import HybridLoss
 from segmenter.torch_utils import RunManager, CheckpointManager
+
+
+def get_n_iters(test_split:float=None)-> int:
+    """
+    Return the number of iterations needed to train the model
+    given test_split.
+    :param test_split: float in range (0,1]
+    :return:
+    """
+    result = 1
+    if test_split is not None:
+        _split = test_split if 0 < test_split < 0.5 else 1
+        result = int(1/_split)
+    return result
 
 
 def main():
@@ -90,7 +104,8 @@ def main():
     # logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
-    test_sizes = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+    n_folds = 5
     metrics = {"case": [],
                "test_split": [],
                "test_iteration": [],
@@ -107,30 +122,22 @@ def main():
 
     for test_split in test_sizes:
 
-        n_iters = int(1 / test_split) if test_split > 0 else 1
+        logger.info(f"Testing split {test_split} for {n_folds} iterations.")
 
-        logger.info(f"Testing split {test_split} for {n_iters} iterations.")
+        ss = ShuffleSplit(n_splits=n_folds, test_size=test_split, random_state=42)
+        len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
+        shuffled_indices = np.random.permutation(len_hdf5)
 
-        folds = []
-        try:
-            kf = KFold(n_splits=n_iters, shuffle=True, random_state=42)
-            len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
-            shuffled_indices = np.random.permutation(len_hdf5)
-            for train_index, test_index in kf.split(shuffled_indices):
-                folds.append((train_index, test_index))
-        except ValueError as e:
-            folds = [(list(), list(range(n_records)))]
-
-        for idx, (train_index, test_index) in enumerate(folds):
+        for idx, (train_index, test_index) in enumerate(ss.split(shuffled_indices)):
             test_names = original_names[test_index]
             metrics["case"].append(test_names.tolist())
             metrics["is_test"].append([1] * len(test_names))
-            if len(train_index) > 0:
-                train_names = original_names[train_index]
-                metrics["case"].append(train_names.tolist())
-                metrics["is_test"].append([0] * len(train_names))
-                metrics["test_split"].append([test_split] * n_records)
-                metrics["test_iteration"].append([idx] * n_records)
+
+            train_names = original_names[train_index]
+            metrics["case"].append(train_names.tolist())
+            metrics["is_test"].append([0] * len(train_names))
+            metrics["test_split"].append([test_split] * n_records)
+            metrics["test_iteration"].append([idx] * n_records)
 
             final_test_dataset = HDF5ImageDataset(
                 hdf5_path=hdf5_file,
@@ -140,28 +147,23 @@ def main():
                 n_augment=0
             )
 
-            if len(train_index) > 0:
-                final_train_dataset = HDF5ImageDataset(
-                    hdf5_path=hdf5_file,
-                    indices=train_index,
-                    is_train_split=True,
-                    image_size=image_size,
-                    n_augment=n_augments
-                )
-            else:
-                final_train_dataset = None
 
-            logger.info(f"Starting fold [{idx + 1}/{n_iters}] for test split [{test_split}].")
+            final_train_dataset = HDF5ImageDataset(
+                hdf5_path=hdf5_file,
+                indices=train_index,
+                is_train_split=True,
+                image_size=image_size,
+                n_augment=n_augments
+            )
 
-            if final_train_dataset is not None:
-                train_loader = DataLoader(
-                    final_train_dataset,
-                    batch_size=batch_size,
-                    shuffle=False,  # Already randomly shuffled
-                    num_workers=num_workers
-                )
-            else:
-                train_loader = None
+            logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
+
+            train_loader = DataLoader(
+                final_train_dataset,
+                batch_size=batch_size,
+                shuffle=False,  # Already randomly shuffled
+                num_workers=num_workers
+            )
 
             test_loader = DataLoader(
                 final_test_dataset,
@@ -171,10 +173,8 @@ def main():
             )
 
             logger.info(f"Successfully loaded training and testing dataset for {n_records} records.")
-            if train_loader is not None:
-                logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
-            else:
-                logger.info(f"No training records in this batch.")
+
+            logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
             logger.info(f"Number of batches in the test DataLoader: {len(test_loader)}")
 
             cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
@@ -239,24 +239,19 @@ def main():
             train_params = {}
             eval_params = {}
 
-
             for epoch in range(n_epochs):
-                if test_split == 0:
-                    logger.info(f"Epoch {epoch + 1}/1")
-                else:
-                    logger.info(f"Epoch {epoch + 1}/{n_epochs}")
+                logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
-                if test_split > 0:
-                    train_metrics = trainer.train(**train_params)
-                    train_loss = train_metrics['loss']
-                    train_iou = train_metrics['iou']
-                    train_miou = np.mean(train_iou)
-                    train_dice = train_metrics['dice']
-                    train_mdice = np.mean(train_dice)
-                    train_precision = train_metrics['precision']
-                    train_recall = train_metrics['recall']
-                    logger.info(
-                        f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_mdice:.4f} | IOU: {train_miou:.4f}")
+                train_metrics = trainer.train(**train_params)
+                train_loss = train_metrics['loss']
+                train_iou = train_metrics['iou']
+                train_miou = np.mean(train_iou)
+                train_dice = train_metrics['dice']
+                train_mdice = np.mean(train_dice)
+                train_precision = train_metrics['precision']
+                train_recall = train_metrics['recall']
+                logger.info(
+                    f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_mdice:.4f} | IOU: {train_miou:.4f}")
 
                 val_metrics = trainer.evaluate(**eval_params)
                 val_loss = val_metrics['loss']
@@ -273,20 +268,13 @@ def main():
                                                 prefix=f"split_{test_split}_iteration_{idx}")
                 if stop_training:
                     logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
-                    if test_split > 0:
-                        metrics["dice"] = val_dice + train_dice
-                        metrics["iou"] = val_iou + train_iou
-                        metrics["precision"] = val_precision + train_precision
-                        metrics["recall"] = val_recall + train_recall
-                    else:
-                        metrics["dice"] = val_dice
-                        metrics["iou"] = val_iou
-                        metrics["precision"] = val_precision
-                        metrics["recall"] = val_recall
+
+                    metrics["dice"] = val_dice + train_dice
+                    metrics["iou"] = val_iou + train_iou
+                    metrics["precision"] = val_precision + train_precision
+                    metrics["recall"] = val_recall + train_recall
                     break
 
-                if test_split == 0:
-                    break
 
     try:
         pd.DataFrame(metrics).to_csv(f"classica_evaluate_metrics_{timestamp}.csv")
