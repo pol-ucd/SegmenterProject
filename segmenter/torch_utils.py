@@ -456,7 +456,7 @@ class CheckpointManager:
         if self.verbose:
             self.logger.info(f"Checkpoint manager loaded with prefix: {self.prefix} and timestamp: {self.timestamp}")
 
-    def save(self, model, current_accuracy, prefix:str=None) -> bool:
+    def save(self, model, current_accuracy, prefix:str=None) -> tuple[bool, bool]:
         """
         Saves the model checkpoint if the current accuracy is the best seen so far.
 
@@ -468,7 +468,9 @@ class CheckpointManager:
 
         Returns:
             bool: True if training should stop, False otherwise.
+            bool: True if model was saved on this step, False otherwise.
         """
+        is_saved = False
         if current_accuracy > self.best_accuracy + self.min_delta:
             # New best accuracy found, save the model and reset the counter
             self.best_accuracy = current_accuracy
@@ -496,6 +498,7 @@ class CheckpointManager:
                 json.dump(json_data, fp, sort_keys=True, indent=4)
             if self.verbose:
                 self.logger.info(f"Checkpoint saved: {filepath} with score: {current_accuracy:.4f}")
+            is_saved = True
         else:
             # No significant improvement, increment the counter
             self.epochs_without_improvement += 1
@@ -508,7 +511,7 @@ class CheckpointManager:
             if self.verbose:
                 self.logger.info(f"Early stopping triggered. Training will be stopped after this epoch.")
 
-        return self.stop_training
+        return self.stop_training, is_saved
 
     def load(self, model:torch.nn.Module, filename: str,
              device: torch.device =torch.device("cpu")) -> torch.nn.Module:

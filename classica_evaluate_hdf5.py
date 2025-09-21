@@ -264,15 +264,17 @@ def main():
                 logger.info(
                     f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_mdice:.4f} | IOU: {val_miou:.4f}")
 
-                stop_training = cp_manager.save(model, 1 - val_miou,
-                                                prefix=f"split_{test_split}_iteration_{idx}")
-                if stop_training:
-                    logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
-
+                stop_training, is_saved = cp_manager.save(model,
+                                                          1 - val_miou,
+                                                          prefix=f"split_{test_split}_iteration_{idx}")
+                if is_saved:
                     metrics["dice"] = val_dice + train_dice
                     metrics["iou"] = val_iou + train_iou
                     metrics["precision"] = val_precision + train_precision
                     metrics["recall"] = val_recall + train_recall
+
+                if stop_training:
+                    logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
                     break
 
 
