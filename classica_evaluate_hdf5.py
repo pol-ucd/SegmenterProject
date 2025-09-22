@@ -24,6 +24,7 @@ from segmenter.torch_utils import RunManager, CheckpointManager
 def check_scores(metric:dict[str,list])-> bool:
     all_lens = np.array([len(v) for v in metric.values()])
     base_len = all_lens[0]
+    print(all_lens)
     return np.all(all_lens == base_len)
 
 
