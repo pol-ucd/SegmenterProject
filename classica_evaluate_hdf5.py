@@ -283,13 +283,14 @@ def main():
 
                 stop_training, is_saved = cp_manager.save(model,
                                                           1 - val_miou,
-                                                          prefix=f"split_{test_split}_iteration_{idx}")
+                                                          prefix=f"split_{test_split}_fold_{idx}")
 
                 if is_saved:
                     metrics["dice"] = val_dice + test_dice
                     metrics["iou"] = val_iou + test_iou
                     metrics["precision"] = val_precision + test_precision
                     metrics["recall"] = val_recall + test_recall
+                    logger.info(f"Saving model: split: {test_split}, fold: {idx}")
                     assert check_scores(metrics), "Scores don't match!"
 
                 if stop_training:
