@@ -194,6 +194,7 @@ def main():
                                            prefix=checkpoint_prefix,
                                            patience=checkpoint_patience,
                                            min_delta=checkpoint_min_delta,
+                                           set_point=0,
                                            verbose=False)
             """
             Setup the model 

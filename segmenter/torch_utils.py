@@ -284,6 +284,7 @@ class CheckpointManager:
                  prefix: str ="model_checkpoint",
                  patience: int = 5,
                  min_delta: float = 0.0,
+                 set_point: float = 1.0,
                  verbose=False):
         self.logger = logging.getLogger(self.__class__.__name__)
         # Ensure the checkpoint directory exists and if not, revert to local
@@ -300,6 +301,7 @@ class CheckpointManager:
         self.prefix = prefix
         self.patience = patience
         self.min_delta = min_delta
+        self.set_point = set_point  # Restart at this level
         self.best_accuracy = float('-inf')  # Initialize with a very low value
         self.epochs_without_improvement = 0
         self.stop_training = False
@@ -384,7 +386,7 @@ class CheckpointManager:
         try:
             with open(json_filename, 'r') as fp:
                 json_data  = json.load(fp)
-                self.best_accuracy = json_data["best_accuracy"]
+                self.best_accuracy = min(json_data["best_accuracy"], self.set_point)
                 try:
                     # self.patience = json_data["patience"]
                     # self.epochs_without_improvement = json_data["epochs_without_improvement"]
