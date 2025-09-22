@@ -285,7 +285,7 @@ def main():
                     f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_mdice:.4f} | IOU: {val_miou:.4f}")
 
                 stop_training, is_saved = cp_manager.save(model,
-                                                          1 - val_miou,
+                                                          val_miou,
                                                           prefix=f"split_{test_split}_fold_{idx}")
 
                 if is_saved:
