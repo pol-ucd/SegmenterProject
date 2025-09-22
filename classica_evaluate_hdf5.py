@@ -21,18 +21,11 @@ from segmenter.modules import HybridLoss
 from segmenter.torch_utils import RunManager, CheckpointManager
 
 
-def get_n_iters(test_split:float=None)-> int:
-    """
-    Return the number of iterations needed to train the model
-    given test_split.
-    :param test_split: float in range (0,1]
-    :return:
-    """
-    result = 1
-    if test_split is not None:
-        _split = test_split if 0 < test_split < 0.5 else 1
-        result = int(1/_split)
-    return result
+def check_scores(metric:dict[str,list])-> bool:
+    all_lens = np.array([len(v) for v in metric.values()])
+    base_len = all_lens[0]
+    return np.all(all_lens == base_len)
+
 
 
 def main():
@@ -100,7 +93,7 @@ def main():
     hdf5_file = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]][0]
     # logger.info(f"Loaded parameters: {params}")
 
-    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
@@ -114,6 +107,8 @@ def main():
                "iou": [],
                "precision": [],
                "recall": []}
+
+    # scorer = Scorer()
 
     with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
         original_names_hdf = hdf['original_name']
@@ -139,7 +134,7 @@ def main():
             metrics["test_split"].append([test_split] * n_records)
             metrics["test_iteration"].append([idx] * n_records)
 
-            final_test_dataset = HDF5ImageDataset(
+            final_eval_dataset = HDF5ImageDataset(
                 hdf5_path=hdf5_file,
                 indices=test_index,
                 is_train_split=False,
@@ -147,6 +142,17 @@ def main():
                 n_augment=0
             )
 
+            """ 
+            Create a non-augmented test dataset from the training records so
+            we get metrics for the unaugmented records only when we train.
+            """
+            final_test_dataset = HDF5ImageDataset(
+                hdf5_path=hdf5_file,
+                indices=train_index,
+                is_train_split=False,
+                image_size=image_size,
+                n_augment=n_augments
+            )
 
             final_train_dataset = HDF5ImageDataset(
                 hdf5_path=hdf5_file,
@@ -172,10 +178,17 @@ def main():
                 num_workers=num_workers
             )
 
+            eval_loader = DataLoader(
+                final_eval_dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers
+            )
+
             logger.info(f"Successfully loaded training and testing dataset for {n_records} records.")
 
             logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
-            logger.info(f"Number of batches in the test DataLoader: {len(test_loader)}")
+            logger.info(f"Number of batches in the test DataLoader: {len(eval_loader)}")
 
             cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
                                            prefix=checkpoint_prefix,
@@ -230,7 +243,8 @@ def main():
                                  scaler=scaler,
                                  scheduler=scheduler,
                                  train_loader=train_loader,
-                                 eval_loader=test_loader,
+                                 test_loader=test_loader,
+                                 eval_loader=eval_loader,
                                  save_preds=False,
                                  save_preds_path="",
                                  config_path=params_file,
@@ -242,14 +256,17 @@ def main():
             for epoch in range(n_epochs):
                 logger.info(f"Epoch {epoch + 1}/{n_epochs}")
 
-                train_metrics = trainer.train(**train_params)
+                train_metrics, test_metrics = trainer.train(**train_params)
                 train_loss = train_metrics['loss']
                 train_iou = train_metrics['iou']
                 train_miou = np.mean(train_iou)
                 train_dice = train_metrics['dice']
                 train_mdice = np.mean(train_dice)
-                train_precision = train_metrics['precision']
-                train_recall = train_metrics['recall']
+
+                test_iou = test_metrics['iou']
+                test_dice = test_metrics['dice']
+                test_precision = test_metrics['precision']
+                test_recall = test_metrics['recall']
                 logger.info(
                     f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_mdice:.4f} | IOU: {train_miou:.4f}")
 
@@ -267,16 +284,17 @@ def main():
                 stop_training, is_saved = cp_manager.save(model,
                                                           1 - val_miou,
                                                           prefix=f"split_{test_split}_iteration_{idx}")
+
                 if is_saved:
-                    metrics["dice"] = val_dice + train_dice
-                    metrics["iou"] = val_iou + train_iou
-                    metrics["precision"] = val_precision + train_precision
-                    metrics["recall"] = val_recall + train_recall
+                    metrics["dice"] = val_dice + test_dice
+                    metrics["iou"] = val_iou + test_iou
+                    metrics["precision"] = val_precision + test_precision
+                    metrics["recall"] = val_recall + test_recall
+                    assert check_scores(metrics), "Scores don't match!"
 
                 if stop_training:
                     logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
                     break
-
 
     try:
         pd.DataFrame(metrics).to_csv(f"classica_evaluate_metrics_{timestamp}.csv")
