@@ -127,14 +127,15 @@ def main():
 
         for idx, (train_index, test_index) in enumerate(ss.split(shuffled_indices)):
             test_names = original_names[test_index]
-            metrics["case"].append(test_names.tolist())
-            metrics["is_test"].append([1] * len(test_names))
+            metrics["case"] += test_names.tolist()
+            metrics["is_test"] += [1] * len(test_names)
 
             train_names = original_names[train_index]
-            metrics["case"].append(train_names.tolist())
-            metrics["is_test"].append([0] * len(train_names))
-            metrics["test_split"].append([test_split] * n_records)
-            metrics["test_iteration"].append([idx] * n_records)
+            metrics["case"] += train_names.tolist()
+            metrics["is_test"] += [0] * len(train_names)
+
+            metrics["test_split"] += [test_split] * n_records
+            metrics["test_iteration"] += [idx] * n_records
 
             final_eval_dataset = HDF5ImageDataset(
                 hdf5_path=hdf5_file,
@@ -153,7 +154,7 @@ def main():
                 indices=train_index,
                 is_train_split=False,
                 image_size=image_size,
-                n_augment=n_augments
+                n_augment=0
             )
 
             final_train_dataset = HDF5ImageDataset(
@@ -189,8 +190,12 @@ def main():
 
             logger.info(f"Successfully loaded training and testing dataset for {n_records} records.")
 
-            logger.info(f"Number of batches in the training DataLoader: {len(train_loader)}")
-            logger.info(f"Number of batches in the test DataLoader: {len(eval_loader)}")
+            logger.info(f"Number of batches in the training DataLoader: "
+                        f"{len(train_loader)} / {len(final_train_dataset)} records")
+            logger.info(f"Number of batches in the test DataLoader: "
+                        f"{len(test_loader)} / {len(final_test_dataset)} records")
+            logger.info(f"Number of batches in the evaluation DataLoader: "
+                        f"{len(eval_loader)} / {len(final_eval_dataset)} records")
 
             cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
                                            prefix=checkpoint_prefix,

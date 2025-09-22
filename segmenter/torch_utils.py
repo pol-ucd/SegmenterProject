@@ -211,14 +211,15 @@ class RunManager:
 
         if self.eval_loader is not None:
             with torch.no_grad():
-                for images, masks in self.eval_loader:
+                for images, masks in loader:
                     if images.device != self.device:
                         images = images.to(self.device)
 
                     if masks.device != self.device:
                         masks = masks.to(self.device)
 
-                    with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+                    with autocast(device_type=get_default_device_type(),
+                                  dtype=torch.float16):
                         logits = self.model(pixel_values=images)
                         loss = self.criterion(logits, masks)
                         total_loss += [loss.item()/logits.shape[0]]
