@@ -118,6 +118,7 @@ def main():
         original_names = np.array([h.decode('utf-8') for h in original_names_hdf])
         n_records = len(original_names)
 
+    records_offset = 0
     for test_split in test_sizes:
 
         logger.info(f"Testing split {test_split} for {n_folds} iterations.")
@@ -127,16 +128,9 @@ def main():
         shuffled_indices = np.random.permutation(len_hdf5)
 
         for idx, (train_index, test_index) in enumerate(ss.split(shuffled_indices)):
+
             test_names = original_names[test_index]
-            metrics["case"] += test_names.tolist()
-            metrics["is_test"] += [1] * len(test_names)
-
             train_names = original_names[train_index]
-            metrics["case"] += train_names.tolist()
-            metrics["is_test"] += [0] * len(train_names)
-
-            metrics["test_split"] += [test_split] * n_records
-            metrics["test_iteration"] += [idx] * n_records
 
             final_eval_dataset = HDF5ImageDataset(
                 hdf5_path=hdf5_file,
@@ -295,13 +289,28 @@ def main():
                                                           prefix=f"split_{test_split}_fold_{idx}")
 
                 if is_saved:
-                    offset = len(metrics['case'])
-                    metrics["dice"][:-offset] += val_dice + test_dice
-                    metrics["iou"][:-offset] += val_iou + test_iou
-                    metrics["precision"][:-offset] += val_precision + test_precision
-                    metrics["recall"][:-offset] += val_recall + test_recall
+
+                    """ Back off the last time we saved so we're only saving the best one """
+                    for k,v in metrics.items():
+                        metrics[k] = v[:records_offset]
+                    records_offset += len(original_names)
+
+                    metrics["case"] += test_names.tolist()
+                    metrics["case"] += train_names.tolist()
+
+                    metrics["is_test"] += [1] * len(test_names)
+                    metrics["is_test"] += [0] * len(train_names)
+
+                    metrics["test_split"] += [test_split] * n_records
+                    metrics["test_iteration"] += [idx] * n_records
+
+                    metrics["dice"] += val_dice + test_dice
+                    metrics["iou"] += val_iou + test_iou
+                    metrics["precision"] += val_precision + test_precision
+                    metrics["recall"] += val_recall + test_recall
                     logger.info(f"Saving model: split: {test_split}, fold: {idx}")
                     assert check_scores(metrics), "Scores don't match!"
+
 
                 if stop_training:
                     logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
