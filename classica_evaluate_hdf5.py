@@ -295,10 +295,11 @@ def main():
                                                           prefix=f"split_{test_split}_fold_{idx}")
 
                 if is_saved:
-                    metrics["dice"] += val_dice + test_dice
-                    metrics["iou"] += val_iou + test_iou
-                    metrics["precision"] += val_precision + test_precision
-                    metrics["recall"] += val_recall + test_recall
+                    offset = len(metrics['case'])
+                    metrics["dice"][:-offset] += val_dice + test_dice
+                    metrics["iou"][:-offset] += val_iou + test_iou
+                    metrics["precision"][:-offset] += val_precision + test_precision
+                    metrics["recall"][:-offset] += val_recall + test_recall
                     logger.info(f"Saving model: split: {test_split}, fold: {idx}")
                     assert check_scores(metrics), "Scores don't match!"
 
