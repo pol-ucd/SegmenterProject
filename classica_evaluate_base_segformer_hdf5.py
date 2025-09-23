@@ -42,11 +42,11 @@ def main():
         logger.warning("Creating 'data' directory in $HOME/segmenter directory.")
         os.makedirs(os.path.join(home, "segmenter/data"))
     if os.path.isfile(os.path.join(os.path.join(home, "segmenter"),
-                                   "classica_params.json")):
+                                   "classica_base_segformer_params.json")):
         params_file = os.path.join(os.path.join(home, "segmenter"),
-                                   "classica_params.json")
+                                   "classica_base_segformer_params.json")
     else:
-        params_file = "classica_params.json"
+        params_file = "classica_base_segformer_params.json"
 
     # --- Load parameters from JSON file ---
     try:
