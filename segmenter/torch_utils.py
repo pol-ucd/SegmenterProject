@@ -172,6 +172,10 @@ class RunManager:
                     if isinstance(self.model, SegformerForSemanticSegmentation):
                         outputs_tuple = self.model(pixel_values=images, return_dict=False)
                         logits = outputs_tuple[0]
+                        logits = F.interpolate(logits,
+                                               size=images.shape[2:],
+                                               mode='bilinear',
+                                               align_corners=False)
                     else:
                         logits = self.model(pixel_values=images)
 
@@ -230,6 +234,10 @@ class RunManager:
                         if isinstance(self.model, SegformerForSemanticSegmentation):
                             outputs_tuple = self.model(pixel_values=images, return_dict=False)
                             logits = outputs_tuple[0]
+                            logits = F.interpolate(logits,
+                                                   size=images.shape[2:],
+                                                   mode='bilinear',
+                                                   align_corners=False)
                         else:
                             logits = self.model(pixel_values=images)
                         loss = self.criterion(logits, masks)
