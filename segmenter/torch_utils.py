@@ -13,6 +13,7 @@ from sklearn.metrics import f1_score, jaccard_score, precision_score, recall_sco
 from torch import autocast, nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
+from transformers import SegformerForSemanticSegmentation
 
 from segmenter.modules import LossFactory, HybridLoss, ImageLightingAugmentation
 
@@ -167,7 +168,12 @@ class RunManager:
                 images = light_aug(images)
 
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-                    logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
+                    # logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
+                    if isinstance(self.model, SegformerForSemanticSegmentation):
+                        outputs_tuple = self.model(pixel_values=dummy_input, return_dict=False)
+                        logits = outputs_tuple[0]
+                    else:
+                        logits = self.model(pixel_values=images)
 
                     loss = self.criterion(logits, masks) # Mask: [B, H, W]
                     total_loss += [loss.item()/logits.shape[0]]
@@ -220,7 +226,12 @@ class RunManager:
 
                     with autocast(device_type=get_default_device_type(),
                                   dtype=torch.float16):
-                        logits = self.model(pixel_values=images)
+
+                        if isinstance(self.model, SegformerForSemanticSegmentation):
+                            outputs_tuple = self.model(pixel_values=dummy_input, return_dict=False)
+                            logits = outputs_tuple[0]
+                        else:
+                            logits = self.model(pixel_values=images)
                         loss = self.criterion(logits, masks)
                         total_loss += [loss.item()/logits.shape[0]]
 
