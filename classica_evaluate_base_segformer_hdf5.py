@@ -204,7 +204,7 @@ def main():
             model_config = SegformerConfig.from_pretrained(pretrained_model)
             model = SegformerForSemanticSegmentation.from_pretrained(
                 pretrained_model,
-                config=model_config,
+                # config=model_config,
                 num_labels=num_classes,
                 ignore_mismatched_sizes=True
             )
