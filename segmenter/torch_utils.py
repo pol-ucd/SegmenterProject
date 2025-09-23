@@ -170,7 +170,7 @@ class RunManager:
                 with autocast(device_type=get_default_device_type(), dtype=torch.float16):
                     # logits = self.model(pixel_values=images) # logits; [B, num_classes, H, W]
                     if isinstance(self.model, SegformerForSemanticSegmentation):
-                        outputs_tuple = self.model(pixel_values=dummy_input, return_dict=False)
+                        outputs_tuple = self.model(pixel_values=images, return_dict=False)
                         logits = outputs_tuple[0]
                     else:
                         logits = self.model(pixel_values=images)
@@ -228,7 +228,7 @@ class RunManager:
                                   dtype=torch.float16):
 
                         if isinstance(self.model, SegformerForSemanticSegmentation):
-                            outputs_tuple = self.model(pixel_values=dummy_input, return_dict=False)
+                            outputs_tuple = self.model(pixel_values=images, return_dict=False)
                             logits = outputs_tuple[0]
                         else:
                             logits = self.model(pixel_values=images)
