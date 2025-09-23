@@ -96,7 +96,7 @@ def main():
     hdf5_file = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]][0]
     # logger.info(f"Loaded parameters: {params}")
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     # logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
@@ -320,7 +320,7 @@ def main():
                     break
 
     try:
-        pd.DataFrame(metrics).to_csv(f"classica_evaluate_metrics_{timestamp}.csv")
+        pd.DataFrame(metrics).to_csv(f"classica_evaluate_base_segformer_metrics_{timestamp}.csv")
     except Exception as e:
         logger.error(f"Error saving scores to CSV. The following exception was detected:{e}")
 
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     home_dir = Path.home()
     if not os.path.exists(os.path.join(home_dir, "segmenter")):
         os.makedirs(os.path.join(home_dir, "segmenter"))
-    logfile = os.path.join(home_dir, "segmenter", f"training_{timestamp}.log")
+    logfile = os.path.join(home_dir, "segmenter", f"training_base_segformer_{timestamp}.log")
 
     logging.basicConfig(
         level=logging.INFO,
