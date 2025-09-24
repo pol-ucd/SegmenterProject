@@ -8,7 +8,7 @@ from transformers import SegformerConfig
 
 
 class MedianPool2d(nn.Module):
-    def __init__(self, kernel_size, /, stride=1, padding=0):
+    def __init__(self, kernel_size, stride=1, padding=0):
         super().__init__()
         self.k = _pair(kernel_size)
         self.s = _pair(stride)
