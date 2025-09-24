@@ -111,6 +111,11 @@ def main():
                "precision": [],
                "recall": []}
 
+    results_csv_path = os.path.join(Path.home(), "segmenter")
+    results_csv_name = os.path.join(results_csv_path,"classica_base_segformer_results.csv")
+    results = pd.DataFrame.from_dict(metrics, orient='index')
+    results.to_csv(results_csv_name)
+
     # scorer = Scorer()
 
     with h5py.File(hdf5_file, 'r', swmr=True) as hdf:
@@ -321,10 +326,11 @@ def main():
                     logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
                     break
 
-    try:
-        pd.DataFrame(metrics).to_csv(f"classica_evaluate_base_segformer_metrics_{timestamp}.csv")
-    except Exception as e:
-        logger.error(f"Error saving scores to CSV. The following exception was detected:{e}")
+        try:
+            results_csv = pd.DataFrame.from_dict(metrics, orient='index')
+            results_csv.to_csv(results_csv_name)
+        except Exception as e:
+            logger.error(f"Error saving scores to CSV. The following exception was detected:{e}")
 
 
 if __name__ == "__main__":
