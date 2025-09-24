@@ -50,7 +50,7 @@ Base class for the Segformer models
 class AugurSegformerClassifierBase(nn.Module):
     default_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
 
-    def __init__(self, pretrained_model: str = None, num_classes: int = None,
+    def __init__(self, /, pretrained_model: str = None, num_classes: int = None,
                  checkpoint_path: str = None):
         """
         Initializes the base class for Segformer-based binary classifiers.
@@ -79,6 +79,52 @@ class AugurSegformerClassifierBase(nn.Module):
         pass
 
 
+class BaseSegformerClassifier(AugurSegformerClassifierBase):
+    """"
+    A base class wrapper for SegFormerForSemanticSegmentation.
+    __init()__ - Load a pretrained model.
+    forward() - Rescales the output logits to match the
+    expected size
+    """
+    def __init__(self, /, pretrained_model: str = None, num_classes: int = None,):
+        super().__init__()
+        if self.pretrained_model is not None:
+            self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+                self.pretrained_model,
+                config=self.config,
+                ignore_mismatched_sizes=True
+            )
+        else:
+            self.base_model = SegformerForSemanticSegmentation(config=self.config)
+
+
+    def forward(self, pixel_values: torch.FloatTensor, labels: torch.LongTensor = None):
+        """
+        Forward pass for SegFormerForSemanticSegmentation with rescaling of output logits.
+
+        Args:
+            pixel_values (torch.Tensor): Input tensor of pixel values.
+            labels (torch.Tensor, optional): Optional ground truth labels.
+
+        Returns:
+            torch.Tensor: The output logits from the model, upsampled to the original input size.
+        """
+        # The base model's forward pass handles the entire encoder and decoder.
+        # We only need the logits.
+        output = self.base_model(pixel_values=pixel_values.float()).logits
+
+        # The Segformer model's output logits are at a reduced resolution (e.g., 1/4th).
+        # We upsample them back to the original input size.
+        logits = F.interpolate(output,
+                               size=pixel_values.shape[2:],
+                               mode='bilinear',
+                               align_corners=False)
+
+        # return logits
+        return logits  # Smoothed logits
+
+
+
 class CustomSegformerDecodeHead(nn.Module):
     def __init__(self, in_channels, out_channels, num_classes):
         super().__init__()
@@ -104,10 +150,6 @@ class CustomSegformerDecodeHead(nn.Module):
         return F.interpolate(logits, scale_factor=4, mode="bilinear", align_corners=False)
 
 
-"""
-A single-class implementation for semantic segmentation.
-This class is the recommended approach for its correctness and efficiency.
-"""
 class AugurSegformerSegmentation(AugurSegformerClassifierBase):
     def __init__(self, pretrained_model: str = None, num_classes: int = None,
                  checkpoint_path:str=None,

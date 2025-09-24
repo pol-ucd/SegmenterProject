@@ -14,9 +14,9 @@ import torch
 from sklearn.model_selection import ShuffleSplit
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
-from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
 from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
+from segmenter.models import BaseSegformerClassifier
 from segmenter.modules import HybridLoss
 from segmenter.torch_utils import RunManager, CheckpointManager
 
@@ -201,13 +201,15 @@ def main():
             """
             Setup the model 
             """
-            model_config = SegformerConfig.from_pretrained(pretrained_model)
-            model_config.num_labels = num_classes
-            model = SegformerForSemanticSegmentation.from_pretrained(
-                pretrained_model,
-                config=model_config,
-                ignore_mismatched_sizes=True
-            )
+            # model_config = SegformerConfig.from_pretrained(pretrained_model)
+            # model_config.num_labels = num_classes
+            # model = SegformerForSemanticSegmentation.from_pretrained(
+            #     pretrained_model,
+            #     config=model_config,
+            #     ignore_mismatched_sizes=True
+            # )
+            model = BaseSegformerClassifier(pretrained_model=pretrained_model,
+                                            num_classes=num_classes)
 
             try:
                 # Get the list of saved checkpoints
