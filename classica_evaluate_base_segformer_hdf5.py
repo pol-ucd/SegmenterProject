@@ -113,7 +113,7 @@ def main():
 
     results_csv_path = os.path.join(Path.home(), "segmenter")
     results_csv_name = os.path.join(results_csv_path,"classica_base_segformer_results.csv")
-    results = pd.DataFrame.from_dict(metrics, orient='index')
+    results = pd.DataFrame.from_dict(metrics)
     results.to_csv(results_csv_name)
 
     # scorer = Scorer()
@@ -327,7 +327,7 @@ def main():
                     break
 
         try:
-            results_csv = pd.DataFrame.from_dict(metrics, orient='index')
+            results_csv = pd.DataFrame.from_dict(metrics)
             results_csv.to_csv(results_csv_name)
         except Exception as e:
             logger.error(f"Error saving scores to CSV. The following exception was detected:{e}")
