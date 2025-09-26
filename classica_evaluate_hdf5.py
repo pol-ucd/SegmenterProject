@@ -16,8 +16,8 @@ from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
 from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
+from segmenter.loss.hybrid import HybridLoss
 from segmenter.models.models import AugurSegformerSegmentation
-from segmenter.modules import HybridLoss
 from segmenter.torch_utils import RunManager, CheckpointManager
 
 
@@ -320,6 +320,7 @@ def main():
         try:
             results_csv = pd.DataFrame.from_dict(metrics)
             results_csv.to_csv(results_csv_name)
+            logger.info(f"Results saved to {results_csv_name}")
         except Exception as e:
             logger.error(f"Error saving scores to CSV. The following exception was detected:{e}")
 

@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from segmenter.data import (split_images_and_masks,
                             SemanticSegmentationDatasetAugmentor,
                             SemanticSegmentationDatasetBasic)
+from segmenter.loss.hybrid import HybridLoss
 from segmenter.models import AugurSegformerSegmentation
-from segmenter.modules import HybridLoss
 from segmenter.torch_utils import RunManager, CheckpointManager
 
 

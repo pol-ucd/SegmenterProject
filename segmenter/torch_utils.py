@@ -14,7 +14,9 @@ from torch import autocast, nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-from segmenter.modules import LossFactory, HybridLoss, ImageLightingAugmentation
+from segmenter.loss.factory import LossFactory
+from segmenter.loss.hybrid import HybridLoss
+from segmenter.modules import ImageLightingAugmentation
 
 # Pre-define a mapping of class names to their actual classes
 # This avoids needing a separate factory file

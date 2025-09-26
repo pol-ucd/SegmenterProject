@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
-from segmenter.modules import HybridLoss
+from segmenter.loss.hybrid import HybridLoss
 from segmenter.torch_utils import CheckpointManager, RunManager2
 
 
