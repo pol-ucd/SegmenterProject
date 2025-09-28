@@ -24,10 +24,8 @@ def randbool(size: Sequence[int], /, p: Probability = 0.5) -> torch.Tensor:
     # sampling
     return rand(size) < p
 
-
 def randbool_like(t: torch.Tensor, /, p: float = 0.5) -> torch.Tensor:
     return randbool(t.shape, p=p)
-
 
 def randimage(shape: Sequence[int], /) -> torch.Tensor:
     return randint(0, 255, shape).long()

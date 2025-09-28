@@ -1,4 +1,5 @@
 import random
+
 import torch
 
 try:
@@ -7,7 +8,7 @@ except ImportError:
     np = NotImplemented
 
 
-def freeze_seed(seed: int, /) -> None:
+def freeze_seed(seed: int=42, /) -> None:
     """
     Freeze random with given seed
 
