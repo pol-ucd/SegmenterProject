@@ -93,4 +93,4 @@ if __name__ == '__main__':
     print("Saving the `msn_model.online_encoder` state dict for fine-tuning.")
 
     # Example of saving the backbone for downstream tasks
-    torch.save(msn_model.online_encoder.state_dict(), 'checkpoints/segformer_msn_pretrained_backbone.pth')
+    torch.save(msn_model.online_encoder.state_dict(), '../segmenter/checkpoint/segformer_msn_pretrained_backbone.pth')
