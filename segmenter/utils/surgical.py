@@ -1,6 +1,7 @@
 import random
 from typing import Tuple
 
+import h5py
 import torch
 import torchvision
 import torchvision.transforms as T
@@ -140,6 +141,11 @@ class SurgicalSiameseDatasetHDF5(HDF5Dataset):
 
 
     def __getitem__(self, idx):
+        if self.f is None:
+            # Re-open the file handle for this specific worker/process
+            self.f = h5py.File(self.hdf5_path, 'r')
+        self.data = {k:self.f[k] for k in self.data_keys}
+
         # Load image and convert to tensor
         image = self.data['images'][idx]
         weak_augment = T.Compose([T.ToTensor(),
