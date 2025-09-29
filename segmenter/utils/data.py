@@ -91,33 +91,34 @@ class GaussianSmoothing(object):
 
 
 class HDF5Dataset(Dataset):
-    def __init__(self, hdf5_path):
+    def __init__(self, hdf5_path, data_keys=None, transform=None):
         super().__init__()
         self.hdf5_path = hdf5_path
         self.data = None
-        self._open_hdf5_file()
+        self.transform = transform
+        self.data_keys = data_keys if data_keys is not None else ['images', 'masks', 'image_sizes',
+                                                                  'image_paths', 'mask_paths']
+        self.data_key = self.data_keys[0]
+        # Open the file connection, but DO NOT load the data.
+        self.f = None
 
-    def _open_hdf5_file(self):
-        """
-        Opens the HDF5 file and assigns the dataset references.
-        This is called by each worker process on first access.
-        """
-        self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True)
-        self.data = {k:v[:] for k,v in self.hdf5_file.items()}
+        # Get the total number of items (length) for __len__.
+        # This requires opening the file briefly or assuming it's structured.
+        with h5py.File(self.hdf5_path, 'r') as f:
+            self.dataset_len = len(f[self.data_key])
 
     def __len__(self):
-        if self.data is None:
-            self._open_hdf5_file()
-        return len(self.data['images'])
+        return self.dataset_len
 
     def __getitem__(self, idx):
-        if self.data is None:
-            self._open_hdf5_file()
-        return {'image': self.data['images'][idx],
-                'mask': self.data['masks'][idx],
-                'size': self.data['image_sizes'][idx],
-                'image_path': self.data['image_paths'][idx],
-                'mask_path': self.data['mask_paths'][idx]}
+        # Check if the file handle is open. If not, open it.
+        # Need same handle for all multi-process DataLoader workers.
+        if self.f is None:
+            # Re-open the file handle for this specific worker/process
+            self.f = h5py.File(self.hdf5_path, 'r')
+            self.data = {k:self.f[k] for k in self.data_keys}
+
+        return {k:v[idx] for k, v in self.data.items()}
 
 
 class HDF5ImageDataset(HDF5Dataset):

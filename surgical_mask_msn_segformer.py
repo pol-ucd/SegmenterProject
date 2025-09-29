@@ -1,3 +1,5 @@
+import os
+
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
 
@@ -45,7 +47,9 @@ if __name__ == '__main__':
     #                                           mask_composer=mask_composer,
     #                                           augmentor=augmentor)
 
-    dataloader = DataLoader(full_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=None)
+    n_workers = min(BATCH_SIZE, os.cpu_count())
+    dataloader = DataLoader(full_dataset, batch_size=BATCH_SIZE, shuffle=True,
+                            collate_fn=None, num_workers=n_workers)
 
     print(f"Dataloader created with {len(full_dataset)} data records in {len(dataloader)} batches.")
 
