@@ -4,7 +4,7 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 from torch.nn.modules.utils import _pair
-from transformers import SegformerConfig
+from transformers import SegformerConfig, SegformerModel
 
 
 class MedianPool2d(nn.Module):
@@ -73,3 +73,32 @@ class AugurSegmenterBase(nn.Module):
     def forward(self, pixel_values):
         """Abstract method for the forward pass."""
         pass
+
+
+class SegformerBackbone(nn.Module):
+    """
+    A wrapper for the Hugging Face SegFormer model to be used as a backbone.
+    This extracts the final hidden state (feature map).
+    """
+
+    def __init__(self, model_name='nvidia/segformer-b0-finetuned-ade-512-512', output_dim=256):
+        super().__init__()
+        self.segformer = SegformerModel.from_pretrained(model_name)
+        self.in_features = int(self.segformer.config.hidden_sizes[-1])
+        self.projection = nn.Linear(self.in_features, output_dim)
+
+    def forward(self, x):
+        outputs = self.segformer(pixel_values=x)
+        features = outputs.last_hidden_state
+        B, C, H, W = features.shape
+
+        # Reshape for the nn.Linear layer: (B, C, H, W) -> (B, H*W, C)
+        features = features.flatten(2).transpose(1, 2)
+
+        # Apply the projection: (B, H*W, C) -> (B, H*W, output_dim)
+        features = self.projection(features)
+
+        # Reshape back to a 4D feature map: (B, H*W, output_dim) -> (B, output_dim, H, W)
+        features = features.transpose(1, 2).reshape(B, -1, H, W)
+
+        return features

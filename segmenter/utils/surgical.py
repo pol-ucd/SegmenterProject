@@ -142,18 +142,24 @@ class SurgicalSiameseDatasetHDF5(HDF5Dataset):
     def __getitem__(self, idx):
         # Load image and convert to tensor
         image = self.data['images'][idx]
-        image = T.ToTensor()(image)
+        weak_augment = T.Compose([T.ToTensor(),
+                                  T.Normalize(mean=[0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225])
+                                 ])
 
         # Apply augmentations
+        image1 = weak_augment(image)
         if self.augmentor:
-            image = self.augmentor(image)
+            image2 = self.augmentor(image1)
+        else:
+            image2 = image1.deepcopy()
 
         # Generate two masked views and metadata
         mask1, meta1 = self.mask_composer._generate_single()
         mask2, meta2 = self.mask_composer._generate_single()
 
-        view1 = image * mask1
-        view2 = image * mask2
+        view1 = image1 * mask1
+        view2 = image2 * mask2
 
         return {
             'view1': view1,
