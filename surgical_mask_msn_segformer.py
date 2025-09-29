@@ -1,4 +1,5 @@
 import os
+from os import minor
 
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
@@ -22,7 +23,7 @@ FOCAL_IMG_SIZE = 96
 MASK_RATIO = 0.5
 FEATURE_DIM = 256  # Should match the backbone's output_dim
 LEARNING_RATE = 1e-4
-EPOCHS = 10
+EPOCHS = 100
 
 if __name__ == '__main__':
 
@@ -63,6 +64,10 @@ if __name__ == '__main__':
     msn_loss = MSNLoss()
 
     print(f"Starting self-supervised training for {EPOCHS} epochs on {device}...")
+    best_loss = float('inf')
+    min_delta = 0.00001
+    boredom = 0
+    max_boredom = 20
     for epoch in range(EPOCHS):
         total_loss = 0
         for i_batch, data_view in enumerate(dataloader):
@@ -91,9 +96,17 @@ if __name__ == '__main__':
 
         avg_loss = total_loss / len(dataloader)
         print(f"Epoch [{epoch + 1}/{EPOCHS}], Average Loss: {avg_loss:.4f}")
+        if avg_loss + min_delta < best_loss:
+            best_loss = avg_loss
+            boredom = 0
+            print("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
+            torch.save(msn_model.online_encoder.state_dict(),
+                       '../segmenter/checkpoint/segformer_msn_pretrained_backbone.pth')
+
+        else:
+            boredom += 1
+        if boredom > max_boredom:
+            print(f"No improvement after {boredom} epochs, terminating")
+            break
 
     print("Self-supervised pre-training complete!")
-    print("Saving the `msn_model.online_encoder` state dict for fine-tuning.")
-
-    # Example of saving the backbone for downstream tasks
-    torch.save(msn_model.online_encoder.state_dict(), '../segmenter/checkpoint/segformer_msn_pretrained_backbone.pth')
