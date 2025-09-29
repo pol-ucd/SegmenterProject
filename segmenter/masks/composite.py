@@ -2,9 +2,10 @@ from typing import Tuple
 
 import torchvision
 
-from .fluid import FluidMask
-from .instrument import InstrumentMask
-from .polygon import RandomShapeMask
+from fluid import FluidMask
+from instrument import InstrumentMask
+from polygon import RandomShapeMask
+from segmenter.masks.fold import FoldMask
 
 
 def composite_occlusion(shape: Tuple,
@@ -16,13 +17,15 @@ def composite_occlusion(shape: Tuple,
     im = InstrumentMask(shape=shape,channels=channels, num_shapes=num_shapes)
     fm = FluidMask(shape=shape,channels=channels, num_shapes=num_shapes)
     rm = RandomShapeMask(shape=shape,channels=channels, num_shapes=num_shapes)
+    fom = FoldMask(shape=shape,channels=channels, num_shapes=num_shapes)
 
     mask1 = im()
     mask2 = fm()
     mask3 = rm()
+    mask4 = fom()
 
-    combined = mask1 * mask2 * mask3  # use one channel from shape mask
-    return combined.unsqueeze(0).repeat(channels, 1, 1)
+    combined = (mask1 + mask2 + mask3 + mask4 > 0).float()
+    return combined
 
 
 if __name__ == '__main__':

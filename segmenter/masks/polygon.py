@@ -48,7 +48,7 @@ if __name__ == '__main__':
     b, c, h, w = 8, 3, 240, 320
     random_mask = RandomShapeMask(shape=(b, c, h, w), channels=n_channels)
     mask = random_mask()
-    assert mask.shape == (b, n_channels, h, w), "Something went wrong, check dimensions."
+    assert mask.shape == (b, n_channels, h, w), f"Something went wrong: {mask.shape}"
 
     trans = torchvision.transforms.ToPILImage()
     out = trans(mask[0])

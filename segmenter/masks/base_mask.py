@@ -40,11 +40,12 @@ class BaseMask:
         pass
 
     def __call__(self) -> torch.Tensor:
-        mask = np.zeros((self.B, self.H, self.W), dtype=np.uint8)
+        mask = np.zeros((self.B, self.H, self.W), dtype=float)
         for b in range(self.B):
             for _ in range(self.num_shapes):
-                mask[b] |= self._mask2D()
-        mask = torch.tensor(mask, dtype=torch.float32)
+                mask[b] += self._mask2D()
+
+        mask = torch.tensor(mask > 0, dtype=torch.float32)
         return self._expand_channels(mask)
 
     @abc.abstractmethod

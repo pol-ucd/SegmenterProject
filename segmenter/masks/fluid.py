@@ -8,10 +8,11 @@ from base_mask import BaseMask
 
 
 class FluidMask(BaseMask):
-    def __init__(self, shape, channels, num_shapes:int=2, max_radius=40):
-        BaseMask.__init__(self, shape, channels)
-        self.num_shapes = num_shapes
+    def __init__(self, shape, channels, num_shapes:int=2, max_radius=40, saturation:float=0.5):
+        BaseMask.__init__(self, shape, channels, num_shapes)
+        # self.num_shapes = num_shapes
         self.max_radius = max_radius
+        self.saturation = saturation
         self._check_args()
 
     def _check_args(self):
@@ -24,17 +25,17 @@ class FluidMask(BaseMask):
         :return: mask as Torch Tensor of size (H, W)
         """
         mask = np.ones((self.H, self.W))
-        for _ in range(self.num_shapes):
-            x = random.randint(0, self.W)
-            y = random.randint(0, self.H)
-            radius = random.randint(20, self.max_radius)
-            Y, X = np.meshgrid(np.arange(self.H),
-                                  np.arange(self.W), indexing='ij')
-            dist = ((X - x)**2 + (Y - y)**2).astype(float)
-            blob = np.exp(-dist / (2 * radius**2))
-            mask *= 1 - blob  # simulate partial occlusion
 
-        return (np.clip(mask,0, 1) < 0.9).astype(np.uint8)
+        x = random.randint(0, self.W)
+        y = random.randint(0, self.H)
+        radius = random.randint(20, self.max_radius)
+        Y, X = np.meshgrid(np.arange(self.H),
+                              np.arange(self.W), indexing='ij')
+        dist = ((X - x)**2 + (Y - y)**2).astype(float)
+        blob = np.exp(-dist / (2 * radius**2))
+        mask *= 1 - blob  # simulate partial occlusion
+
+        return (np.clip(mask,0, 1) < self.saturation).astype(np.uint8)
 
 if __name__ == '__main__':
     do_show = True
