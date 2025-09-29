@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torchvision
 
-from base_mask import BaseMask
+from segmenter.masks import BaseMask
 
 
 class FluidMask(BaseMask):

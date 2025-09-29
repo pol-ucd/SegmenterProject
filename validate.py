@@ -6,10 +6,10 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from segmenter.data import SemanticSegmentationDatasetBasic
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.models import AugurSegformerSegmentation
 from segmenter.torch_utils import RunManager
+from segmenter.utils.data import SemanticSegmentationDatasetBasic
 
 
 def main():

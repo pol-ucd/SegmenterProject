@@ -12,10 +12,10 @@ import torch
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
-from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.models import AugurSegformerSegmentation
 from segmenter.torch_utils import RunManager, CheckpointManager
+from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
 
 classica_names = ['01.png', '02.png', '05.png', '05182023_171203.png', '1013468013.png',
                   '1014670912-ass2.png', '1014670912.png', '10262023_142726.png', '1028851774.png',

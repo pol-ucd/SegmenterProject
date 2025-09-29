@@ -10,10 +10,10 @@ import torch
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
-from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.models import AugurSegformerSegmentation
 from segmenter.torch_utils import RunManager, CheckpointManager
+from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
 
 
 def main():

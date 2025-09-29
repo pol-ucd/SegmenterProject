@@ -90,7 +90,37 @@ class GaussianSmoothing(object):
         return image.filter(ImageFilter.GaussianBlur(radius))
 
 
-class HDF5ImageDataset(Dataset):
+class HDF5Dataset(Dataset):
+    def __init__(self, hdf5_path):
+        super().__init__()
+        self.hdf5_path = hdf5_path
+        self.data = None
+        self._open_hdf5_file()
+
+    def _open_hdf5_file(self):
+        """
+        Opens the HDF5 file and assigns the dataset references.
+        This is called by each worker process on first access.
+        """
+        self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True)
+        self.data = {k:v[:] for k,v in self.hdf5_file.items()}
+
+    def __len__(self):
+        if self.data is None:
+            self._open_hdf5_file()
+        return len(self.data['images'])
+
+    def __getitem__(self, idx):
+        if self.data is None:
+            self._open_hdf5_file()
+        return {'image': self.data['images'][idx],
+                'mask': self.data['masks'][idx],
+                'size': self.data['image_sizes'][idx],
+                'image_path': self.data['image_paths'][idx],
+                'mask_path': self.data['mask_paths'][idx]}
+
+
+class HDF5ImageDataset(HDF5Dataset):
     """
     A PyTorch Dataset subclass for loading the preprocessed Dresden Surgical Anatomy
     Dataset from a single HDF5 file.
@@ -113,7 +143,7 @@ class HDF5ImageDataset(Dataset):
                              training sample.
 
         """
-        self.hdf5_path = hdf5_path
+        super(HDF5ImageDataset, self).__init__(hdf5_path)
         self.split_indices = indices
         self.is_train_split = is_train_split
         self.image_size = image_size
@@ -127,14 +157,14 @@ class HDF5ImageDataset(Dataset):
         self.masks = None
         self.original_names = None
 
-    def _open_hdf5_file(self):
-        """
-        Opens the HDF5 file and assigns the dataset references.
-        This is called by each worker process on first access.
-        """
-        self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True)
-        self.images = self.hdf5_file['images']
-        self.masks = self.hdf5_file['masks']
+    # def _open_hdf5_file(self):
+    #     """
+    #     Opens the HDF5 file and assigns the dataset references.
+    #     This is called by each worker process on first access.
+    #     """
+    #     self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True)
+    #     self.images = self.hdf5_file['images']
+    #     self.masks = self.hdf5_file['masks']
 
     def __len__(self):
         """Returns the number of samples in the current split."""

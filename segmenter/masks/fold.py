@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import torchvision
 
-from base_mask import BaseMask
+from segmenter.masks import BaseMask
 
 
 class FoldMask(BaseMask):

@@ -15,9 +15,9 @@ from torch.nn import functional as F
 from torchvision import transforms
 from tqdm import tqdm
 
-from segmenter.data import get_num_samples_from_hdf5
-from segmenter.data import preprocess_image_pipeline
 from segmenter.models import AugurSegformerSegmentation
+from segmenter.utils.data import get_num_samples_from_hdf5
+from segmenter.utils.data import preprocess_image_pipeline
 
 classica_names = ['01.png', '02.png', '05.png', '05182023_171203.png', '1013468013.png',
                   '1014670912-ass2.png', '1014670912.png', '10262023_142726.png', '1028851774.png',

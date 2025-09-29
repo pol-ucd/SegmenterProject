@@ -8,9 +8,9 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from segmenter.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.torch_utils import CheckpointManager, RunManager2
+from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
 
 
 def main():

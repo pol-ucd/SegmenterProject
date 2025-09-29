@@ -2,9 +2,10 @@ __author__ = 'Pol Mac Aonghusa'
 __email__ = 'polmacaonghusa@gmail.com'
 __version__ = '1.0'
 
-from fold import FoldMask
+
 from .base_mask import BaseMask
 from .fluid import FluidMask
+from .fold import FoldMask
 from .instrument import InstrumentMask
 from .polygon import RandomShapeMask
 

@@ -3,7 +3,7 @@ import random
 import numpy as np
 import torchvision
 
-from base_mask import BaseMask
+from segmenter.masks import BaseMask
 
 
 class InstrumentMask(BaseMask):
