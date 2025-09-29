@@ -144,10 +144,10 @@ class SurgicalSiameseDatasetHDF5(HDF5Dataset):
         if self.f is None:
             # Re-open the file handle for this specific worker/process
             self.f = h5py.File(self.hdf5_path, 'r')
-        self.data = {k:self.f[k] for k in self.data_keys}
+        # self.data = {k:self.f[k] for k in self.data_keys}
 
         # Load image and convert to tensor
-        image = self.data['images'][idx]
+        image = self.f['images'][idx]
         weak_augment = T.Compose([T.ToTensor(),
                                   T.Normalize(mean=[0.485, 0.456, 0.406],
                                               std=[0.229, 0.224, 0.225])
