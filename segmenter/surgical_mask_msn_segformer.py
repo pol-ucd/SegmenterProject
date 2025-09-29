@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 
 from segmenter.core import freeze_seed
 from segmenter.loss import MSNLoss
@@ -9,6 +9,9 @@ from segmenter.utils import SurgicalAugmentor
 from segmenter.utils.surgical import SurgicalSiameseDatasetHDF5, SurgicalMaskComposer
 
 DATASET = '/Users/polmacaonghusa/Documents/Projects/SegmenterProject/data/all_images.hdf5'
+DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
+            '../segmenter/data/all_data.h5',
+            '../segmenter/data/Classica.h5']
 SHAPE = (512, 512)
 BATCH_SIZE = 8
 IMG_SIZE = 224
@@ -21,7 +24,6 @@ EPOCHS = 10
 
 if __name__ == '__main__':
 
-
     # For reproducibility
     freeze_seed()
 
@@ -31,9 +33,17 @@ if __name__ == '__main__':
     # Instantiate dataset and augmentations
     mask_composer = SurgicalMaskComposer(shape=SHAPE, channels=3)
     augmentor = SurgicalAugmentor(size=SHAPE)
-    full_dataset = SurgicalSiameseDatasetHDF5(hdf5_path=DATASET,
-                                              mask_composer=mask_composer,
-                                              augmentor=augmentor)
+    datasets = []
+    for dataset in DATASETS:
+        datasets.append(SurgicalSiameseDatasetHDF5(hdf5_path=dataset,
+                                                   mask_composer=mask_composer,
+                                                   augmentor=augmentor))
+
+    full_dataset = ConcatDataset(datasets)
+
+    # full_dataset = SurgicalSiameseDatasetHDF5(hdf5_path=DATASET,
+    #                                           mask_composer=mask_composer,
+    #                                           augmentor=augmentor)
 
     dataloader = DataLoader(full_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=None)
 
@@ -56,9 +66,8 @@ if __name__ == '__main__':
             global_views = data_view['view1'].to(device)
             focal_views = data_view['view2'].to(device)
 
-
             # Forward pass
-            online_preds, target_protos = msn_model(focal_views, global_views) #, mask)
+            online_preds, target_protos = msn_model(focal_views, global_views)  #, mask)
 
             # The target prototypes are from the entire batch, so we need to concatenate them
             # B, N, C -> (B*N), C
