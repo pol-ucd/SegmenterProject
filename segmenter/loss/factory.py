@@ -1,8 +1,8 @@
 from torch import nn as nn
 
-from segmenter.loss import DiceLoss, IoULoss, FocalLoss, TverskyLoss
-from segmenter.loss.boundary_sdf import BoundarySDFLoss
-from segmenter.loss.soft_chamfer import SoftChamferLoss
+from segmenter.loss import (DiceLoss, IoULoss,
+                            FocalLoss, TverskyLoss,
+                            BoundarySDFLoss, SoftChamferLoss)
 
 
 class LossFactory:

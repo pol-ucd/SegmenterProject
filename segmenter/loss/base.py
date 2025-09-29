@@ -4,9 +4,8 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
-from segmenter.loss.utils import one_hot
+from .utils import one_hot
 
-EPSILON = 1e-6
 
 class BaseLoss(nn.Module, ABC):
     """Abstract base class for all loss functions."""

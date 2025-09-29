@@ -3,8 +3,7 @@ from typing import Dict
 import torch
 from torch import nn as nn
 
-from segmenter.loss import BaseLoss
-from segmenter.loss.factory import LossFactory
+from segmenter.loss import BaseLoss, LossFactory
 
 
 class HybridLoss(BaseLoss):

@@ -1,7 +1,6 @@
 import torch
 
-from segmenter.loss.base import BaseLoss
-from segmenter.modules import EPSILON
+from segmenter.loss import BaseLoss, EPSILON
 
 
 class FocalLoss(BaseLoss):

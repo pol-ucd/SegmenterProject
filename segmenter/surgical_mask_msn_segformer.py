@@ -2,11 +2,11 @@ import copy
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from transformers import SegformerModel
 
 from segmenter.core import freeze_seed
+from segmenter.loss import MSNLoss
 from segmenter.utils import SurgicalAugmentor
 from segmenter.utils.surgical import SurgicalSiameseDatasetHDF5, SurgicalMaskComposer
 
@@ -116,32 +116,32 @@ class SurgicalMaskedSiameseNetwork(nn.Module):
 ################################################################################
 # MSN Loss Function
 ################################################################################
-
-def msn_loss(online_preds, target_protos, temperature=0.1):
-    """
-    Calculates the MSN loss.
-    - online_preds: Predictions from the online network for MASKED patches.
-    - target_protos: Representations from the target network for ALL patches.
-    - temperature: Controls the sharpness of the target distribution.
-    """
-    # Normalize the prototypes and predictions
-    online_preds = F.normalize(online_preds, dim=1)
-    target_protos = F.normalize(target_protos, dim=1)
-
-    # Calculate similarity scores between each masked patch and all target patches
-    # Shape: (num_masked_patches, num_target_patches)
-    similarity_matrix = torch.matmul(online_preds, target_protos.t())
-
-    # Sharpen the target distribution and compute the loss
-    # The target is the softmax over similarities with the target prototypes
-    targets = F.softmax(similarity_matrix / temperature, dim=1)
-
-    # The prediction is the log-softmax over the same similarities
-    predictions = F.log_softmax(similarity_matrix, dim=1)
-
-    # Cross-entropy loss
-    loss = - (targets * predictions).sum(dim=1)
-    return loss.mean()
+#
+# def msn_loss(online_preds, target_protos, temperature=0.1):
+#     """
+#     Calculates the MSN loss.
+#     - online_preds: Predictions from the online network for MASKED patches.
+#     - target_protos: Representations from the target network for ALL patches.
+#     - temperature: Controls the sharpness of the target distribution.
+#     """
+#     # Normalize the prototypes and predictions
+#     online_preds = F.normalize(online_preds, dim=1)
+#     target_protos = F.normalize(target_protos, dim=1)
+#
+#     # Calculate similarity scores between each masked patch and all target patches
+#     # Shape: (num_masked_patches, num_target_patches)
+#     similarity_matrix = torch.matmul(online_preds, target_protos.t())
+#
+#     # Sharpen the target distribution and compute the loss
+#     # The target is the softmax over similarities with the target prototypes
+#     targets = F.softmax(similarity_matrix / temperature, dim=1)
+#
+#     # The prediction is the log-softmax over the same similarities
+#     predictions = F.log_softmax(similarity_matrix, dim=1)
+#
+#     # Cross-entropy loss
+#     loss = - (targets * predictions).sum(dim=1)
+#     return loss.mean()
 
 
 
@@ -181,11 +181,13 @@ if __name__ == '__main__':
 
     print("Initializing SegFormer backbone and MSN model...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = "mps"
 
     segformer_backbone = SegformerBackbone(output_dim=FEATURE_DIM)
     msn_model = SurgicalMaskedSiameseNetwork(backbone=segformer_backbone).to(device)
 
     optimizer = torch.optim.AdamW(msn_model.online_encoder.parameters(), lr=LEARNING_RATE)
+    msn_loss = MSNLoss()
 
     print(f"Starting self-supervised training for {EPOCHS} epochs on {device}...")
     for epoch in range(EPOCHS):
@@ -219,7 +221,7 @@ if __name__ == '__main__':
         print(f"Epoch [{epoch + 1}/{EPOCHS}], Average Loss: {avg_loss:.4f}")
 
     print("Self-supervised pre-training complete!")
-    print("You can now save the `msn_model.online_encoder` state dict for fine-tuning.")
+    print("Saving the `msn_model.online_encoder` state dict for fine-tuning.")
 
     # Example of saving the backbone for downstream tasks
-    # torch.save(msn_model.online_encoder.state_dict(), 'segformer_msn_pretrained_backbone.pth')
+    torch.save(msn_model.online_encoder.state_dict(), 'checkpoints/segformer_msn_pretrained_backbone.pth')

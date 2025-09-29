@@ -1,7 +1,7 @@
 import torch
 
 from segmenter.loss import EPSILON
-from segmenter.loss.utils import sobel_grad
+from segmenter.loss import sobel_grad
 
 
 def make_soft_boundary(prob: torch.Tensor, tau: float = 1.0) -> torch.Tensor:

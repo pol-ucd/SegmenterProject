@@ -2,9 +2,8 @@ import torch
 from torch.nn import functional as F
 
 from segmenter.loss import BaseLoss
-from segmenter.loss import EPSILON
+from segmenter.loss import one_hot
 from segmenter.loss.distance import DistanceTransform2D
-from segmenter.loss.utils import one_hot
 
 
 class BoundarySDFLoss(BaseLoss):

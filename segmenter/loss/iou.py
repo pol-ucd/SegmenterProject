@@ -1,11 +1,10 @@
 import torch
 
-from segmenter.loss.base import BaseLoss
-from segmenter.modules import EPSILON
+from segmenter.loss import BaseLoss, EPSILON
 
 
 class IoULoss(BaseLoss):
-    """Calculates the Intersection over Union (IoU) Loss."""
+    """Calculates Intersection over Union (IoU or Jaccard) Loss."""
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         scores = super().setup(predicted, target)

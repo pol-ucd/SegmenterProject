@@ -2,11 +2,8 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
-from segmenter.loss import BaseLoss
-from segmenter.loss import EPSILON
+from segmenter.loss import BaseLoss, EPSILON, one_hot, DistanceTransform2D
 from segmenter.loss.boundary import make_soft_boundary
-from segmenter.loss.distance import DistanceTransform2D
-from segmenter.loss.utils import one_hot
 
 
 class SoftChamferLoss(BaseLoss):

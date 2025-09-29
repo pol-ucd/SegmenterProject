@@ -1,12 +1,11 @@
 import torch
 
-from segmenter.loss.base import BaseLoss
-from segmenter.modules import EPSILON
+from segmenter.loss import BaseLoss, EPSILON
 
 
 class DiceLoss(BaseLoss):
     """
-    Calculates the multi-class Dice Loss.
+    Calculates Dice Loss.
     """
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:

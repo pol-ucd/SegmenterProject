@@ -1,7 +1,7 @@
 import torch
 from torch.nn import functional as F
 
-from segmenter.modules import EPSILON
+EPSILON = 1e-06
 
 
 def one_hot(mask: torch.Tensor, num_classes: int) -> torch.Tensor:
