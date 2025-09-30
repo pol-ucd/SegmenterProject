@@ -290,12 +290,8 @@ class SiameseSegFormer(nn.Module):
 
     def __init__(self, model_name: str = 'nvidia/mit-b0', projection_dim: int = 128):
         super().__init__()
-        # Load the SegFormer Model (only the encoder/backbone)
-        # We use SegformerModel which returns the features before the decoder head
         self.encoder = SegformerModel.from_pretrained(model_name)
 
-        # Determine the dimension of the final encoder output
-        # SegFormer outputs features from multiple stages. We take the last one.
         # For MiT-B0, the last feature dimension is typically 512
         encoder_output_dim = self.encoder.config.hidden_sizes[-1]
 
@@ -312,7 +308,7 @@ class SiameseSegFormer(nn.Module):
         Processes anchor and positive pairs through the shared encoder and head.
         :return: (Anchor Embeddings, Positive Embeddings)
         """
-        # 1. Anchor Stream
+        # Anchor Stream
         # The SegFormerModel returns a BaseModelOutput (features from all stages)
         # We grab the last hidden state (last_hidden_state)
         # [B, H*W, D] -> We need to pool or average it to [B, D]
@@ -322,12 +318,12 @@ class SiameseSegFormer(nn.Module):
         # [B, H*W, D] -> [B, D]
         z_anchor_pooled = anchor_features.mean(dim=1).reshape(anchor_features.shape[0], -1)
 
-        # 2. Positive Stream
+        # Positive Stream
         positive_features = self.encoder(x_positive).last_hidden_state
         # z_positive_pooled = positive_features.mean(dim=1)
         z_positive_pooled = positive_features.mean(dim=1).reshape(positive_features.shape[0], -1)
 
-        # 3. Projection Head
+        # Projection Head
         z_anchor = self.projection_head(z_anchor_pooled)
         z_positive = self.projection_head(z_positive_pooled)
 

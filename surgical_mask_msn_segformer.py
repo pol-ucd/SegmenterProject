@@ -55,7 +55,7 @@ if __name__ == '__main__':
     print(f"Dataloader created with {len(full_dataset)} data records in {len(dataloader)} batches.")
 
     print("Initializing SegFormer backbone and MSN model...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     segformer_backbone = SegformerBackbone(output_dim=FEATURE_DIM)
     msn_model = SurgicalMaskedSiameseNetwork(backbone=segformer_backbone).to(device)
