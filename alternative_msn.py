@@ -423,7 +423,7 @@ class SupervisedSegFormer(SegformerForSemanticSegmentation):
 
 
 def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, device: torch.device):
+                  optimizer: torch.optim.Optimizer, device: torch.device, num_epochs=100):
     logger = logging.getLogger(__name__)
     model.train()
     total_loss = 0
@@ -431,33 +431,55 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     # Use a combined loss (Dice + Cross-Entropy) for better segmentation
     ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Ignore index 255 for padded areas
 
-    for inputs, labels in dataloader:  # inputs=[B,C,H,W], labels=[B,H,W]
-        inputs, labels = inputs.to(device), labels.to(device).long()
+    best_loss = float('inf')
+    min_delta = 0.00001
+    boredom = 0
+    max_boredom = 10
+    best_model = None
+    for epoch in range(num_epochs):
+        for inputs, labels in dataloader:  # inputs=[B,C,H,W], labels=[B,H,W]
+            inputs, labels = inputs.to(device), labels.to(device).long()
 
-        optimizer.zero_grad()
+            optimizer.zero_grad()
 
-        # Forward pass
-        outputs = model(inputs)
-        logits = outputs.logits  # Logits [B, num_labels, H/4, W/4]
+            # Forward pass
+            outputs = model(inputs)
+            logits = outputs.logits  # Logits [B, num_labels, H/4, W/4]
 
-        # Resize logits to match labels size (SegFormer outputs downsampled logits)
-        resized_logits = F.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+            # Resize logits to match labels size (SegFormer outputs downsampled logits)
+            resized_logits = F.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
 
-        # Calculate Cross Entropy Loss
-        ce_loss = ce_loss_fn(resized_logits, labels)
+            # Calculate Cross Entropy Loss
+            ce_loss = ce_loss_fn(resized_logits, labels)
 
-        # For simplicity, we use only CE Loss in this example, but a Dice Loss
-        # (or Tversky/Focal) is highly recommended for medical segmentation.
-        loss = ce_loss
+            # For simplicity, we use only CE Loss in this example, but a Dice Loss
+            # (or Tversky/Focal) is highly recommended for medical segmentation.
+            loss = ce_loss
 
-        # Backpropagation
-        loss.backward()
-        optimizer.step()
+            # Backpropagation
+            loss.backward()
+            optimizer.step()
 
-        total_loss += loss.item()
+            total_loss += loss.item()
 
-    avg_loss = total_loss / len(dataloader)
-    logger.info(f"Fine-tuning Loss: {avg_loss:.4f}")
+        avg_loss = total_loss / len(dataloader)
+
+        logger.info(f"PFine-tuning Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
+        if avg_loss + min_delta < best_loss:
+            best_loss = avg_loss
+            boredom = 0
+            logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
+            best_model = model.online_encoder.state_dict()
+            torch.save(best_model,
+                       '../segmenter/checkpoint/alternative_msn_segformer_finetuned.pth')
+
+        else:
+            boredom += 1
+        if boredom > max_boredom:
+            logger.info(f"No improvement after {boredom} epochs, terminating")
+            break
+
+    return best_model  # Return the pre-trained encoder weights
 
 
 def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader, device: torch.device):
