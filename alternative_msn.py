@@ -1,4 +1,9 @@
+import datetime
+import logging
+import os
 import random
+import sys
+from pathlib import Path
 from typing import Tuple
 
 import h5py
@@ -7,6 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
+from timm.data.tf_preprocessing import IMAGE_SIZE
 from torch.utils.data import ConcatDataset
 
 from transformers import SegformerConfig, SegformerModel, SegformerForSemanticSegmentation
@@ -327,45 +333,65 @@ class SiameseSegFormer(nn.Module):
 
 
 def pretrain_step(model: SiameseSegFormer, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device):
-    """Snippet for the pre-training loop."""
+                  optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device,
+                  num_epochs=100):
+    logger = logging.getLogger(__name__)
     model.train()
     total_loss = 0
     mask_generator = MaskGenerator(size=IMAGE_SIZE)
 
-    for batch_images in dataloader:
-        # Assuming dataloader yields raw images [B, C, H, W]
-        # Create Siamese Pairs dynamically for the batch
-        batch_anchor = []
-        batch_positive = []
+    best_loss = float('inf')
+    min_delta = 0.00001
+    boredom = 0
+    max_boredom = 10
+    best_model = None
+    for epoch in range(num_epochs):
+        for batch_images in dataloader:
+            # Assuming dataloader yields raw images [B, C, H, W]
+            # Create Siamese Pairs dynamically for the batch
+            batch_anchor = []
+            batch_positive = []
 
-        for image in batch_images:
-            anchor, positive = mask_generator.create_siamese_pair(image)
-            batch_anchor.append(anchor)
-            batch_positive.append(positive)
+            for image in batch_images:
+                anchor, positive = mask_generator.create_siamese_pair(image)
+                batch_anchor.append(anchor)
+                batch_positive.append(positive)
 
 
-        x_anchor = torch.stack(batch_anchor).to(device)
-        x_positive = torch.stack(batch_positive).to(device)
+            x_anchor = torch.stack(batch_anchor).to(device)
+            x_positive = torch.stack(batch_positive).to(device)
 
-        optimizer.zero_grad()
+            optimizer.zero_grad()
 
-        # Forward pass through the Siamese network
-        z_anchor, z_positive = model(x_anchor, x_positive)
+            # Forward pass through the Siamese network
+            z_anchor, z_positive = model(x_anchor, x_positive)
 
-        # Calculate InfoNCE Loss
-        loss = loss_fn(z_anchor, z_positive)
+            # Calculate InfoNCE Loss
+            loss = loss_fn(z_anchor, z_positive)
 
-        # Backpropagation
-        loss.backward()
-        optimizer.step()
+            # Backpropagation
+            loss.backward()
+            optimizer.step()
 
-        total_loss += loss.item()
+            total_loss += loss.item()
 
-    avg_loss = total_loss / len(dataloader)
-    print(f"Pre-training Loss: {avg_loss:.4f}")
+        avg_loss = total_loss / len(dataloader)
+        logger.info(f"Pretraining Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
+        if avg_loss + min_delta < best_loss:
+            best_loss = avg_loss
+            boredom = 0
+            logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
+            best_model = model.online_encoder.state_dict()
+            torch.save(best_model,
+                       '../segmenter/checkpoint/alternative_msn_segformer_pretrained.pth')
 
-    return model.encoder.state_dict()  # Return the pre-trained encoder weights
+        else:
+            boredom += 1
+        if boredom > max_boredom:
+            logger.info(f"No improvement after {boredom} epochs, terminating")
+            break
+
+    return best_model  # Return the pre-trained encoder weights
 
 
 # --- 3. Fine-tuning & Validation Module ---
@@ -383,7 +409,7 @@ class SupervisedSegFormer(SegformerForSemanticSegmentation):
         """
         Loads the pre-trained encoder weights into the segmentation model's backbone.
         """
-        print("Loading pre-trained weights into SegFormer backbone...")
+        logger.info("Loading pre-trained weights into SegFormer backbone...")
         # Get the keys for the shared encoder from the pre-trained state dict
         encoder_state_dict = {
             k: v for k, v in pretrain_state_dict.items()
@@ -393,12 +419,12 @@ class SupervisedSegFormer(SegformerForSemanticSegmentation):
         # Load the weights into the current model, ignoring the randomly initialized head
         # The strict=False handles keys missing in the decoder part
         self.load_state_dict(encoder_state_dict, strict=False)
-        print("Pre-trained encoder weights loaded successfully.")
+        logger.info("Pre-trained encoder weights loaded successfully.")
 
 
 def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer, device: torch.device):
-    """Snippet for the supervised fine-tuning loop."""
+    logger = logging.getLogger(__name__)
     model.train()
     total_loss = 0
 
@@ -431,11 +457,11 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
         total_loss += loss.item()
 
     avg_loss = total_loss / len(dataloader)
-    print(f"Fine-tuning Loss: {avg_loss:.4f}")
+    logger.info(f"Fine-tuning Loss: {avg_loss:.4f}")
 
 
 def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader, device: torch.device):
-    """Snippet for the validation loop."""
+    logger = logging.getLogger(__name__)
     model.eval()
     total_dice = 0.0
     num_classes = model.config.num_labels
@@ -469,14 +495,14 @@ def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
                 # Multi-class implementation would require iterating over classes
 
     avg_dice = total_dice / len(dataloader.dataset)
-    print(f"Validation Dice Score (Foreground): {avg_dice:.4f}")
+    logger.info(f"Validation Dice Score (Foreground): {avg_dice:.4f}")
 
 
 # --- Example Usage (Mock Data and Setup) ---
 
-if __name__ == '__main__':
-
-    print("--- Setting up Modular Architecture Demonstration ---")
+def main():
+    logger = logging.getLogger()
+    logger.info("--- Setting up Modular Architecture Demonstration ---")
 
     # Mock Configuration
     IMAGE_SIZE = 512
@@ -486,7 +512,7 @@ if __name__ == '__main__':
 
     # Use CPU for simplicity in example
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    logger.info(f"Using device: {device}")
 
 
     # Large Unannotated set for Pre-training
@@ -525,7 +551,7 @@ if __name__ == '__main__':
     # 1. PRE-TRAINING PHASE
     # ----------------------------------------------------
 
-    print("\n--- 1. Starting Pre-training Phase (Siamese Network) ---")
+    logger.info("Starting Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
     siamese_model = SiameseSegFormer(model_name='nvidia/mit-b0').to(device)
@@ -547,7 +573,7 @@ if __name__ == '__main__':
     # 2. FINE-TUNING PHASE
     # ----------------------------------------------------
 
-    print("\n--- 2. Starting Fine-tuning Phase (Supervised Segmentation) ---")
+    logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
 
     # Configure the standard SegFormer for the segmentation task
     segformer_config = SegformerConfig.from_pretrained('nvidia/segformer-b0', num_labels=NUM_CLASSES)
@@ -573,6 +599,36 @@ if __name__ == '__main__':
     # 3. VALIDATION PHASE
     # ----------------------------------------------------
 
-    print("\n--- 3. Starting Validation Phase ---")
+    logger.info("Starting Validation Phase ---")
 
     validate_step(supervised_model, validation_dataloader, device)
+
+if __name__ == "__main__":
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    home_dir = Path.home()
+    if not os.path.exists(os.path.join(home_dir, "segmenter")):
+        os.makedirs(os.path.join(home_dir, "segmenter"))
+    logfile = os.path.join(home_dir, "segmenter", f"training_{timestamp}.log")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        force=True,  # Resets any previous configuration - in Colab for example
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(logfile)
+        ]
+    )
+    logger = logging.getLogger(__name__)
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("KeyboardInterrupt detected. Shutting down gracefully.")
+        sys.exit(0)
+    finally:
+        # This block will always be executed, allowing you to clean up resources
+        # ensure log handlers are flushed.
+        for handler in logger.handlers:
+            handler.flush()
+            handler.close()
+        logger.info("Logger handlers flushed and closed. Exiting now.")
