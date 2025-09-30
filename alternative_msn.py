@@ -485,7 +485,7 @@ if __name__ == '__main__':
     finetune_percent = 0.1
 
     # Use CPU for simplicity in example
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
 
