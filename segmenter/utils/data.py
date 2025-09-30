@@ -116,7 +116,7 @@ class HDF5Dataset(Dataset):
         if self.f is None:
             # Re-open the file handle for this specific worker/process
             self.f = h5py.File(self.hdf5_path, 'r')
-        self.data = {k:self.f[k] for k in self.data_keys}
+        self.data = {k:self.f[k] for k in self.data_keys if k in self.f}
 
         return {k:v[idx] for k, v in self.data.items()}
 

@@ -526,7 +526,7 @@ def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
 
 def main():
     logger = logging.getLogger()
-    logger.info("--- Setting up Modular Architecture Demonstration ---")
+    logger.info("Starting pretraining run")
 
     # Mock Configuration
     IMAGE_SIZE = 512
