@@ -632,7 +632,7 @@ if __name__ == "__main__":
     home_dir = Path.home()
     if not os.path.exists(os.path.join(home_dir, "segmenter")):
         os.makedirs(os.path.join(home_dir, "segmenter"))
-    logfile = os.path.join(home_dir, "segmenter", f"training_{timestamp}.log")
+    logfile = os.path.join(home_dir, "segmenter", f"alternative_msn_{timestamp}.log")
 
     logging.basicConfig(
         level=logging.INFO,
