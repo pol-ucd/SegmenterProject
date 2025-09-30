@@ -11,7 +11,7 @@ from segmenter.models.msn import SurgicalMaskedSiameseNetwork
 from segmenter.utils import SurgicalAugmentor
 from segmenter.utils.surgical import SurgicalSiameseDatasetHDF5, SurgicalMaskComposer
 
-DATASET = '/Users/polmacaonghusa/Documents/Projects/SegmenterProject/data/all_images.hdf5'
+
 DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
             '../segmenter/data/all_data.h5',
             '../segmenter/data/Classica.h5']
