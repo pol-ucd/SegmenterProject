@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
-from timm.data.tf_preprocessing import IMAGE_SIZE
+# from timm.data.tf_preprocessing import IMAGE_SIZE
 from torch.utils.data import ConcatDataset
 
 from transformers import SegformerConfig, SegformerModel, SegformerForSemanticSegmentation
@@ -24,6 +24,8 @@ PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
                      '../segmenter/data/all_data.h5']
 
 FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
+
+IMAGE_SIZE=(512, 512)
 
 
 class MSNPretrainDatasetHDF5(HDF5Dataset):
