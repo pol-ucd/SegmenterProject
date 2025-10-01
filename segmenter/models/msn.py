@@ -316,7 +316,7 @@ class MoCoSiameseNetwork(nn.Module):
             target_pooled_features = get_pooled_features(global_view, self.target_encoder)
 
             # Apply the Target Head to project 256 down to 128 (MUST be done before comparison)
-            target_z = self.target_head(target_pooled_features.flatten(-2, -1))
+            target_z = self.target_head(target_pooled_features)
 
             # The target embedding Z' must be detached
             target_z_detached = target_z.detach()
