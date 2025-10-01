@@ -1,24 +1,22 @@
-from datetime import datetime
 import logging
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.utils.data import ConcatDataset
 from tqdm import tqdm
+from transformers import SegformerConfig
 
-from transformers import SegformerConfig, SegformerForSemanticSegmentation
-
-from segmenter.models.base import SupervisedSegFormer
 from segmenter.loss.msn import InfoNCELoss
+from segmenter.masks.msn import MaskGenerator
+from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import SimCLRSegFormer
 from segmenter.utils.data import get_num_samples_from_hdf5, MSNPretrainDatasetHDF5, MSNFinetuneDatasetHDF5
-from segmenter.masks.msn import MaskGenerator
 
 PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
                      '../segmenter/data/all_data.h5']
