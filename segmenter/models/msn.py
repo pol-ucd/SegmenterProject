@@ -263,7 +263,7 @@ class MoCoSiameseNetwork(nn.Module):
         def get_pooled_features(x, encoder):
             features = encoder(x.squeeze(1)).last_hidden_state
             # Pool over the sequence dimension (dim=1) and reshape to [B, D]
-            return features.mean(dim=1).reshape(features.shape[0], -1)
+            return features.mean(dim=1).reshape(features.shape[0], -1).squeeze(-1)
 
             # --- Online Path (Focal View / MASKED) ---
 
