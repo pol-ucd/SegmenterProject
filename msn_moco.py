@@ -88,7 +88,8 @@ def pretrain_step(model:MoCoSiameseNetwork, dataloader: torch.utils.data.DataLoa
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           '../segmenter/checkpoint/msn_moco_segformer_pretrained.pth')
+                           '../segmenter/checkpoint/msn_moco'
+                           '_segformer_pretrained.pth')
             except Exception as e:
                 logger.error(f"Pretraining failed to save `msn_model.online_encoder.state_dict()`: {e}")
 

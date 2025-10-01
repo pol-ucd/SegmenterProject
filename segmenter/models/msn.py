@@ -212,13 +212,13 @@ class MoCoSiameseNetwork(nn.Module):
     now including the logic to mask online features.
     """
 
-    def __init__(self, backbone, momentum=0.996, projection_dim=128):
+    def __init__(self, model_name, momentum=0.996, projection_dim=128):
         super().__init__()
         self.momentum = momentum
         self.projection_dim = projection_dim
 
         # Create online and target networks
-        self.online_encoder = backbone
+        self.online_encoder = model_name
 
         try:
             encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
