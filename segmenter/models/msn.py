@@ -287,7 +287,8 @@ class MoCoSiameseNetwork(nn.Module):
         online_pooled_features_list = []
         for i in range(B):
             # Select the D-dim feature vectors where the patch is visible
-            visible_patches = online_features[i][patch_visibility_mask[i]]  # [S_visible, D]
+            p_h, p_w = online_features[i].shape[-2:]
+            visible_patches = online_features[i][patch_visibility_mask[i].reshape(p_h, p_w)]  # [S_visible, D]
 
             # Pool over the visible patches only (average over S_visible)
             if visible_patches.numel() > 0:
