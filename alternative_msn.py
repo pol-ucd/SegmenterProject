@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
-# from timm.data.tf_preprocessing import IMAGE_SIZE
+
 from torch.utils.data import ConcatDataset
 from tqdm import tqdm
 
@@ -283,10 +283,23 @@ class InfoNCELoss(nn.Module):
         return loss
 
 
-class SiameseSegFormer(nn.Module):
+class SiameseSimCLRSegFormer(nn.Module):
     """
-    SegFormer Encoder wrapped in a Siamese architecture for pre-training.
-    Uses a Projection Head to generate fixed-size embeddings.
+    An implementation of SimCLR architecture using a single, shared encoder for both the anchor
+    and positive image streams.
+
+    The shared encoder approach is standard in simpler Contrastive Learning frameworks like SimCLR.
+    Invariance Learning: The core goal is to teach the single encoder to produce similar embeddings
+    (z_anchor, and z_positive) for two different, augmented views (the original image and the occluded image)
+    of the same underlying scene. By using a single set of weights, you maximize the gradient flow,
+    forcing those weights to learn invariance to the occlusion augmentation simultaneously from both paths.
+
+    Simultaneous Update: The loss is calculated based on the similarity between the positive pair,
+    and dissimilarity with all other pairs in the batch (negatives). When you backpropagate the loss,
+    the gradients from both the anchor view and the positive (occluded) view update the same shared
+    weights in the encoder at the same time.
+
+    There is no concept of a "momentum" encoder or separate updates.
     """
 
     def __init__(self, model_name: str = 'nvidia/mit-b0', projection_dim: int = 128):
@@ -310,8 +323,6 @@ class SiameseSegFormer(nn.Module):
         :return: (Anchor Embeddings, Positive Embeddings)
         """
         # Anchor Stream
-        # The SegFormerModel returns a BaseModelOutput (features from all stages)
-        # We grab the last hidden state (last_hidden_state)
         # [B, H*W, D] -> We need to pool or average it to [B, D]
         anchor_features = self.encoder(x_anchor).last_hidden_state
 
@@ -331,7 +342,7 @@ class SiameseSegFormer(nn.Module):
         return z_anchor, z_positive
 
 
-def pretrain_step(model: SiameseSegFormer, dataloader: torch.utils.data.DataLoader,
+def pretrain_step(model: SiameseSimCLRSegFormer, dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device,
                   num_epochs=100):
     logger = logging.getLogger(__name__)
@@ -575,7 +586,7 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = SiameseSegFormer(model_name='nvidia/mit-b0').to(device)
+    siamese_model = SiameseSimCLRSegFormer(model_name='nvidia/mit-b0').to(device)
     pretrain_loss_fn = InfoNCELoss(temperature=0.1)
 
     # Use a large LR for pre-training (standard for self-supervised learning)

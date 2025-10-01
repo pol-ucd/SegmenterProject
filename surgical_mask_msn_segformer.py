@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 from segmenter.core import freeze_seed
 from segmenter.loss import MSNLoss
 from segmenter.models.base import SegformerBackbone
-from segmenter.models.msn import SurgicalMaskedSiameseNetwork
+from segmenter.models.msn import SurgicalSimCLRSiameseNetwork
 from segmenter.utils import SurgicalAugmentor
 from segmenter.utils.surgical import SurgicalSiameseDatasetHDF5, SurgicalMaskComposer
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     segformer_backbone = SegformerBackbone(output_dim=FEATURE_DIM)
-    msn_model = SurgicalMaskedSiameseNetwork(backbone=segformer_backbone).to(device)
+    msn_model = SurgicalSimCLRSiameseNetwork(backbone=segformer_backbone).to(device)
 
     optimizer = torch.optim.AdamW(msn_model.online_encoder.parameters(), lr=LEARNING_RATE)
     msn_loss = MSNLoss()

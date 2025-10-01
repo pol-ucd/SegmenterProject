@@ -4,7 +4,8 @@ import torch
 from torch import nn as nn
 
 
-class SurgicalMaskedSiameseNetwork(nn.Module):
+class SurgicalSimCLRSiameseNetwork(nn.Module):
+
     def __init__(self, backbone, momentum=0.996):
         super().__init__()
         self.momentum = momentum
