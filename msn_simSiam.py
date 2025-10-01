@@ -54,16 +54,16 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
                 batch_positive.append(positive)
 
 
-            x_anchor = torch.stack(batch_anchor).to(device)
-            x_positive = torch.stack(batch_positive).to(device)
+            x1 = torch.stack(batch_anchor).to(device)
+            x2 = torch.stack(batch_positive).to(device)
 
             optimizer.zero_grad()
 
-            # Forward pass through the Siamese network
-            z_anchor, z_positive = model(x_anchor, x_positive)
+            # Forward pass through the SimSiam network (returns 4 tensors for symmetric loss)
+            p1, z2_detached, p2, z1_detached = model(x1, x2)
 
-            # Calculate InfoNCE Loss
-            loss = loss_fn(z_anchor, z_positive)
+            # Calculate SimSiam Loss (Symmetric)
+            loss = loss_fn(p1, z2_detached, p2, z1_detached)
 
             # Backpropagation
             loss.backward()
