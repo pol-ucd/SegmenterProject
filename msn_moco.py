@@ -13,7 +13,7 @@ from tqdm import tqdm
 from transformers import SegformerConfig
 
 from segmenter.loss import DiceLoss
-from segmenter.loss.msn import SimSiamLoss
+# from segmenter.loss.msn import SimSiamLoss
 from segmenter.masks.msn import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import MoCoSiameseNetwork
@@ -66,9 +66,8 @@ def pretrain_step(model:MoCoSiameseNetwork, dataloader: torch.utils.data.DataLoa
             # Pass the mask to the forward method
             prediction_p, target_z_detached = model(x1, x2, x3)
 
-            # Simple similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
-            # Using MSE here for simplicity, similar to SimSiam
-            loss =loss_fn(prediction_p, target_z_detached)
+            # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
+            loss = loss_fn(prediction_p, target_z_detached)
 
             # Backpropagation
             loss.backward()
@@ -261,7 +260,8 @@ def main():
 
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(model_name='nvidia/mit-b0', momentum=0.996).to(device)
-    pretrain_loss_fn = SimSiamLoss()
+    # pretrain_loss_fn = SimSiamLoss()
+    pretrain_loss_fn = nn.MSELoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(), lr=1e-3, weight_decay=1e-4)
