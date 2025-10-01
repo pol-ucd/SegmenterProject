@@ -1,10 +1,8 @@
 from datetime import datetime
 import logging
 import os
-import random
 import sys
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 import torch
@@ -14,8 +12,9 @@ import torch.nn.functional as F
 from torch.utils.data import ConcatDataset
 from tqdm import tqdm
 
-from transformers import SegformerConfig, SegformerModel, SegformerForSemanticSegmentation
+from transformers import SegformerConfig
 
+from segmenter.models.base import SupervisedSegFormer
 from segmenter.utils.data import get_num_samples_from_hdf5, MSNPretrainDatasetHDF5, MSNFinetuneDatasetHDF5
 from segmenter.masks.msn import MaskGenerator
 from segmenter.models.msn import SimSiamSegFormer
@@ -78,9 +77,12 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
             best_loss = avg_loss
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
-            best_model = model.online_encoder.state_dict()
-            torch.save(best_model,
-                       '../segmenter/checkpoint/alternative_msn_segformer_pretrained.pth')
+            try:
+                best_model = model.online_encoder.state_dict()
+                torch.save(best_model,
+                           '../segmenter/checkpoint/alternative_msn_segformer_pretrained.pth')
+            except Exception as e:
+                logger.error(f"Pretraining failed to save `msn_model.online_encoder.state_dict()`: {e}")
 
         else:
             boredom += 1
@@ -89,34 +91,6 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
             break
 
     return best_model  # Return the pre-trained encoder weights
-
-
-# --- 3. Fine-tuning & Validation Module ---
-
-class SupervisedSegFormer(SegformerForSemanticSegmentation):
-    """
-    Standard SegFormer model for semantic segmentation.
-    Inherits from the Hugging Face implementation.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-
-    def load_pretrain_weights(self, pretrain_state_dict: dict):
-        """
-        Loads the pre-trained encoder weights into the segmentation model's backbone.
-        """
-        logger.info("Loading pre-trained weights into SegFormer backbone...")
-        # Get the keys for the shared encoder from the pre-trained state dict
-        encoder_state_dict = {
-            k: v for k, v in pretrain_state_dict.items()
-            if k.startswith('encoder')
-        }
-
-        # Load the weights into the current model, ignoring the randomly initialized head
-        # The strict=False handles keys missing in the decoder part
-        self.load_state_dict(encoder_state_dict, strict=False)
-        logger.info("Pre-trained encoder weights loaded successfully.")
 
 
 def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader,
@@ -166,9 +140,12 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             best_loss = avg_loss
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
-            best_model = model.online_encoder.state_dict()
-            torch.save(best_model,
-                       '../segmenter/checkpoint/msn_simsiam_segformer_finetuned.pth')
+            try:
+                best_model = model.online_encoder.state_dict()
+                torch.save(best_model,
+                           '../segmenter/checkpoint/msn_simsiam_segformer_finetuned.pth')
+            except Exception as e:
+                logger.error(f"Finetuning failed to save `msn_model.online_encoder.state_dict()`: {e}")
 
         else:
             boredom += 1

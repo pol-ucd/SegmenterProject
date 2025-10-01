@@ -14,8 +14,9 @@ from tqdm import tqdm
 
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
+from segmenter.models.base import SupervisedSegFormer
 from segmenter.loss.msn import InfoNCELoss
-from segmenter.models.msn import SiameseSimCLRSegFormer
+from segmenter.models.msn import SimCLRSegFormer
 from segmenter.utils.data import get_num_samples_from_hdf5, MSNPretrainDatasetHDF5, MSNFinetuneDatasetHDF5
 from segmenter.masks.msn import MaskGenerator
 
@@ -27,7 +28,7 @@ FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
 IMAGE_SIZE=(512, 512)
 
 
-def pretrain_step(model: SiameseSimCLRSegFormer, dataloader: torch.utils.data.DataLoader,
+def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device,
                   num_epochs=100):
     logger = logging.getLogger(__name__)
@@ -76,9 +77,12 @@ def pretrain_step(model: SiameseSimCLRSegFormer, dataloader: torch.utils.data.Da
             best_loss = avg_loss
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
-            best_model = model.online_encoder.state_dict()
-            torch.save(best_model,
-                       '../segmenter/checkpoint/alternative_msn_segformer_pretrained.pth')
+            try:
+                best_model = model.online_encoder.state_dict()
+                torch.save(best_model,
+                           '../segmenter/checkpoint/alternative_msn_segformer_pretrained.pth')
+            except Exception as e:
+                logger.error(f"Pretraining failed to save `msn_model.online_encoder.state_dict()`: {e}")
 
         else:
             boredom += 1
@@ -87,34 +91,6 @@ def pretrain_step(model: SiameseSimCLRSegFormer, dataloader: torch.utils.data.Da
             break
 
     return best_model  # Return the pre-trained encoder weights
-
-
-# --- 3. Fine-tuning & Validation Module ---
-
-class SupervisedSegFormer(SegformerForSemanticSegmentation):
-    """
-    Standard SegFormer model for semantic segmentation.
-    Inherits from the Hugging Face implementation.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-
-    def load_pretrain_weights(self, pretrain_state_dict: dict):
-        """
-        Loads the pre-trained encoder weights into the segmentation model's backbone.
-        """
-        logger.info("Loading pre-trained weights into SegFormer backbone...")
-        # Get the keys for the shared encoder from the pre-trained state dict
-        encoder_state_dict = {
-            k: v for k, v in pretrain_state_dict.items()
-            if k.startswith('encoder')
-        }
-
-        # Load the weights into the current model, ignoring the randomly initialized head
-        # The strict=False handles keys missing in the decoder part
-        self.load_state_dict(encoder_state_dict, strict=False)
-        logger.info("Pre-trained encoder weights loaded successfully.")
 
 
 def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader,
@@ -164,9 +140,12 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             best_loss = avg_loss
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
-            best_model = model.online_encoder.state_dict()
-            torch.save(best_model,
-                       '../segmenter/checkpoint/msn_simclr_segformer_finetuned.pth')
+            try:
+                best_model = model.online_encoder.state_dict()
+                torch.save(best_model,
+                           '../segmenter/checkpoint/msn_simclr_segformer_finetuned.pth')
+            except Exception as e:
+                logger.error(f"Finetuning failed to save `msn_model.online_encoder.state_dict()`: {e}")
 
         else:
             boredom += 1
@@ -271,7 +250,7 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = SiameseSimCLRSegFormer(model_name='nvidia/mit-b0').to(device)
+    siamese_model = SimCLRSegFormer(model_name='nvidia/mit-b0').to(device)
     pretrain_loss_fn = InfoNCELoss(temperature=0.1)
 
     # Use a large LR for pre-training (standard for self-supervised learning)

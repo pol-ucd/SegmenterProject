@@ -7,7 +7,7 @@ from transformers import SegformerModel
 
 
 class SimCLRSiameseNetwork(nn.Module):
-
+    """ Original model - used in surgical_mask_msn_segformer.py """
     def __init__(self, backbone, momentum=0.996):
         super().__init__()
         self.momentum = momentum
@@ -64,9 +64,9 @@ class SimSiamSegFormer(nn.Module):
     def __init__(self, model_name: str = 'nvidia/mit-b0', projection_dim: int = 128):
         super().__init__()
         # Load the SegFormer Model (only the encoder/backbone) - Shared Encoder
-        self.encoder = SegformerModel.from_pretrained(model_name)
+        self.online_encoder = SegformerModel.from_pretrained(model_name)
 
-        encoder_output_dim = self.encoder.config.hidden_sizes[-1]
+        encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
 
         # Projection Head (g) - Maps features to embedding space (z)
         self.projection_head = nn.Sequential(
@@ -97,7 +97,7 @@ class SimSiamSegFormer(nn.Module):
         # Helper function to compute z and p for a view
         def get_p_and_z(x):
             # Encoder
-            features = self.encoder(x).last_hidden_state
+            features = self.online_encoder(x).last_hidden_state
             # Pool features over the sequence dimension (dim=1) and explicitly reshape to [B, D]
             z_pooled = features.mean(dim=1).reshape(features.shape[0], -1)
             # Projection Head (z)
@@ -116,7 +116,7 @@ class SimSiamSegFormer(nn.Module):
         return p1, z2.detach(), p2, z1.detach()
 
 
-class SiameseSimCLRSegFormer(nn.Module):
+class SimCLRSegFormer(nn.Module):
     """
     An implementation of SimCLR architecture using a single, shared encoder for both the anchor
     and positive image streams.
@@ -137,10 +137,10 @@ class SiameseSimCLRSegFormer(nn.Module):
 
     def __init__(self, model_name: str = 'nvidia/mit-b0', projection_dim: int = 128):
         super().__init__()
-        self.encoder = SegformerModel.from_pretrained(model_name)
+        self.online_encoder = SegformerModel.from_pretrained(model_name)
 
         # For MiT-B0, the last feature dimension is typically 512
-        encoder_output_dim = self.encoder.config.hidden_sizes[-1]
+        encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
 
         # Projection Head (MLP) for Contrastive Learning
         # This maps the high-dimensional feature into a lower-dimensional embedding (z)
@@ -157,14 +157,14 @@ class SiameseSimCLRSegFormer(nn.Module):
         """
         # Anchor Stream
         # [B, H*W, D] -> We need to pool or average it to [B, D]
-        anchor_features = self.encoder(x_anchor).last_hidden_state
+        anchor_features = self.online_encoder(x_anchor).last_hidden_state
 
         # Global Average Pooling across the spatial dimension (H*W)
         # [B, H*W, D] -> [B, D]
         z_anchor_pooled = anchor_features.mean(dim=1).reshape(anchor_features.shape[0], -1)
 
         # Positive Stream
-        positive_features = self.encoder(x_positive).last_hidden_state
+        positive_features = self.online_encoder(x_positive).last_hidden_state
         # z_positive_pooled = positive_features.mean(dim=1)
         z_positive_pooled = positive_features.mean(dim=1).reshape(positive_features.shape[0], -1)
 
