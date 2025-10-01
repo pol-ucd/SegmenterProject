@@ -157,14 +157,14 @@ class SimCLRSegFormer(nn.Module):
         """
         # Anchor Stream
         # [B, H*W, D] -> We need to pool or average it to [B, D]
-        anchor_features = self.online_encoder(x_anchor).last_hidden_state
+        anchor_features = self.online_encoder(x_anchor.squeeze()).last_hidden_state
 
         # Global Average Pooling across the spatial dimension (H*W)
         # [B, H*W, D] -> [B, D]
         z_anchor_pooled = anchor_features.mean(dim=1).reshape(anchor_features.shape[0], -1)
 
         # Positive Stream
-        positive_features = self.online_encoder(x_positive).last_hidden_state
+        positive_features = self.online_encoder(x_positive.squeeze()).last_hidden_state
         # z_positive_pooled = positive_features.mean(dim=1)
         z_positive_pooled = positive_features.mean(dim=1).reshape(positive_features.shape[0], -1)
 
