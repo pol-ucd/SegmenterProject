@@ -223,7 +223,7 @@ class MoCoSiameseNetwork(nn.Module):
         try:
             encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
         except:
-            encoder_output_dim = 16
+            encoder_output_dim = 256
 
         # Online Predictor Head (h)
         self.online_head = nn.Sequential(
@@ -248,9 +248,14 @@ class MoCoSiameseNetwork(nn.Module):
     @torch.no_grad()
     def _update_target_network(self):
         """
-        Performs the Exponential Moving Average (EMA) update for the target network.
+        Performs the Exponential Moving Average (EMA) update for both the target encoder and target head.
         """
+        # Update Target Encoder
         for online_param, target_param in zip(self.online_encoder.parameters(), self.target_encoder.parameters()):
+            target_param.data = target_param.data * self.momentum + online_param.data * (1. - self.momentum)
+
+        # Update Target Head (The projection layer used for the target features)
+        for online_param, target_param in zip(self.online_head.parameters(), self.target_head.parameters()):
             target_param.data = target_param.data * self.momentum + online_param.data * (1. - self.momentum)
 
     def forward(self, focal_view: torch.Tensor, global_view: torch.Tensor, mask: torch.Tensor):
