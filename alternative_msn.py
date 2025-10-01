@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 # from timm.data.tf_preprocessing import IMAGE_SIZE
 from torch.utils.data import ConcatDataset
+from tqdm import tqdm
 
 from transformers import SegformerConfig, SegformerModel, SegformerForSemanticSegmentation
 
@@ -344,7 +345,7 @@ def pretrain_step(model: SiameseSegFormer, dataloader: torch.utils.data.DataLoad
     max_boredom = 10
     best_model = None
     for epoch in range(num_epochs):
-        for batch_images in dataloader:
+        for batch_images in tqdm(dataloader):
             # Assuming dataloader yields raw images [B, C, H, W]
             # Create Siamese Pairs dynamically for the batch
             batch_anchor = []
@@ -543,7 +544,7 @@ def main():
     pretrain_dataset = ConcatDataset(pretrain_datasets)
 
     pretrain_dataloader = torch.utils.data.DataLoader(
-        pretrain_dataset, batch_size=BATCH_SIZE, shuffle=True
+        pretrain_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8
     )
 
     # Small Annotated set for Fine-tuning
@@ -557,21 +558,21 @@ def main():
     finetune_dataset = MSNFinetuneDatasetHDF5(hdf5_path=finetune_data,
                                               indices=finetune_indices)
     finetune_dataloader = torch.utils.data.DataLoader(
-        finetune_dataset, batch_size=BATCH_SIZE, shuffle=True
+        finetune_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4
     )
 
     # Annotated set for Validation
     validation_dataset = MSNFinetuneDatasetHDF5(hdf5_path=finetune_data,
                                                 indices=validation_indices)
     validation_dataloader = torch.utils.data.DataLoader(
-        validation_dataset, batch_size=BATCH_SIZE, shuffle=False
+        validation_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
     )
 
     # ----------------------------------------------------
     # 1. PRE-TRAINING PHASE
     # ----------------------------------------------------
 
-    logger.info("Starting Pre-training Phase (Siamese Network) ---")
+    logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
     siamese_model = SiameseSegFormer(model_name='nvidia/mit-b0').to(device)
@@ -579,8 +580,8 @@ def main():
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(), lr=1e-3, weight_decay=1e-4)
+    logger.info("Starting Pre-training Phase (Siamese Network) ---")
 
-    # Perform a single epoch of pre-training for demonstration
     pretrain_weights = pretrain_step(
         siamese_model,
         pretrain_dataloader,
