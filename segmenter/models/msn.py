@@ -223,7 +223,7 @@ class MoCoSiameseNetwork(nn.Module):
         try:
             encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
         except:
-            encoder_output_dim = 256
+            encoder_output_dim = 16
 
             # 1. Online Predictor Head (h)
         self.online_predictor = nn.Sequential(
