@@ -6,9 +6,6 @@ from torch.nn import functional as F
 from torch.nn.modules.utils import _pair
 from transformers import SegformerConfig, SegformerModel, SegformerForSemanticSegmentation
 
-from msn_simSiam import logger
-
-
 class MedianPool2d(nn.Module):
     def __init__(self, kernel_size, stride=1, padding=0):
         super().__init__()
@@ -119,7 +116,6 @@ class SupervisedSegFormer(SegformerForSemanticSegmentation):
         """
         Loads the pre-trained encoder weights into the segmentation model's backbone.
         """
-        logger.info("Loading pre-trained weights into SegFormer backbone...")
         # Get the keys for the shared encoder from the pre-trained state dict
         encoder_state_dict = {
             k: v for k, v in pretrain_state_dict.items()
@@ -129,4 +125,3 @@ class SupervisedSegFormer(SegformerForSemanticSegmentation):
         # Load the weights into the current model, ignoring the randomly initialized head
         # The strict=False handles keys missing in the decoder part
         self.load_state_dict(encoder_state_dict, strict=False)
-        logger.info("Pre-trained encoder weights loaded successfully.")
