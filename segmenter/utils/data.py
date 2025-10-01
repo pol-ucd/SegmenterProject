@@ -1,6 +1,7 @@
 import numbers
 import os
 import platform
+from typing import Tuple
 
 import cv2
 import h5py
@@ -8,7 +9,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageFilter
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader
-from torchvision import transforms
+from torchvision import transforms, transforms as T
 from torchvision.transforms import functional as F
 
 
@@ -475,3 +476,76 @@ if __name__ == "__main__":
     os.remove(dummy_hdf5_path_1)
     os.remove(dummy_hdf5_path_2)
     print("\nDummy HDF5 files cleaned up.")
+
+
+class MSNPretrainDatasetHDF5(HDF5Dataset):
+    """ A dataset containing raw medical images (for pre-training)
+       and annotated images/masks (for fine-tuning).
+    """
+
+    def __init__(self, hdf5_path,
+                 size: Tuple[int, int] = (512, 512)):
+        super().__init__(hdf5_path)
+        self.image_size = size
+
+    def __getitem__(self, idx):
+        # if self.f is None:
+        #     # Re-open the file handle for this specific worker/process
+        #     self.f = h5py.File(self.hdf5_path, 'r')
+        _data = super().__getitem__(idx)
+
+        # Load image and convert to tensor
+        image =_data['images']
+
+        image_augment = T.Compose([T.ToTensor(),
+                                   T.Resize(self.image_size,
+                                            T.InterpolationMode.BICUBIC),
+                                   T.Normalize(mean=[0.485, 0.456, 0.406],
+                                               std=[0.229, 0.224, 0.225])
+                                   ])
+
+        image = image_augment(image)
+
+        return image
+
+
+class MSNFinetuneDatasetHDF5(HDF5Dataset):
+    """ A dataset containing raw medical images (for pre-training)
+       and annotated images/masks (for fine-tuning).
+    """
+
+    def __init__(self, hdf5_path,
+                 indices,
+                 size: Tuple[int, int] = (512, 512)):
+        super().__init__(hdf5_path)
+        self.indices = indices
+        self.image_size = size
+        self.len = len(indices)
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        if self.f is None:
+            # Re-open the file handle for this specific worker/process
+            self.f = h5py.File(self.hdf5_path, 'r')
+
+        # Load image and convert to tensor
+        image = self.f['images'][self.indices[idx]]
+        mask = self.f['masks'][self.indices[idx]]
+
+        image_augment = T.Compose([T.ToTensor(),
+                                   T.Resize(self.image_size,
+                                            T.InterpolationMode.BICUBIC),
+                                   T.Normalize(mean=[0.485, 0.456, 0.406],
+                                               std=[0.229, 0.224, 0.225])
+                                   ])
+
+        mask_augment = T.Compose([T.ToTensor(),
+                                  T.Resize(self.image_size,
+                                           T.InterpolationMode.BICUBIC)
+                                  ])
+        # Apply augmentations
+        image = image_augment(image)
+        mask = mask_augment(mask)
+        return image, mask.long()

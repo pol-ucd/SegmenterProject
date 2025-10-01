@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import nn, nn as nn
+from torch.nn import functional as F
 
 
 def msn_loss(online_preds, target_protos, temperature=0.1):
@@ -41,3 +42,114 @@ class MSNLoss(nn.Module):
     def forward(self, online_preds, target_protos, temperature=0.1):
         return msn_loss(online_preds, target_protos, temperature)
 
+
+class SimSiamLoss(nn.Module):
+    """
+    Calculates the full symmetric SimSiam loss using MSE between predictions and targets.
+    L_sym = 0.5 * [ L(p1, z2_det) + L(p2, z1_det) ]
+    """
+
+    def __init__(self):
+        super().__init__()
+        # MSE is used for the loss calculation
+        self.mse_loss = nn.MSELoss()
+
+    def forward(self, p1: torch.Tensor, z2_detached: torch.Tensor,
+                p2: torch.Tensor, z1_detached: torch.Tensor) -> torch.Tensor:
+        """
+        Calculates the full symmetric loss.
+        :param p1: Prediction from view 1 (Anchor) [B, D].
+        :param z2_detached: Target embedding from detached view 2 (Positive) [B, D].
+        :param p2: Prediction from view 2 (Positive) [B, D].
+        :param z1_detached: Target embedding from detached view 1 (Anchor) [B, D].
+        :return: Scalar total symmetric loss tensor.
+        """
+        # 1. Normalize embeddings before calculating loss (as per SimSiam implementation)
+        p1 = F.normalize(p1, dim=1)
+        z2_detached = F.normalize(z2_detached, dim=1)
+        p2 = F.normalize(p2, dim=1)
+        z1_detached = F.normalize(z1_detached, dim=1)
+
+        # 2. Calculate the two symmetric loss terms (MSE)
+        # Term 1: Prediction from view 1 vs Target from detached view 2
+        loss1 = self.mse_loss(p1, z2_detached)
+
+        # Term 2: Prediction from view 2 vs Target from detached view 1
+        loss2 = self.mse_loss(p2, z1_detached)
+
+        # 3. Total Symmetric Loss (Averaged)
+        total_loss = 0.5 * (loss1 + loss2)
+
+        return total_loss
+
+
+class InfoNCELoss(nn.Module):
+    """
+    SimCLR/MoCo-style InfoNCE Loss for contrastive learning.
+    This simplifies the loss to focus on bringing the positive pair (Anchor vs Occluded) closer.
+    """
+
+    def __init__(self, temperature=0.07):
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
+        """
+        Calculates the InfoNCE loss for a single positive pair (anchor, positive).
+        The negative samples are implicitly all other samples in the batch.
+        :param z_anchor: Anchor embeddings [B, D].
+        :param z_positive: Positive embeddings [B, D].
+        :return: Scalar loss tensor.
+        """
+        # Normalize embeddings
+        z_anchor = F.normalize(z_anchor, dim=1)
+        z_positive = F.normalize(z_positive, dim=1)
+
+        # Concatenate anchor and positive embeddings to form the main batch
+        # [2B, D]
+        features = torch.cat([z_anchor, z_positive], dim=0)
+
+        # Compute cosine similarity matrix: [2B, 2B]
+        similarity_matrix = torch.matmul(features, features.T) / self.temperature
+
+        # Create mask for positive pairs: 1 for positive, 0 otherwise
+        batch_size = z_anchor.shape[0]
+        mask = torch.eye(2 * batch_size, dtype=torch.bool, device=features.device)
+
+        # The positive pairs are at (i, i+B) and (i+B, i)
+        # 1. Anchor i to Positive i+B
+        pos_mask_1 = torch.roll(torch.eye(batch_size, device=features.device), shifts=batch_size, dims=1)
+        # 2. Positive i+B to Anchor i
+        pos_mask_2 = torch.roll(torch.eye(batch_size, device=features.device), shifts=batch_size, dims=0)
+
+        # Combine into the full mask for the 2B x 2B matrix
+        # [B, B] [B, B]
+        # [B, B] [B, B]
+        # We need the positive pair connections:
+        # A_i -> P_i and P_i -> A_i
+
+        positive_pairs_mask = torch.zeros_like(similarity_matrix, dtype=torch.bool)
+
+        # Anchor to Positive (i, i+B)
+        positive_pairs_mask[:batch_size, batch_size:] = torch.eye(batch_size, dtype=torch.bool, device=features.device)
+        # Positive to Anchor (i+B, i)
+        positive_pairs_mask[batch_size:, :batch_size] = torch.eye(batch_size, dtype=torch.bool, device=features.device)
+
+        # Exclude self-similarities (diagonal)
+        similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
+        positive_pairs_mask = positive_pairs_mask[~mask].view(positive_pairs_mask.shape[0], -1)
+
+        # Select the similarities for the positive pairs
+        positives = similarity_matrix[positive_pairs_mask].view(2 * batch_size, -1)
+
+        # The numerator of the InfoNCE loss (similarity with positive)
+        logits = positives
+
+        # All other samples (excluding self) are negatives
+        labels = torch.zeros(logits.shape[0], dtype=torch.long, device=features.device)
+
+        # InfoNCE Loss: -log( exp(pos) / sum(exp(all)) )
+        # Using CrossEntropyLoss with logits and labels of 0 is equivalent to this:
+        loss = F.cross_entropy(logits, labels)
+
+        return loss
