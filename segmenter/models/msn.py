@@ -226,7 +226,7 @@ class MoCoSiameseNetwork(nn.Module):
             encoder_output_dim = 16
 
         # Online Predictor Head (h)
-        self.online_predictor = nn.Sequential(
+        self.online_head = nn.Sequential(
             # This must match the encoder's pooled feature dimension (D)
             nn.Linear(encoder_output_dim, encoder_output_dim // 4),
             nn.BatchNorm1d(encoder_output_dim // 4),
@@ -308,7 +308,7 @@ class MoCoSiameseNetwork(nn.Module):
         online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
 
         # Apply the predictor head to get the final prediction P
-        prediction_p = self.online_predictor(online_pooled_features.flatten(-2,-1))
+        prediction_p = self.online_head(online_pooled_features.flatten(-2, -1))
 
         # --- Target Path (Global View / UNMASKED) ---
         with torch.no_grad():
