@@ -65,7 +65,6 @@ def pretrain_step(model:MoCoSiameseNetwork, dataloader: torch.utils.data.DataLoa
 
             # Pass the mask to the forward method
             prediction_p, target_z_detached = model(x1, x2, x3)
-            print(prediction_p.shape, target_z_detached.shape)
 
             # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
             loss = loss_fn(prediction_p, target_z_detached)
