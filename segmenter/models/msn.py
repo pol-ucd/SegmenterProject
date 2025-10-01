@@ -234,10 +234,15 @@ class MoCoSiameseNetwork(nn.Module):
             nn.Linear(encoder_output_dim // 4, self.projection_dim)
         )
 
+        # Target Head (Z') - Projector only. Must match the online head structure.
+        self.target_head = copy.deepcopy(self.online_head)
+
         self.target_encoder = copy.deepcopy(self.online_encoder)
 
-        # Disable gradients for the target network
+        # Disable gradients for the target network and target head
         for p in self.target_encoder.parameters():
+            p.requires_grad = False
+        for p in self.target_head.parameters():
             p.requires_grad = False
 
     @torch.no_grad()
@@ -310,8 +315,11 @@ class MoCoSiameseNetwork(nn.Module):
             self.target_encoder.eval()
             target_pooled_features = get_pooled_features(global_view, self.target_encoder)
 
+            # Apply the Target Head to project 256 down to 128 (MUST be done before comparison)
+            target_z = self.target_head(target_pooled_features.flatten(-2, -1))
+
             # The target embedding Z' must be detached
-            target_z_detached = target_pooled_features.detach()
+            target_z_detached = target_z.detach()
 
         # Returns P (prediction) and Z' (detached target embedding)
         return prediction_p, target_z_detached
