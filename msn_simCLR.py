@@ -79,7 +79,7 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           '../segmenter/checkpoint/alternative_msn_segformer_pretrained.pth')
+                           '../segmenter/checkpoint/msn_simclr_segformer_pretrained.pth')
             except Exception as e:
                 logger.error(f"Pretraining failed to save `msn_model.online_encoder.state_dict()`: {e}")
 

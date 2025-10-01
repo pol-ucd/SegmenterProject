@@ -88,7 +88,7 @@ def pretrain_step(model:MoCoSiameseNetwork, dataloader: torch.utils.data.DataLoa
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           '../segmenter/checkpoint/alternative_msn_segformer_pretrained.pth')
+                           '../segmenter/checkpoint/msn_moco_segformer_pretrained.pth')
             except Exception as e:
                 logger.error(f"Pretraining failed to save `msn_model.online_encoder.state_dict()`: {e}")
 
@@ -151,7 +151,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           '../segmenter/checkpoint/msn_simsiam_segformer_finetuned.pth')
+                           '../segmenter/checkpoint/msn_moco_segformer_finetuned.pth')
             except Exception as e:
                 logger.error(f"Finetuning failed to save `msn_model.online_encoder.state_dict()`: {e}")
 
