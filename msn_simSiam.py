@@ -251,7 +251,7 @@ def main():
 
     # Instantiate Siamese Model and Loss
     siamese_model = SimSiamSegFormer(model_name='nvidia/mit-b0').to(device)
-    pretrain_loss_fn = SimSiamLoss(temperature=0.1)
+    pretrain_loss_fn = SimSiamLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(), lr=1e-3, weight_decay=1e-4)
