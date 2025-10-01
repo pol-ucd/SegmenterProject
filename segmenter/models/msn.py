@@ -218,7 +218,7 @@ class MoCoSiameseNetwork(nn.Module):
         self.projection_dim = projection_dim
 
         # Create online and target networks
-        self.online_encoder = model_name
+        self.online_encoder = SegformerModel.from_pretrained(model_name)
 
         try:
             encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
