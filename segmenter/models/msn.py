@@ -280,16 +280,15 @@ class MoCoSiameseNetwork(nn.Module):
         )  # [B, 1, h_feat, w_feat]
 
         # 2. Create the boolean index: True for UNMASKED (visible) patches
-        # Mask is 1.0 for the occluded area, so (1.0 - mask) is 1.0 for visible area.
-        patch_visibility_mask = (1.0 - downsampled_mask).flatten(2).bool()  # [B, S]
+        # FIX: Use flatten(1) to get shape [B, S], necessary for indexing.
+        patch_visibility_mask = (1.0 - downsampled_mask).flatten(1).bool()  # [B, S]
 
         # 3. Apply the mask and pool: For each sample, select only the visible patches
         online_pooled_features_list = []
         for i in range(B):
             # Select the D-dim feature vectors where the patch is visible
-            p_h, p_w = online_features[i].shape[-2:]
-            print(online_features[i].shape, patch_visibility_mask.shape)
-            visible_patches = online_features[i][patch_visibility_mask[i].reshape(p_h, p_w)]  # [S_visible, D]
+            # Indexing [S, D] with a 1D boolean mask [S] is the correct way to select rows.
+            visible_patches = online_features[i][patch_visibility_mask[i]]  # [S_visible, D]
 
             # Pool over the visible patches only (average over S_visible)
             if visible_patches.numel() > 0:
