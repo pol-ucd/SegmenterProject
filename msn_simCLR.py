@@ -166,7 +166,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
             best_model = model.online_encoder.state_dict()
             torch.save(best_model,
-                       '../segmenter/checkpoint/alternative_msn_segformer_finetuned.pth')
+                       '../segmenter/checkpoint/msn_simclr_segformer_finetuned.pth')
 
         else:
             boredom += 1
@@ -325,7 +325,7 @@ if __name__ == "__main__":
     home_dir = Path.home()
     if not os.path.exists(os.path.join(home_dir, "segmenter")):
         os.makedirs(os.path.join(home_dir, "segmenter"))
-    logfile = os.path.join(home_dir, "segmenter", f"alternative_msn_{timestamp}.log")
+    logfile = os.path.join(home_dir, "segmenter", f"msn_simclr_{timestamp}.log")
 
     logging.basicConfig(
         level=logging.INFO,
