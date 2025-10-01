@@ -137,3 +137,25 @@ class MaskGenerator:
         positive = anchor * occlusion_mask.unsqueeze(0)
 
         return anchor, positive
+
+    def create_siamese_triple(self, image: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Creates an Anchor and a Positive image pair AND returns the mask.
+        :param image: The raw input medical image [C, H, W].
+        :return: (Anchor Image, Positive (Occluded) Image, Mask)
+        """
+        if image.ndim == 4:
+            image = image.squeeze(0)
+
+        image_augmented = apply_custom_augmentations(image.clone())
+        mask = self.generate_composite_mask()  # [1, H, W]
+
+        # Anchor (View 1 / Focal)
+        anchor = image_augmented
+
+        # Positive (View 2 / Global) - Occlusion applied
+        occlusion_mask = 1.0 - mask
+        positive = anchor * occlusion_mask.unsqueeze(0)
+
+        # Mask is 1.0 where occlusion/lesion occurs.
+        return anchor, positive, mask

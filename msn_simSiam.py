@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 from transformers import SegformerConfig
 
+from segmenter.loss import DiceLoss
 from segmenter.models.base import SupervisedSegFormer
 from segmenter.utils.data import get_num_samples_from_hdf5, MSNPretrainDatasetHDF5, MSNFinetuneDatasetHDF5
 from segmenter.masks.msn import MaskGenerator
@@ -98,9 +99,9 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     logger = logging.getLogger(__name__)
     model.train()
     total_loss = 0
-
-    # Use a combined loss (Dice + Cross-Entropy) for better segmentation
-    ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Ignore index 255 for padded areas
+    CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
+    ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Standard Cross Entropy
+    dice_loss_fn = DiceLoss(num_classes=model.config.num_labels, ignore_index=255)  # Custom Dice Loss
 
     best_loss = float('inf')
     min_delta = 0.00001
@@ -120,12 +121,12 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             # Resize logits to match labels size (SegFormer outputs downsampled logits)
             resized_logits = F.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
 
-            # Calculate Cross Entropy Loss
+            # Calculate Losses
             ce_loss = ce_loss_fn(resized_logits, labels)
+            dice_loss = dice_loss_fn(resized_logits, labels)
 
-            # For simplicity, we use only CE Loss in this example, but a Dice Loss
-            # (or Tversky/Focal) is highly recommended for medical segmentation.
-            loss = ce_loss
+            # Combined Loss
+            loss = CE_WEIGHT * ce_loss + DICE_WEIGHT * dice_loss
 
             # Backpropagation
             loss.backward()

@@ -13,10 +13,10 @@ from tqdm import tqdm
 from transformers import SegformerConfig
 
 from segmenter.loss import DiceLoss
-from segmenter.loss.msn import InfoNCELoss
+from segmenter.loss.msn import SimSiamLoss
 from segmenter.masks.msn import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
-from segmenter.models.msn import SimCLRSegFormer
+from segmenter.models.msn import MoCoSiameseNetwork
 from segmenter.utils.data import get_num_samples_from_hdf5, MSNPretrainDatasetHDF5, MSNFinetuneDatasetHDF5
 
 PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
@@ -27,10 +27,15 @@ FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
 IMAGE_SIZE=(512, 512)
 
 
-def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device,
+def pretrain_step(model:MoCoSiameseNetwork, dataloader: torch.utils.data.DataLoader,
+                  optimizer: torch.optim.Optimizer,
+                  loss_fn: nn.Module,
+                  device: torch.device,
                   num_epochs=100):
     logger = logging.getLogger(__name__)
+    if loss_fn is None or loss_fn == nn.MSELoss:
+        loss_fn = nn.MSELoss()
+
     model.train()
     total_loss = 0
     mask_generator = MaskGenerator(size=IMAGE_SIZE)
@@ -42,31 +47,35 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
     best_model = None
     for epoch in range(num_epochs):
         for batch_images in tqdm(dataloader):
-            # Assuming dataloader yields raw images [B, C, H, W]
-            # Create Siamese Pairs dynamically for the batch
-            batch_anchor = []
-            batch_positive = []
+            batch_anchor, batch_positive, batch_mask = [], [], []
 
             for image in batch_images:
-                anchor, positive = mask_generator.create_siamese_pair(image)
+                # Mask is now returned here
+                anchor, positive, mask = mask_generator.create_siamese_triple(image)
                 batch_anchor.append(anchor)
                 batch_positive.append(positive)
+                batch_mask.append(mask)
 
-
-            x_anchor = torch.stack(batch_anchor).to(device)
-            x_positive = torch.stack(batch_positive).to(device)
+            # x1 = Focal/Online View (Anchor), x2 = Global/Target View (Positive), x3 = Mask
+            x1 = torch.stack(batch_anchor).to(device)
+            x2 = torch.stack(batch_positive).to(device)
+            x3 = torch.stack(batch_mask).to(device)
 
             optimizer.zero_grad()
 
-            # Forward pass through the Siamese network
-            z_anchor, z_positive = model(x_anchor, x_positive)
+            # Pass the mask to the forward method
+            prediction_p, target_z_detached = model(x1, x2, x3)
 
-            # Calculate InfoNCE Loss
-            loss = loss_fn(z_anchor, z_positive)
+            # Simple similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
+            # Using MSE here for simplicity, similar to SimSiam
+            loss =loss_fn(prediction_p, target_z_detached)
 
             # Backpropagation
             loss.backward()
             optimizer.step()
+
+            # CRITICAL: Update the Target Encoder weights using EMA
+            model._update_target_network()
 
             total_loss += loss.item()
 
@@ -95,9 +104,9 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
 def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer, device: torch.device, num_epochs=100):
     logger = logging.getLogger(__name__)
+    CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
     model.train()
     total_loss = 0
-    CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
     ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Standard Cross Entropy
     dice_loss_fn = DiceLoss(num_classes=model.config.num_labels, ignore_index=255)  # Custom Dice Loss
 
@@ -142,7 +151,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           '../segmenter/checkpoint/msn_simclr_segformer_finetuned.pth')
+                           '../segmenter/checkpoint/msn_simsiam_segformer_finetuned.pth')
             except Exception as e:
                 logger.error(f"Finetuning failed to save `msn_model.online_encoder.state_dict()`: {e}")
 
@@ -159,6 +168,7 @@ def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     logger = logging.getLogger(__name__)
     model.eval()
     total_dice = 0.0
+
     num_classes = model.config.num_labels
 
     with torch.no_grad():
@@ -206,7 +216,7 @@ def main():
     finetune_percent = 0.1
 
     # Use CPU for simplicity in example
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
 
@@ -249,8 +259,8 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = SimCLRSegFormer(model_name='nvidia/mit-b0').to(device)
-    pretrain_loss_fn = InfoNCELoss(temperature=0.1)
+    siamese_model = MoCoSiameseNetwork(model_name='nvidia/mit-b0', momentum=0.996).to(device)
+    pretrain_loss_fn = SimSiamLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(), lr=1e-3, weight_decay=1e-4)
@@ -303,7 +313,7 @@ if __name__ == "__main__":
     home_dir = Path.home()
     if not os.path.exists(os.path.join(home_dir, "segmenter")):
         os.makedirs(os.path.join(home_dir, "segmenter"))
-    logfile = os.path.join(home_dir, "segmenter", f"msn_simclr_{timestamp}.log")
+    logfile = os.path.join(home_dir, "segmenter", f"msn_simsiam_{timestamp}.log")
 
     logging.basicConfig(
         level=logging.INFO,

@@ -1,13 +1,44 @@
+"""
+Mixed Siamese Networks for Bring Your Own Labels (BYOL) implementation
+
+    The follwoing architectural styles are implemented:
+    - Momentum Contrast (MoCo): using two encoders and updating one with EMA,
+    - SimCLR: Gradients flow from both views to the single shared encoder
+    - SimSiam: detached gradient on one branch of a shared encoder's output
+
+    Pretrain a backbone model with unlabelled images using one of the
+    MSN architectures below.
+
+    Fine-tune the pretrained model with a small subset of annotated examples
+
+    Validate with the remaining annotated images
+"""
 import copy
 from typing import Tuple
 
 import torch
 from torch import nn as nn
+from torch.nn import functional as F
 from transformers import SegformerModel
 
 
-class SimCLRSiameseNetwork(nn.Module):
-    """ Original model - used in surgical_mask_msn_segformer.py """
+class MoCoSegFormer(nn.Module):
+    """
+    Siamese Network Architecture Pattern: Momentum Contrast (MoCo)
+
+    utilizes a core concept seen in MoCo and BYOL: two separate, yet related, encoders:
+
+    Online Encoder (self.online_encoder):
+            This is the main encoder whose weights are updated directly
+            via standard backpropagation gradients.
+
+T   arget/Momentum Encoder (self.target_encoder):
+            This is a copy of the online encoder, but its weights
+            are not updated via backpropagation.
+
+    Provides a slowly evolving target, decoupling the two views in time/weight space.
+
+    """
     def __init__(self, backbone, momentum=0.996):
         super().__init__()
         self.momentum = momentum
@@ -173,3 +204,118 @@ class SimCLRSegFormer(nn.Module):
         z_positive = self.projection_head(z_positive_pooled)
 
         return z_anchor, z_positive
+
+
+class MoCoSiameseNetwork(nn.Module):
+    """
+    Implements a MoCo/BYOL/MSN-style architecture with Online and Target Encoders,
+    now including the logic to mask online features.
+    """
+
+    def __init__(self, backbone, momentum=0.996, projection_dim=128):
+        super().__init__()
+        self.momentum = momentum
+        self.projection_dim = projection_dim
+
+        # Create online and target networks
+        self.online_encoder = backbone
+
+        try:
+            encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
+        except:
+            encoder_output_dim = 512
+
+            # 1. Online Predictor Head (h)
+        self.online_predictor = nn.Sequential(
+            nn.Linear(encoder_output_dim, encoder_output_dim // 4),
+            nn.BatchNorm1d(encoder_output_dim // 4),
+            nn.ReLU(),
+            nn.Linear(encoder_output_dim // 4, self.projection_dim)
+        )
+
+        self.target_encoder = copy.deepcopy(self.online_encoder)
+
+        # Disable gradients for the target network
+        for p in self.target_encoder.parameters():
+            p.requires_grad = False
+
+    @torch.no_grad()
+    def _update_target_network(self):
+        """
+        Performs the Exponential Moving Average (EMA) update for the target network.
+        """
+        for online_param, target_param in zip(self.online_encoder.parameters(), self.target_encoder.parameters()):
+            target_param.data = target_param.data * self.momentum + online_param.data * (1. - self.momentum)
+
+    def forward(self, focal_view: torch.Tensor, global_view: torch.Tensor, mask: torch.Tensor):
+        """
+        Processes focal_view (online/masked) and global_view (target/unmasked).
+
+        :param focal_view: The anchor/online view [B, C, H, W].
+        :param global_view: The positive/target view [B, C, H, W].
+        :param mask: The synthetic binary mask [B, 1, H, W]. (1=occlusion area)
+        :return: (P, Z') prediction and detached target embedding.
+        """
+        B, _, H, W = focal_view.shape
+
+        # Helper to extract and pool features (used only for Target Network)
+        def get_pooled_features(x, encoder):
+            features = encoder(x.squeeze(1)).last_hidden_state
+            # Pool over the sequence dimension (dim=1) and reshape to [B, D]
+            return features.mean(dim=1).reshape(features.shape[0], -1)
+
+            # --- Online Path (Focal View / MASKED) ---
+
+        online_output = self.online_encoder(focal_view.squeeze(1))
+        online_features = online_output.last_hidden_state  # [B, S, D]
+
+        S, D = online_features.shape[1], online_features.shape[2]
+        h_feat = w_feat = int(torch.sqrt(torch.tensor(S).float()).item())
+
+        # 1. Downsample the input mask [B, 1, H, W] to feature resolution [B, 1, h_feat, w_feat]
+        downsampled_mask = F.interpolate(
+            mask.float(),
+            size=(h_feat, w_feat),
+            mode='nearest'
+        )  # [B, 1, h_feat, w_feat]
+
+        # 2. Create the boolean index: True for UNMASKED (visible) patches
+        # Mask is 1.0 for the occluded area, so (1.0 - mask) is 1.0 for visible area.
+        patch_visibility_mask = (1.0 - downsampled_mask).flatten(2).bool()  # [B, S]
+
+        # 3. Apply the mask and pool: For each sample, select only the visible patches
+        online_pooled_features_list = []
+        for i in range(B):
+            # Select the D-dim feature vectors where the patch is visible
+            visible_patches = online_features[i][patch_visibility_mask[i]]  # [S_visible, D]
+
+            # Pool over the visible patches only (average over S_visible)
+            if visible_patches.numel() > 0:
+                online_pooled_features = visible_patches.mean(dim=0)  # [D]
+            else:
+                # Fallback: if completely masked, use the full feature mean
+                online_pooled_features = online_features[i].mean(dim=0)  # [D]
+
+            online_pooled_features_list.append(online_pooled_features)
+
+        online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
+
+        # Apply the predictor head to get the final prediction P
+        prediction_p = self.online_predictor(online_pooled_features)
+
+        # --- Target Path (Global View / UNMASKED) ---
+        with torch.no_grad():
+            self.target_encoder.eval()
+            target_pooled_features = get_pooled_features(global_view, self.target_encoder)
+
+            # The target embedding Z' must be detached
+            target_z_detached = target_pooled_features.detach()
+
+        # Returns P (prediction) and Z' (detached target embedding)
+        return prediction_p, target_z_detached
+
+    def get_model_stride(self):
+        # NOTE: This line assumes a 'segformer' attribute exists in the backbone,
+        # which is true for HuggingFace's SegformerModel, but we should make sure
+        # to use the config object if possible.
+        return self.online_encoder.config.patch_sizes[-1]  # Approximation, usually 16 or 32 for the final layer
