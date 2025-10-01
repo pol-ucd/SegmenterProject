@@ -29,13 +29,14 @@ class MaskGenerator:
     and tissue folds for self-supervised pre-training.
     """
 
-    def __init__(self, size: int = 512, instrument_ratio: float = 0.3):
+    def __init__(self, size: Tuple[int, int] = (512, 512),
+                 instrument_ratio: float = 0.3):
         """
         Initializes the mask generator.
         :param size: The target size (H, W) for the square mask.
         :param instrument_ratio: Probability of generating an instrument-like mask.
         """
-        self.size = size
+        self.size = size if len(size) == 2 else (512, 512)
         self.instrument_ratio = instrument_ratio
 
     def _generate_lesion_mask(self) -> np.ndarray:
@@ -43,19 +44,19 @@ class MaskGenerator:
         Generates a soft, irregular lesion/fold mask by combining multiple blurred
         ellipses, better mimicking a real polyp or lesion annotation.
         """
-        mask = np.zeros((self.size, self.size), dtype=np.float32)
+        mask = np.zeros(self.size, dtype=np.float32)
         num_shapes = random.randint(1, 3)  # 1 to 3 overlapping shapes
 
-        Y, X = np.ogrid[:self.size, :self.size]
+        Y, X = np.ogrid[:self.size[0], :self.size[1]]
 
         for _ in range(num_shapes):
-            sub_mask = np.zeros((self.size, self.size), dtype=np.float32)
+            sub_mask = np.zeros(self.size, dtype=np.float32)
 
             # Random parameters for a sub-ellipse
-            center_x = random.randint(self.size // 5, self.size * 4 // 5)
-            center_y = random.randint(self.size // 5, self.size * 4 // 5)
-            radius_x = random.randint(self.size // 15, self.size // 5)
-            radius_y = random.randint(self.size // 15, self.size // 5)
+            center_x = random.randint(self.size[0] // 5, self.size[0] * 4 // 5)
+            center_y = random.randint(self.size[1] // 5, self.size[1] * 4 // 5)
+            radius_x = random.randint(self.size[0] // 15, self.size[0] // 5)
+            radius_y = random.randint(self.size[1] // 15, self.size[1] // 5)
 
             # Create the sub-ellipse
             dist_sq = ((Y - center_y) ** 2 / radius_y ** 2 + (X - center_x) ** 2 / radius_x ** 2)
@@ -73,13 +74,13 @@ class MaskGenerator:
 
     def _generate_instrument_mask(self) -> np.ndarray:
         """Generates a thin, long mask (simulating a surgical instrument)."""
-        mask = np.zeros((self.size, self.size), dtype=np.float32)
+        mask = np.zeros(self.size, dtype=np.float32)
 
         # Start and end points for a line
-        start_x = random.randint(0, self.size - 1)
-        start_y = random.randint(0, self.size - 1)
-        end_x = random.randint(0, self.size - 1)
-        end_y = random.randint(0, self.size - 1)
+        start_x = random.randint(0, self.size[0] - 1)
+        start_y = random.randint(0, self.size[1] - 1)
+        end_x = random.randint(0, self.size[0] - 1)
+        end_y = random.randint(0, self.size[1] - 1)
 
         # Create a line approximation
         num_points = int(np.hypot(end_x - start_x, end_y - start_y))
@@ -87,8 +88,8 @@ class MaskGenerator:
         y = np.linspace(start_y, end_y, num_points).astype(int)
 
         # Clip to boundaries and set instrument path
-        x = np.clip(x, 0, self.size - 1)
-        y = np.clip(y, 0, self.size - 1)
+        x = np.clip(x, 0, self.size[0] - 1)
+        y = np.clip(y, 0, self.size[1] - 1)
         mask[y, x] = 1.0
 
         # Dilate the line to give it thickness
