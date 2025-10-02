@@ -27,12 +27,14 @@ FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
 IMAGE_SIZE=(512, 512)
 
 
-def pretrain_step(model:MoCoSiameseNetwork, dataloader: torch.utils.data.DataLoader,
+def pretrain_step(model:MoCoSiameseNetwork,
+                  dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer,
                   loss_fn: nn.Module,
                   device: torch.device,
                   num_epochs=100):
     logger = logging.getLogger(__name__)
+
     if loss_fn is None or loss_fn == nn.MSELoss:
         loss_fn = nn.MSELoss()
 
@@ -228,7 +230,8 @@ def main():
     pretrain_dataset = ConcatDataset(pretrain_datasets)
 
     pretrain_dataloader = torch.utils.data.DataLoader(
-        pretrain_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8
+        pretrain_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True,
+        prefetch_factor=BATCH_SIZE
     )
 
     # Small Annotated set for Fine-tuning

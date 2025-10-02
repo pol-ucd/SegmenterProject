@@ -218,7 +218,8 @@ def main():
     pretrain_dataset = ConcatDataset(pretrain_datasets)
 
     pretrain_dataloader = torch.utils.data.DataLoader(
-        pretrain_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8
+        pretrain_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True,
+        prefetch_factor=BATCH_SIZE
     )
 
     # Small Annotated set for Fine-tuning
