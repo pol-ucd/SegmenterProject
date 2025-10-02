@@ -17,12 +17,16 @@ def load_data(batch_size: int, finetune_percent: float,
               num_workers:int=4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
     # Large Unannotated set for Pre-training
     pretrain_datasets = []
+    total_len = 0
     for ds in PRETRAIN_DATASETS:
         pretrain_datasets.append(MSNPretrainDatasetHDF5(hdf5_path=ds))
+        total_len += get_num_samples_from_hdf5(hdf5_path=ds)
+
 
     pretrain_dataset = ConcatDataset(pretrain_datasets)
 
-    custom_sampler = HDF5BatchSampler(pretrain_dataset.dataset_len,
+
+    custom_sampler = HDF5BatchSampler(total_len,   #pretrain_dataset.dataset_len,
                                       batch_size, shuffle=True)
 
     pretrain_dataloader = torch.utils.data.DataLoader(
