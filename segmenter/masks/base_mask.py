@@ -48,6 +48,9 @@ class BaseMask:
         mask = torch.tensor(mask > 0, dtype=torch.float32)
         return self._expand_channels(mask)
 
+    def mask2d(self):
+        return self._mask2D()
+
     @abc.abstractmethod
     def _mask2D(self):
         """ Implement this method to return a type-specific 2D mask of shape (H, W) """

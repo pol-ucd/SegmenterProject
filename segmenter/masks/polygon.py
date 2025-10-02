@@ -39,6 +39,7 @@ class RandomShapeMask(BaseMask):
             center_y + radii * np.sin(angles)
         ], axis=-1).astype(np.int32)
         cv2.fillPoly(mask2d, [points], color=1)
+
         return mask2d
 
 

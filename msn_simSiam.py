@@ -17,7 +17,7 @@ from transformers import SegformerConfig
 from segmenter.loss import DiceLoss
 from segmenter.models.base import SupervisedSegFormer
 from segmenter.utils.data import get_num_samples_from_hdf5, MSNPretrainDatasetHDF5, MSNFinetuneDatasetHDF5
-from segmenter.masks.msn import MaskGenerator
+from segmenter.masks import MaskGenerator
 from segmenter.models.msn import SimSiamSegFormer
 from segmenter.loss.msn import SimSiamLoss
 
