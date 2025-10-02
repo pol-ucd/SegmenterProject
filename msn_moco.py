@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from transformers import SegformerConfig
 
-from segmenter.loss import DiceLoss
+from segmenter.loss import DiceLoss, MSNLoss
 # from segmenter.loss.msn import SimSiamLoss
 from segmenter.masks import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
@@ -203,7 +203,7 @@ def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     logger.info(f"Validation Dice Score (Foreground): {avg_dice:.4f}")
 
 
-# --- Example Usage (Mock Data and Setup) ---
+
 
 def main():
     logger = logging.getLogger()
@@ -224,7 +224,8 @@ def main():
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(model_name='nvidia/mit-b0', momentum=0.996).to(device)
     # pretrain_loss_fn = SimSiamLoss()
-    pretrain_loss_fn = nn.MSELoss()
+    # pretrain_loss_fn = nn.MSELoss()
+    pretrain_loss_fn = MSNLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(), lr=1e-3, weight_decay=1e-4)
