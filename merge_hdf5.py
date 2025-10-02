@@ -107,8 +107,4 @@ if __name__ == '__main__':
                      '../segmenter/data/all_data.h5']
     output_filename = '../segmenter/merged_dataset.hdf5'
 
-    for f in file_list + [output_filename]:
-        if os.path.exists(f):
-            os.remove(f)
-
     merge_hdf5_files(file_list, output_filename, keys=['images', 'masks'])
