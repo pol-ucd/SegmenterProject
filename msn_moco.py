@@ -18,7 +18,8 @@ from segmenter.models.msn import MoCoSiameseNetwork
 from segmenter.utils.msn import load_data
 
 # Configuration
-BATCH_SIZE = 4
+BATCH_SIZE = 12
+NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE=(512, 512)
@@ -110,6 +111,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Standard Cross Entropy
     dice_loss_fn = DiceLoss(num_classes=model.config.num_labels, ignore_index=255)  # Custom Dice Loss
 
+    model_name = f'../segmenter/checkpoint/{prefix}_segformer_finetuned.pth'
     best_loss = float('inf')
     min_delta = 0.00001
     boredom = 0
@@ -151,7 +153,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           f'../segmenter/checkpoint/{prefix}_segformer_finetuned.pth')
+                           model_name)
             except Exception as e:
                 logger.error(f"Finetuning failed to save `{prefix}_segformer_pretrained.pth`: {e}")
 
@@ -223,8 +225,7 @@ def main():
 
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(model_name='nvidia/mit-b0', momentum=0.996).to(device)
-    # pretrain_loss_fn = SimSiamLoss()
-    # pretrain_loss_fn = nn.MSELoss()
+
     pretrain_loss_fn = MSNLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)

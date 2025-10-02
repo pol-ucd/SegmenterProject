@@ -4,8 +4,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
 
-from segmenter.utils.data import MSNPretrainDatasetHDF5, get_num_samples_from_hdf5, MSNFinetuneDatasetHDF5
-
+from segmenter.utils.data import MSNPretrainDatasetHDF5, get_num_samples_from_hdf5, MSNFinetuneDatasetHDF5, \
+    HDF5BatchSampler
 
 PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
                      '../segmenter/data/all_data.h5']
@@ -13,7 +13,8 @@ PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
 FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
 
 
-def load_data(batch_size: int, finetune_percent: float) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
+def load_data(batch_size: int, finetune_percent: float,
+              num_workers:int=4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
     # Large Unannotated set for Pre-training
     pretrain_datasets = []
     for ds in PRETRAIN_DATASETS:
@@ -21,8 +22,14 @@ def load_data(batch_size: int, finetune_percent: float) -> tuple[DataLoader[Any]
 
     pretrain_dataset = ConcatDataset(pretrain_datasets)
 
+    custom_sampler = HDF5BatchSampler(pretrain_dataset.dataset_len,
+                                      batch_size, shuffle=True)
+
     pretrain_dataloader = torch.utils.data.DataLoader(
-        pretrain_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True,
+        pretrain_dataset, batch_size=None,
+        sampler=custom_sampler,
+        shuffle=True, num_workers=num_workers,
+        pin_memory=True,
         prefetch_factor=batch_size
     )
 

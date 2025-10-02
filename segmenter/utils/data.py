@@ -1,14 +1,14 @@
 import numbers
 import os
 import platform
-from typing import Tuple
+from typing import Tuple, Iterator
 
 import cv2
 import h5py
 import numpy as np
 import torch
 from PIL import Image, ImageFilter
-from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader
+from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler
 from torchvision import transforms, transforms as T
 from torchvision.transforms import functional as F
 
@@ -89,6 +89,129 @@ class GaussianSmoothing(object):
     def __call__(self, image):
         radius = np.random.uniform(self.min_radius, self.max_radius)
         return image.filter(ImageFilter.GaussianBlur(radius))
+
+
+class HDF5BatchSampler(Sampler[int]):
+    """
+    A custom Sampler that yields contiguous index chunks (batches) to maximize
+    HDF5 read efficiency. This implements "weak shuffling" by shuffling the
+    order of the batch chunks but keeping indices within a chunk contiguous.
+    """
+
+    def __init__(self, dataset_size: int, batch_size: int, shuffle: bool = True):
+        self.dataset_size = dataset_size
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+        # Calculate the starting index of each batch chunk
+        self.start_indices = list(range(0, dataset_size, batch_size))
+
+        # If the last chunk is smaller than batch_size, its starting index is still included.
+
+    def __iter__(self) -> Iterator[list[int]]:
+        """
+        Yields a list of contiguous indices for the DataLoader to pass to __getitem__.
+        """
+        indices = self.start_indices
+        if self.shuffle:
+            np.random.shuffle(indices)
+
+        for start_idx in indices:
+            # Determine the end of the current batch (exclusive)
+            end_idx = min(start_idx + self.batch_size, self.dataset_size)
+
+            # Yield the contiguous range of indices
+            yield list(range(start_idx, end_idx))
+
+    def __len__(self) -> int:
+        """Returns the number of batches."""
+        return len(self.start_indices)
+
+
+class HDF5DatasetOptimized(Dataset):
+    """
+    HDF5 Dataset designed for batch reading using a custom Sampler.
+    It opens the file in the worker process via the worker_init_fn
+    (best practice for h5py multiprocessing).
+    """
+
+    def __init__(self, hdf5_path, data_keys=None, transform=None):
+        super().__init__()
+        self.hdf5_path = hdf5_path
+        self.transform = transform
+        self.data_keys = data_keys if data_keys is not None else ['images', 'masks']
+        self.data_key = self.data_keys[0]
+
+        # File handle is initialized to None and will be opened by worker_init_fn
+        self.f = None
+
+        # Get dataset length once
+        try:
+            with h5py.File(self.hdf5_path, 'r') as f:
+                self.dataset_len = len(f[self.data_key])
+        except Exception as e:
+            print(f"Error reading dataset length: {e}")
+            self.dataset_len = 0
+
+    # --- FIX for TypeError: h5py objects cannot be pickled ---
+    def __getstate__(self):
+        """Called when serializing (pickling) the object for workers."""
+        # Create a copy of the instance's dictionary
+        state = self.__dict__.copy()
+        # Explicitly remove the unpickleable file handle 'f' before serialization
+        state['f'] = None
+        return state
+
+    def __setstate__(self, state):
+        """Called when deserializing (unpickling) the object in a worker."""
+        # Restore the state (all attributes except 'f', which is None)
+        self.__dict__.update(state)
+        # 'f' remains None, and will be correctly opened by worker_init_fn
+
+    def __len__(self):
+        return self.dataset_len
+
+    def __getitem__(self, idx):
+        """
+        Handles both single index (scalar) and index list (batch/slice).
+
+        When used with HDF5BatchSampler, 'idx' will be a list of contiguous indices,
+        allowing a single, efficient HDF5 read.
+        """
+        # --- Best practice for h5py in PyTorch: file handle must be open per worker ---
+        # The file handle self.f should be opened by worker_init_fn.
+        if self.f is None:
+            # If running in single-worker mode (num_workers=0) or if worker_init_fn failed,
+            # open the file now for safety.
+            try:
+                # Note: swmr=True helps when multiple readers access the same file
+                self.f = h5py.File(self.hdf5_path, 'r', swmr=True, libver='latest')
+            except Exception as e:
+                # Handle case where file might be corrupt or missing
+                raise RuntimeError(f"Could not open HDF5 file in __getitem__: {e}")
+
+        # 1. Read the data chunk from the HDF5 file in a single operation
+
+        # If idx is a list of indices (the batch), read the whole slice efficiently
+        if isinstance(idx, (list, np.ndarray)):
+            # This is the line that gets the massive speedup for contiguous indices!
+            batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
+        else:
+            # Single item read (for default Sampler or if DataLoader is misconfigured)
+            batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
+
+        # 2. Convert to PyTorch tensors and apply transforms
+
+        results = {}
+        for k, v in batch_data.items():
+            # Use torch.as_tensor() or torch.from_numpy() for zero-copy conversion
+            tensor = torch.as_tensor(v)
+            if self.transform:
+                results[k] = self.transform(tensor)
+            else:
+                results[k] = tensor
+
+        return results
 
 
 class HDF5Dataset(Dataset):
@@ -267,218 +390,21 @@ class HDF5ImageDataset(HDF5Dataset):
         return image_tensor, mask_tensor
 
 
+def hdf5_worker_init_fn(worker_id):
+    """
+    Initializes the HDF5 file handle for each DataLoader worker process.
+    This prevents h5py's multiprocessing issues.
+    """
+    worker_info = torch.utils.data.get_worker_info()
+    dataset = worker_info.dataset  # Get the dataset object
 
-# The rest of the script remains the same, but with the modified usage in the main block.
-if __name__ == "__main__":
-    NUM_CLASSES = 11
-    # --- Create a dummy HDF5 file for demonstration purposes ---
-    print("Creating dummy HDF5 files for demonstration...")
-
-    # Create the first dummy HDF5 file
-    dummy_hdf5_path_1 = "dummy_data_1.h5"
-    if os.path.exists(dummy_hdf5_path_1):
-        os.remove(dummy_hdf5_path_1)
-
-    H, W = 1024, 1024
-    num_samples_1 = 3
-
-    dummy_images_1 = np.random.randint(0, 255, size=(num_samples_1, H, W, 3), dtype=np.uint8)
-    dummy_masks_1 = np.random.randint(0, NUM_CLASSES, size=(num_samples_1, H, W), dtype=np.uint8)
-    dummy_masks_one_hot_1 = np.zeros((num_samples_1, NUM_CLASSES, H, W), dtype=np.uint8)
-    for i in range(num_samples_1):
-        for c in range(NUM_CLASSES):
-            dummy_masks_one_hot_1[i, c, :, :] = (dummy_masks_1[i, :, :] == c).astype(np.uint8)
-    dummy_splits_1 = ['train'] * num_samples_1
-
-    with h5py.File(dummy_hdf5_path_1, 'w') as hf:
-        hf.create_dataset('images', data=dummy_images_1, compression='gzip')
-        hf.create_dataset('masks', data=dummy_masks_one_hot_1, compression='gzip')
-        dt = h5py.string_dtype(encoding='utf-8')
-        hf.create_dataset('splits', data=np.array(dummy_splits_1, dtype=dt))
-
-    print(f"Dummy HDF5 file 1 created at '{dummy_hdf5_path_1}'.")
-
-    # Create the second dummy HDF5 file
-    dummy_hdf5_path_2 = "dummy_data_2.h5"
-    if os.path.exists(dummy_hdf5_path_2):
-        os.remove(dummy_hdf5_path_2)
-
-    num_samples_2 = 4
-
-    dummy_images_2 = np.random.randint(0, 255, size=(num_samples_2, H, W, 3), dtype=np.uint8)
-    dummy_masks_2 = np.random.randint(0, NUM_CLASSES, size=(num_samples_2, H, W), dtype=np.uint8)
-    dummy_masks_one_hot_2 = np.zeros((num_samples_2, NUM_CLASSES, H, W), dtype=np.uint8)
-    for i in range(num_samples_2):
-        for c in range(NUM_CLASSES):
-            dummy_masks_one_hot_2[i, c, :, :] = (dummy_masks_2[i, :, :] == c).astype(np.uint8)
-    dummy_splits_2 = ['train'] * num_samples_2
-
-    with h5py.File(dummy_hdf5_path_2, 'w') as hf:
-        hf.create_dataset('images', data=dummy_images_2, compression='gzip')
-        hf.create_dataset('masks', data=dummy_masks_one_hot_2, compression='gzip')
-        dt = h5py.string_dtype(encoding='utf-8')
-        hf.create_dataset('splits', data=np.array(dummy_splits_2, dtype=dt))
-
-    print(f"Dummy HDF5 file 2 created at '{dummy_hdf5_path_2}'.\n")
-
-    # --- Demonstrate dynamic data splitting and DataLoader usage ---
-    image_target_size = (256, 256)
-    BATCH_SIZE = 2
-
-    # Check the operating system to determine num_workers
-    if platform.system() == 'Darwin':
-        num_workers = 0
-    else:
-        num_workers = os.cpu_count() or 1
-
-    # 1. Load the full dataset from both HDF5 files and combine them
-    print("Loading all data from both HDF5 files...")
-    # These datasets are only used to get a combined list of indices.
-    full_dataset_1 = HDF5ImageDataset(
-        hdf5_path=dummy_hdf5_path_1,
-        indices=list(range(num_samples_1)),
-        is_train_split=True,
-        image_size=image_target_size,
-        n_augment=0
-    )
-    full_dataset_2 = HDF5ImageDataset(
-        hdf5_path=dummy_hdf5_path_2,
-        indices=list(range(num_samples_2)),
-        is_train_split=True,
-        image_size=image_target_size,
-        n_augment=0
-    )
-
-    combined_full_dataset = full_dataset_1 + full_dataset_2
-    total_samples = len(combined_full_dataset)
-    print(f"Total number of combined samples: {total_samples}")
-
-    # 2. Create the dynamic split (e.g., 90% train, 10% test)
-    print("\nCreating a dynamic 90/10 train/test split...")
-    train_size = int(0.9 * total_samples)
-    test_size = total_samples - train_size
-
-    # Use random_split to create the indices for each split
-    train_split, test_split = random_split(combined_full_dataset, [train_size, test_size])
-
-    print(f"Training split size: {len(train_split)}")
-    print(f"Test split size: {len(test_split)}")
-
-    # 3. Create the DataLoaders for the new splits
-    # Use the Subset objects directly, which correctly handle the index mapping to the underlying datasets.
-    n_augmentations = 2
-
-    # We create two new ConcatDataset objects, one for each split.
-    # The Subset objects automatically handle the logic of which file to load.
-
-    # Create the training dataset with augmentations
-    # Note: We can't apply augmentations directly to the Subset object.
-    # Instead, we define a custom class or pass the augmentation logic through.
-    # The current design is flawed because the Subset object doesn't carry augmentation info.
-    #
-    # To fix the immediate bug and maintain the existing structure, we will
-    # revert to creating the splits before concatenating.
-
-    all_indices_1 = list(range(num_samples_1))
-    all_indices_2 = list(range(num_samples_2))
-
-    # Combine and shuffle all indices from both files
-    all_combined_indices = all_indices_1 + all_indices_2
-    # Ensure reproducibility with a fixed seed
-    torch.manual_seed(42)
-    shuffled_indices = torch.randperm(len(all_combined_indices)).tolist()
-
-    train_indices = shuffled_indices[:train_size]
-    test_indices = shuffled_indices[train_size:]
-
-    # Now we correctly split the indices and create new datasets
-    train_datasets = []
-    test_datasets = []
-
-    # Split indices for file 1
-    train_indices_1 = [i for i in train_indices if i < num_samples_1]
-    test_indices_1 = [i for i in test_indices if i < num_samples_1]
-
-    if train_indices_1:
-        train_datasets.append(HDF5ImageDataset(
-            hdf5_path=dummy_hdf5_path_1,
-            indices=train_indices_1,
-            is_train_split=True,
-            image_size=image_target_size,
-            n_augment=n_augmentations
-        ))
-    if test_indices_1:
-        test_datasets.append(HDF5ImageDataset(
-            hdf5_path=dummy_hdf5_path_1,
-            indices=test_indices_1,
-            is_train_split=False,
-            image_size=image_target_size,
-            n_augment=0
-        ))
-
-    # Split indices for file 2
-    # We must map the combined index back to the file-specific index.
-    train_indices_2 = [i - num_samples_1 for i in train_indices if i >= num_samples_1]
-    test_indices_2 = [i - num_samples_1 for i in test_indices if i >= num_samples_1]
-
-    if train_indices_2:
-        train_datasets.append(HDF5ImageDataset(
-            hdf5_path=dummy_hdf5_path_2,
-            indices=train_indices_2,
-            is_train_split=True,
-            image_size=image_target_size,
-            n_augment=n_augmentations
-        ))
-    if test_indices_2:
-        test_datasets.append(HDF5ImageDataset(
-            hdf5_path=dummy_hdf5_path_2,
-            indices=test_indices_2,
-            is_train_split=False,
-            image_size=image_target_size,
-            n_augment=0
-        ))
-
-    final_train_dataset = ConcatDataset(train_datasets)
-    final_test_dataset = ConcatDataset(test_datasets)
-
-    train_loader = DataLoader(
-        final_train_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        num_workers=num_workers
-    )
-    test_loader = DataLoader(
-        final_test_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        num_workers=num_workers
-    )
-
-    print(f"Number of batches in the training DataLoader: {len(train_loader)}")
-    print(f"Number of batches in the test DataLoader: {len(test_loader)}")
-
-    # 4. Iterate over a few batches from each DataLoader to show it works
-    print("\nIterating through the first batch of the training DataLoader:")
-    for i, (images, masks) in enumerate(train_loader):
-        print(f"  Batch {i + 1}:")
-        print(f"    Image batch shape: {images.shape}")
-        print(f"    Mask batch shape: {masks.shape}")
-        break
-
-    print("\nIterating through the first batch of the test DataLoader:")
-    for i, (images, masks) in enumerate(test_loader):
-        print(f"  Batch {i + 1}:")
-        print(f"    Image batch shape: {images.shape}")
-        print(f"    Mask batch shape: {masks.shape}")
-        break
-
-    # Clean up the dummy files
-    os.remove(dummy_hdf5_path_1)
-    os.remove(dummy_hdf5_path_2)
-    print("\nDummy HDF5 files cleaned up.")
+    # Open the HDF5 file handle for this worker
+    if dataset.f is None:
+        # Use swmr=True (Single Writer Multiple Reader) for read safety
+        dataset.f = h5py.File(dataset.hdf5_path, 'r', swmr=True, libver='latest')
 
 
-class MSNPretrainDatasetHDF5(HDF5Dataset):
+class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
     """ A dataset containing raw medical images (for pre-training)
        and annotated images/masks (for fine-tuning).
     """
@@ -509,7 +435,7 @@ class MSNPretrainDatasetHDF5(HDF5Dataset):
         return image
 
 
-class MSNFinetuneDatasetHDF5(HDF5Dataset):
+class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
     """ A dataset containing raw medical images (for pre-training)
        and annotated images/masks (for fine-tuning).
     """

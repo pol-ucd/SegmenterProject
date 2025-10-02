@@ -18,7 +18,8 @@ from segmenter.models.msn import SimSiamSegFormer
 from segmenter.utils.msn import load_data
 
 # Configuration
-BATCH_SIZE = 4
+BATCH_SIZE = 12
+NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE=(512, 512)
