@@ -32,7 +32,8 @@ def load_data(batch_size: int, finetune_percent: float,
     pretrain_dataloader = torch.utils.data.DataLoader(
         pretrain_dataset, batch_size=None,
         sampler=custom_sampler,
-        shuffle=True, num_workers=num_workers,
+        shuffle=False,
+        num_workers=num_workers,
         pin_memory=True,
         prefetch_factor=batch_size
     )
