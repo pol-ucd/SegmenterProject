@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 
 from segmenter.utils.data import MSNPretrainDatasetHDF5, get_num_samples_from_hdf5, MSNFinetuneDatasetHDF5, \
-    HDF5BatchSampler
+    HDF5BatchSampler, hdf5_worker_init_fn
 
 PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
                      '../segmenter/data/all_data.h5']
@@ -35,7 +35,7 @@ def load_data(batch_size: int, finetune_percent: float,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
-        prefetch_factor=batch_size
+        worker_init_fn=hdf5_worker_init_fn
     )
 
     # Small Annotated set for Fine-tuning
