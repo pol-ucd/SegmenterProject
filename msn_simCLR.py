@@ -17,11 +17,10 @@ from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import SimCLRSegFormer
 from segmenter.utils.msn import load_data
 
-PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
-                     '../segmenter/data/all_data.h5']
-
-FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
-
+# Configuration
+BATCH_SIZE = 4
+NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
+finetune_percent = 0.1
 IMAGE_SIZE=(512, 512)
 
 prefix='msn_simclr'
