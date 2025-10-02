@@ -24,6 +24,8 @@ FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
 
 IMAGE_SIZE=(512, 512)
 
+prefix='msn_simsiam'
+
 
 def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer, loss_fn: SimSiamLoss, device: torch.device,
@@ -77,9 +79,9 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           '../segmenter/checkpoint/msn_simsiam_segformer_pretrained.pth')
+                           f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth')
             except Exception as e:
-                logger.error(f"Pretraining failed to save `msn_model.online_encoder.state_dict()`: {e}")
+                logger.error(f"Pretraining failed to save `{prefix}_segformer_pretrained.pth`: {e}")
 
         else:
             boredom += 1
@@ -140,9 +142,9 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             try:
                 best_model = model.online_encoder.state_dict()
                 torch.save(best_model,
-                           '../segmenter/checkpoint/msn_simsiam_segformer_finetuned.pth')
+                           f'../segmenter/checkpoint/{prefix}_segformer_finetuned.pth')
             except Exception as e:
-                logger.error(f"Finetuning failed to save `msn_model.online_encoder.state_dict()`: {e}")
+                logger.error(f"Finetuning failed to save `{prefix}_segformer_pretrained.pth`: {e}")
 
         else:
             boredom += 1
@@ -195,7 +197,7 @@ def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
 
 def main():
     logger = logging.getLogger()
-    logger.info("Starting pretraining run")
+    logger.info(f"Starting pretraining run {prefix.upper()}")
 
     # Mock Configuration
     IMAGE_SIZE = 512
@@ -270,7 +272,7 @@ if __name__ == "__main__":
     home_dir = Path.home()
     if not os.path.exists(os.path.join(home_dir, "segmenter")):
         os.makedirs(os.path.join(home_dir, "segmenter"))
-    logfile = os.path.join(home_dir, "segmenter", f"msn_simsiam_{timestamp}.log")
+    logfile = os.path.join(home_dir, "segmenter", f"{prefix}_{timestamp}.log")
 
     logging.basicConfig(
         level=logging.INFO,
