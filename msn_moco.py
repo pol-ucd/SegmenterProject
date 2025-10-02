@@ -4,11 +4,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import ConcatDataset
 from tqdm import tqdm
 from transformers import SegformerConfig
 
@@ -17,7 +15,7 @@ from segmenter.loss import DiceLoss
 from segmenter.masks import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import MoCoSiameseNetwork
-from segmenter.utils.data import get_num_samples_from_hdf5, MSNPretrainDatasetHDF5, MSNFinetuneDatasetHDF5
+from segmenter.utils.msn import load_data
 
 PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
                      '../segmenter/data/all_data.h5']
@@ -221,39 +219,7 @@ def main():
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
-
-    # Large Unannotated set for Pre-training
-    pretrain_datasets = []
-    for ds in PRETRAIN_DATASETS:
-        pretrain_datasets.append(MSNPretrainDatasetHDF5(hdf5_path=ds))
-
-    pretrain_dataset = ConcatDataset(pretrain_datasets)
-
-    pretrain_dataloader = torch.utils.data.DataLoader(
-        pretrain_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True,
-        prefetch_factor=BATCH_SIZE
-    )
-
-    # Small Annotated set for Fine-tuning
-    finetune_data = FINETUNE_DATASETS[0]
-    n_finetune = get_num_samples_from_hdf5(finetune_data)
-    shuffled_indices = np.random.permutation(n_finetune)
-    n_finetune = int(n_finetune*finetune_percent)
-    finetune_indices = shuffled_indices[:n_finetune]
-    validation_indices = shuffled_indices[n_finetune:]
-
-    finetune_dataset = MSNFinetuneDatasetHDF5(hdf5_path=finetune_data,
-                                              indices=finetune_indices)
-    finetune_dataloader = torch.utils.data.DataLoader(
-        finetune_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4
-    )
-
-    # Annotated set for Validation
-    validation_dataset = MSNFinetuneDatasetHDF5(hdf5_path=finetune_data,
-                                                indices=validation_indices)
-    validation_dataloader = torch.utils.data.DataLoader(
-        validation_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
-    )
+    finetune_dataloader, pretrain_dataloader, validation_dataloader = load_data(BATCH_SIZE, finetune_percent)
 
     # ----------------------------------------------------
     # 1. PRE-TRAINING PHASE
@@ -311,6 +277,7 @@ def main():
     logger.info("Starting Validation Phase ---")
 
     validate_step(supervised_model, validation_dataloader, device)
+
 
 if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
