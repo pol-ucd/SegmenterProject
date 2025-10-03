@@ -190,26 +190,31 @@ class HDF5DatasetOptimized(Dataset):
                 # Handle case where file might be corrupt or missing
                 raise RuntimeError(f"Could not open HDF5 file in __getitem__: {e}")
 
+        results = {}
         # 1. Read the data chunk from the HDF5 file in a single operation
-
+        is_batch = isinstance(idx, (list, np.ndarray))
         # If idx is a list of indices (the batch), read the whole slice efficiently
-        if isinstance(idx, (list, np.ndarray)):
+        if is_batch:
             # This is the line that gets the massive speedup for contiguous indices!
             batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
+
+            for k, v in batch_data.items():
+                if self.transform:
+                    results[k] = [self.transform(torch.as_tensor(v_i).float()) for v_i in v]
+                else:
+                    results[k] = [torch.as_tensor(v_i).float() for v_i in v]
+
         else:
             # Single item read (for default Sampler or if DataLoader is misconfigured)
             batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
 
-        # 2. Convert to PyTorch tensors and apply transforms
-
-        results = {}
-        for k, v in batch_data.items():
-            # Use torch.as_tensor() or torch.from_numpy() for zero-copy conversion
-            tensor = torch.as_tensor(v).float().permute(2, 0, 1)
-            if self.transform:
-                results[k] = self.transform(tensor)
-            else:
-                results[k] = tensor
+            for k, v in batch_data.items():
+                # Use torch.as_tensor() or torch.from_numpy() for zero-copy conversion
+                tensor = torch.as_tensor(v).float()
+                if self.transform:
+                    results[k] = self.transform(tensor)
+                else:
+                    results[k] = tensor
 
         return results
 
