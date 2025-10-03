@@ -417,7 +417,7 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
     def __getitem__(self, idx):
         _data = super().__getitem__(idx)
 
-        image = torch.tensor(_data['images'])
+        image = T.ToTensor(_data['images'])
 
         image_augment = T.Compose([T.Resize(self.image_size,
                                             T.InterpolationMode.BICUBIC),
@@ -427,7 +427,7 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
 
         image = image_augment(image)
 
-        return image
+        return image.float()
 
 
 class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
