@@ -7,24 +7,18 @@ from torch.utils.data import DataLoader, ConcatDataset
 from segmenter.utils.data import MSNPretrainDatasetHDF5, get_num_samples_from_hdf5, MSNFinetuneDatasetHDF5, \
     HDF5BatchSampler, hdf5_worker_init_fn
 
-PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
-                     '../segmenter/data/all_data.h5']
+# PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
+#                      '../segmenter/data/all_data.h5']
+PRETRAIN_DATASET = '../segmenter/data/pretrain_images.h5'
 
-FINETUNE_DATASETS = ['../segmenter/data/Classica.h5']
+FINETUNE_DATASET = '../segmenter/data/Classica.h5'
 
 
 def load_data(batch_size: int, finetune_percent: float,
               num_workers:int=4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
-    # Large Unannotated set for Pre-training
-    pretrain_datasets = []
-    total_len = 0
-    for ds in PRETRAIN_DATASETS:
-        pretrain_datasets.append(MSNPretrainDatasetHDF5(hdf5_path=ds))
-        total_len += get_num_samples_from_hdf5(hdf5_path=ds)
 
-
-    pretrain_dataset = ConcatDataset(pretrain_datasets)
-
+    pretrain_dataset = MSNPretrainDatasetHDF5(hdf5_path=PRETRAIN_DATASET)
+    total_len = get_num_samples_from_hdf5(hdf5_path=PRETRAIN_DATASET)
 
     custom_sampler = HDF5BatchSampler(total_len,   #pretrain_dataset.dataset_len,
                                       batch_size, shuffle=True)
@@ -39,7 +33,7 @@ def load_data(batch_size: int, finetune_percent: float,
     )
 
     # Small Annotated set for Fine-tuning
-    finetune_data = FINETUNE_DATASETS[0]
+    finetune_data = FINETUNE_DATASET
     n_finetune = get_num_samples_from_hdf5(finetune_data)
     shuffled_indices = np.random.permutation(n_finetune)
     n_finetune = int(n_finetune * finetune_percent)

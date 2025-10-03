@@ -139,7 +139,7 @@ class HDF5DatasetOptimized(Dataset):
         super().__init__()
         self.hdf5_path = hdf5_path
         self.transform = transform
-        self.data_keys = data_keys if data_keys is not None else ['images', 'masks']
+        self.data_keys = data_keys if data_keys is not None else ['images']
         self.data_key = self.data_keys[0]
 
         # File handle is initialized to None and will be opened by worker_init_fn
