@@ -205,7 +205,7 @@ class HDF5DatasetOptimized(Dataset):
         results = {}
         for k, v in batch_data.items():
             # Use torch.as_tensor() or torch.from_numpy() for zero-copy conversion
-            tensor = torch.as_tensor(v)
+            tensor = torch.as_tensor(v).float()
             if self.transform:
                 results[k] = self.transform(tensor)
             else:
