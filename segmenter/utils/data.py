@@ -415,16 +415,11 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
         self.image_size = size
 
     def __getitem__(self, idx):
-        # if self.f is None:
-        #     # Re-open the file handle for this specific worker/process
-        #     self.f = h5py.File(self.hdf5_path, 'r')
         _data = super().__getitem__(idx)
 
-        # Load image and convert to tensor
-        image =_data['images']
+        image = torch.tensor(_data['images'])
 
-        image_augment = T.Compose([T.ToTensor(),
-                                   T.Resize(self.image_size,
+        image_augment = T.Compose([T.Resize(self.image_size,
                                             T.InterpolationMode.BICUBIC),
                                    T.Normalize(mean=[0.485, 0.456, 0.406],
                                                std=[0.229, 0.224, 0.225])
