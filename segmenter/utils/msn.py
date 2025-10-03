@@ -2,7 +2,7 @@ from typing import Any
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 
 from segmenter.utils.data import MSNPretrainDatasetHDF5, get_num_samples_from_hdf5, MSNFinetuneDatasetHDF5, \
     HDF5BatchSampler, hdf5_worker_init_fn
