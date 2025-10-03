@@ -52,7 +52,6 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
                 batch_anchor.append(anchor)
                 batch_positive.append(positive)
 
-
             x1 = torch.stack(batch_anchor).to(device)
             x2 = torch.stack(batch_positive).to(device)
 
