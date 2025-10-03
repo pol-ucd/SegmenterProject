@@ -417,7 +417,7 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
     def __getitem__(self, idx):
         _data = super().__getitem__(idx)
 
-        image = T.ToTensor(_data['images'])
+        image = T.ToTensor()(_data['images'])
 
         image_augment = T.Compose([T.Resize(self.image_size,
                                             T.InterpolationMode.BICUBIC),
