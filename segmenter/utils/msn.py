@@ -18,8 +18,7 @@ FINETUNE_DATASET = '../segmenter/data/Classica.h5'
 def load_data(batch_size: int, finetune_percent: float,
               image_size=(512, 512),
               num_workers:int=4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
-    image_augment = T.Compose([T.ToTensor(),
-                               T.Resize(image_size,
+    image_augment = T.Compose([T.Resize(image_size,
                                         T.InterpolationMode.BICUBIC),
                                T.Normalize(mean=[0.485, 0.456, 0.406],
                                            std=[0.229, 0.224, 0.225])
