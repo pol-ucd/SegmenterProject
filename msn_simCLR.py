@@ -18,6 +18,7 @@ from segmenter.models.msn import SimCLRSegFormer
 from segmenter.utils.msn import load_data
 
 # Configuration
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 12
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
@@ -205,8 +206,6 @@ def main():
     NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
     finetune_percent = 0.1
 
-    # Use CPU for simplicity in example
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
     finetune_dataloader, pretrain_dataloader, validation_dataloader = load_data(BATCH_SIZE, finetune_percent)

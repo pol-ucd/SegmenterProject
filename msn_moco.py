@@ -18,6 +18,7 @@ from segmenter.models.msn import MoCoSiameseNetwork
 from segmenter.utils.msn import load_data
 
 # Configuration
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 12
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
@@ -212,8 +213,6 @@ def main():
     logger = logging.getLogger()
     logger.info(f"Starting pretraining run {prefix.upper()}")
 
-    # Use CPU for simplicity in example
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
     finetune_dataloader, pretrain_dataloader, validation_dataloader = load_data(BATCH_SIZE, finetune_percent)
