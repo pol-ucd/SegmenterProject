@@ -52,7 +52,6 @@ def pretrain_step(model:MoCoSiameseNetwork,
             batch_anchor, batch_positive, batch_mask = [], [], []
 
             for image in batch_images:
-                print(image.shape)
                 print(image)
                 # Mask is now returned here
                 anchor, positive, mask = mask_generator.create_siamese_triple(image)
