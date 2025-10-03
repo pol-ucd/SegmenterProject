@@ -47,7 +47,7 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
             batch_anchor = []
             batch_positive = []
 
-            for image in batch_images:
+            for image in batch_images['images']:
                 anchor, positive = mask_generator.create_siamese_pair(image)
                 batch_anchor.append(anchor)
                 batch_positive.append(positive)
