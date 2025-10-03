@@ -173,48 +173,59 @@ class HDF5DatasetOptimized(Dataset):
 
     def __getitem__(self, idx):
         """
-        Handles both single index (scalar) and index list (batch/slice).
-
-        When used with HDF5BatchSampler, 'idx' will be a list of contiguous indices,
-        allowing a single, efficient HDF5 read.
+        Reads a single item (scalar idx) or a batch (list idx) and applies
+        transforms on a per-sample basis if necessary.
         """
-        # --- Best practice for h5py in PyTorch: file handle must be open per worker ---
-        # The file handle self.f should be opened by worker_init_fn.
+        # Ensure file handle is open (safety check)
         if self.f is None:
-            # If running in single-worker mode (num_workers=0) or if worker_init_fn failed,
-            # open the file now for safety.
             try:
-                # Note: swmr=True helps when multiple readers access the same file
                 self.f = h5py.File(self.hdf5_path, 'r', swmr=True, libver='latest')
             except Exception as e:
-                # Handle case where file might be corrupt or missing
-                raise RuntimeError(f"Could not open HDF5 file in __getitem__: {e}")
+                raise RuntimeError(f"Could not open HDF5 file: {e}")
 
-        results = {}
-        # 1. Read the data chunk from the HDF5 file in a single operation
-        is_batch = isinstance(idx, (list, np.ndarray))
-        # If idx is a list of indices (the batch), read the whole slice efficiently
-        if is_batch:
-            # This is the line that gets the massive speedup for contiguous indices!
+        # 1. Efficient Batch Read
+        if isinstance(idx, (list, np.ndarray)):
+            # Optimized read: idx is a list of contiguous indices
             batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
-
-            for k, v in batch_data.items():
-                if self.transform:
-                    results[k] = [self.transform(torch.as_tensor(v_i).float()) for v_i in v]
-                else:
-                    results[k] = [torch.as_tensor(v_i).float() for v_i in v]
-
         else:
-            # Single item read (for default Sampler or if DataLoader is misconfigured)
+            # Single item read
             batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
 
-            for k, v in batch_data.items():
-                # Use torch.as_tensor() or torch.from_numpy() for zero-copy conversion
-                tensor = torch.as_tensor(v).float()
-                if self.transform:
-                    results[k] = self.transform(tensor)
+        # 2. FIX 2: Correctly apply transform to each sample in the batch
+        results = {}
+
+        # Determine if we are processing a single sample or a batch
+        is_batch = isinstance(idx, (list, np.ndarray))
+
+        for k, v in batch_data.items():
+            if self.transform:
+
+                # If we read a batch, we must loop and augment each sample individually
+                if is_batch:
+                    transformed_samples = []
+                    # v is now B, H, W, C NumPy array
+                    for sample_np in v:
+                        # Convert H, W, C NumPy to C, H, W Tensor
+                        sample_tensor = torch.as_tensor(sample_np).permute(2, 0, 1).float()
+                        transformed_samples.append(self.transform(sample_tensor))
+
+                    # Stack the augmented 3D results back into a 4D batch (B, C, H, W)
+                    results[k] = torch.stack(transformed_samples)
+
+                # If we only read a single item, apply transform directly
                 else:
-                    results[k] = tensor
+                    # Convert H, W, C NumPy to C, H, W Tensor
+                    sample_tensor = torch.as_tensor(v).permute(2, 0, 1).float()
+                    results[k] = self.transform(sample_tensor)
+
+            else:
+                # No transform: convert directly to tensor, handling shape for batch/single
+                if is_batch:
+                    # B, H, W, C -> B, C, H, W (4D)
+                    results[k] = torch.as_tensor(v).permute(0, 3, 1, 2).float()
+                else:
+                    # H, W, C -> C, H, W (3D)
+                    results[k] = torch.as_tensor(v).permute(2, 0, 1).float()
 
         return results
 
