@@ -240,9 +240,9 @@ class HDF5Dataset(Dataset):
         if self.f is None:
             # Re-open the file handle for this specific worker/process
             self.f = h5py.File(self.hdf5_path, 'r')
-        self.data = {k:self.f[k] for k in self.data_keys if k in self.f}
+        self.data = {k: self.f[k] for k in self.data_keys if k in self.f}
 
-        return {k:v[idx] for k, v in self.data.items()}
+        return {k: v[idx] for k, v in self.data.items()}
 
 
 class HDF5ImageDataset(HDF5Dataset):
@@ -274,7 +274,6 @@ class HDF5ImageDataset(HDF5Dataset):
         self.image_size = image_size
         self.n_augment = n_augment
         self.sigma = 30.0
-
 
         # Initialize h5py file and dataset references to None
         self.hdf5_file = None
@@ -417,9 +416,12 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
     def __getitem__(self, idx):
         _data = super().__getitem__(idx)
 
-        image = T.ToTensor()(_data['images'])
+        image = _data['images']
+        if isinstance(image, torch.Tensor):
+            image = image.numpy()
 
-        image_augment = T.Compose([T.Resize(self.image_size,
+        image_augment = T.Compose([T.ToTensor(),
+                                   T.Resize(self.image_size,
                                             T.InterpolationMode.BICUBIC),
                                    T.Normalize(mean=[0.485, 0.456, 0.406],
                                                std=[0.229, 0.224, 0.225])
