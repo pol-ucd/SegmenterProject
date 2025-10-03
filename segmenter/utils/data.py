@@ -419,6 +419,7 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
         image = _data['images']
         if isinstance(image, torch.Tensor):
             image = image.numpy()
+        print(image.shape)
 
         image_augment = T.Compose([T.ToTensor(),
                                    T.Resize(self.image_size,
