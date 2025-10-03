@@ -29,9 +29,9 @@ def load_data(batch_size: int, finetune_percent: float,
                                             data_keys=['images'],
                                             transform=image_augment)
 
-    total_len = get_num_samples_from_hdf5(hdf5_path=PRETRAIN_DATASET)
+    # total_len = get_num_samples_from_hdf5(hdf5_path=PRETRAIN_DATASET)
 
-    custom_sampler = HDF5BatchSampler(total_len,   #pretrain_dataset.dataset_len,
+    custom_sampler = HDF5BatchSampler(pretrain_dataset.dataset_len,
                                       batch_size, shuffle=True)
 
     pretrain_dataloader = torch.utils.data.DataLoader(
