@@ -16,7 +16,7 @@ def merge_hdf5_files(input_files: List[str], output_file: str, keys: List[str]):
         print("Error: Input file list is empty.")
         return
 
-    keys = keys if keys is not None else ['images', 'masks']
+    keys = keys if keys is not None else ['images']
 
     print(f"\nStarting merge process to create {output_file}...")
 
@@ -107,4 +107,4 @@ if __name__ == '__main__':
                      '../segmenter/data/all_data.h5']
     output_filename = '../segmenter/merged_dataset.hdf5'
 
-    merge_hdf5_files(file_list, output_filename, keys=['images', 'masks'])
+    merge_hdf5_files(file_list, output_filename, keys=['images'])
