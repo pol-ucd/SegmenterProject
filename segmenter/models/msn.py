@@ -224,17 +224,16 @@ class MoCoSiameseNetwork(nn.Module):
         # --- FIX 1: Robustly determine the feature dimension D for the head initialization ---
         encoder_output_dim = None
         try:
-            # 1. Try standard 'hidden_size' (common for final layer)
+            # Try standard 'hidden_size' (common for final layer)
             encoder_output_dim = self.online_encoder.config.hidden_size
-            print("Step 1", encoder_output_dim)
         except AttributeError:
-            # 2. Try 'hidden_sizes[-1]' (common for multi-stage models)
+            # Try 'hidden_sizes[-1]' (common for multi-stage models)
             try:
                 encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
                 print("Step 2", encoder_output_dim)
                 print(self.online_encoder.config.hidden_sizes)
             except (AttributeError, IndexError):
-                # 3. Fallback: Based on the previous runtime error, the actual output dimension D is 16.
+                # Fallback:
                 # This needs to be manually set if the config properties are not available.
                 print(f"Warning: Could not auto-detect encoder dimension. Falling back to D=16 based on runtime error.")
                 encoder_output_dim = 16
@@ -247,7 +246,6 @@ class MoCoSiameseNetwork(nn.Module):
 
         # Online Predictor Head (h)
         self.online_head = nn.Sequential(
-            # This must match the encoder's pooled feature dimension (D=16 in your case)
             nn.Linear(encoder_output_dim, encoder_output_dim // 4),
             nn.BatchNorm1d(encoder_output_dim // 4),
             nn.ReLU(),
@@ -346,6 +344,7 @@ class MoCoSiameseNetwork(nn.Module):
             online_pooled_features_list.append(online_pooled_features)
 
         online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
+        print(online_pooled_features.shape)
 
         # Apply the predictor head to get the final prediction P
         prediction_p = self.online_head(online_pooled_features)
