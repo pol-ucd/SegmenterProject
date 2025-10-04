@@ -73,6 +73,7 @@ class MaskedTiledViewGenerator:
         tiles = self.tile_image(image)  # (B, C, N, th, tw)
         masked_tiles, metadata = self.apply_masks(tiles)
         masked_tiles = masked_tiles.permute(0, 2, 1, 3, 4)  # (B, N, C, th, tw)
+        print("__call__: ", image.shape, masked_tiles.shape)
         masked_image = self.stitch_tiles(masked_tiles, H, W)
 
         if self.return_metadata:
