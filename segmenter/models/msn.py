@@ -222,8 +222,9 @@ class MoCoSiameseNetwork(nn.Module):
         self.online_encoder = SegformerModel.from_pretrained(model_name)
 
         try:
-            encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
-        except:
+            # --- FIX 1: Use the standard 'hidden_size' property for the final embedding dimension ---
+            encoder_output_dim = self.online_encoder.config.hidden_size
+        except AttributeError:
             # Fallback for common SegFormer hidden size D
             encoder_output_dim = 256
 
@@ -279,7 +280,6 @@ class MoCoSiameseNetwork(nn.Module):
         S, D = online_features.shape[1], online_features.shape[2]
 
         # --- FIX 1: Robustly calculate spatial dimensions of the feature grid ---
-        # FIX FOR TypeError: round(): argument 'input' (position 1) must be Tensor, not float
         # Ensure torch.round() is applied to a Tensor, not a float.
         s_tensor = torch.tensor(S, dtype=torch.float32, device=online_features.device)
         h_feat = int(torch.round(torch.sqrt(s_tensor)).item())
@@ -331,8 +331,8 @@ class MoCoSiameseNetwork(nn.Module):
         online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
 
         # Apply the predictor head to get the final prediction P
-        # The flattened(-2, -1) is necessary only if D>1, which it is.
-        prediction_p = self.online_head(online_pooled_features.flatten(-2, -1))
+        # --- FIX 3: Removed redundant .flatten(-2, -1) call ---
+        prediction_p = self.online_head(online_pooled_features)
 
         # --- Target Path (Global View / UNMASKED) ---
         with torch.no_grad():
