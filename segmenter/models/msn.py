@@ -281,7 +281,7 @@ class MoCoSiameseNetwork(nn.Module):
 
         S, D = online_features.shape[1], online_features.shape[2]
         h_feat = w_feat = int(torch.sqrt(torch.tensor(S).float()).item())
-        print(S.item(), D.item(), h_feat, w_feat)
+        print(S, D, h_feat, w_feat)
 
         # 1. Downsample the input mask [B, 1, H, W] to feature resolution [B, 1, h_feat, w_feat]
         downsampled_mask = F.interpolate(
