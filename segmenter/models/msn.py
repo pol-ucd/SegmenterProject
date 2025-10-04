@@ -58,7 +58,8 @@ class MaskedTiledViewGenerator:
         return masked_tiles, metadata
 
     def stitch_tiles(self, masked_tiles, H, W):
-        B, N, C, th, tw = masked_tiles.shape
+        # B, N, C, th, tw = masked_tiles.shape
+        B, C, N, th, tw = masked_tiles.shape
         tiles_per_row = W // tw
         print(B, N, C, th, tw)
         print(B, tiles_per_row, -1, C, th, tw)
