@@ -1,0 +1,10 @@
+{
+  "run": {
+    "n_epochs": 100
+  },
+  "optimizer": {
+    "params": {
+      "lr": 1e-05
+      }
+  }
+}

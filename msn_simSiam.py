@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from transformers import SegformerConfig
 
+from segmenter.core import Config
 from segmenter.loss import DiceLoss
 from segmenter.loss.msn import SimSiamLoss
 from segmenter.masks import MaskGenerator
@@ -18,6 +19,7 @@ from segmenter.models.msn import SimSiamSegFormer
 from segmenter.utils.msn import load_data
 
 # Configuration
+config = Config("config/msn_common.json")
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 learning_rate=1e-04
 BATCH_SIZE = 12
