@@ -218,11 +218,13 @@ class MoCoSiameseNetwork(nn.Module):
         self.projection_dim = projection_dim
 
         # Create online and target networks
+        # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         self.online_encoder = SegformerModel.from_pretrained(model_name)
 
         try:
             encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
         except:
+            # Fallback for common SegFormer hidden size D
             encoder_output_dim = 256
 
         # Online Predictor Head (h)
@@ -267,22 +269,20 @@ class MoCoSiameseNetwork(nn.Module):
         :param mask: The synthetic binary mask [B, 1, H, W]. (1=occlusion area)
         :return: (P, Z') prediction and detached target embedding.
         """
-        B, _, H, W = focal_view.shape
-
-        # Helper to extract and pool features (used only for Target Network)
-        def get_pooled_features(x, encoder):
-            features = encoder(x.squeeze(1)).last_hidden_state
-            # Pool over the sequence dimension (dim=1) and reshape to [B, D]
-            return features.mean(dim=1).reshape(features.shape[0], -1).squeeze(-1)
+        B, C, H, W = focal_view.shape
 
         # --- Online Path (Focal View / MASKED) ---
-        online_output = self.online_encoder(focal_view.squeeze(1))
+        # NOTE: SegFormer expects the input to be named 'pixel_values'
+        online_output = self.online_encoder(pixel_values=focal_view.squeeze(1))
         online_features = online_output.last_hidden_state  # [B, S, D]
 
         S, D = online_features.shape[1], online_features.shape[2]
-        # h_feat = w_feat = int(torch.sqrt(torch.tensor(S).float()).item())
-        h_feat = w_feat = int(torch.sqrt(torch.tensor(D).float()).item())
-        print(S, D, h_feat, w_feat)
+
+        # --- FIX 1: Robustly calculate spatial dimensions of the feature grid ---
+        # This is necessary for mask interpolation, even if S is not a perfect square.
+        # We rely on a square approximation (h_feat x w_feat) for the interpolation target.
+        h_feat = int(torch.round(torch.sqrt(torch.tensor(S, dtype=torch.float32)).item()))
+        w_feat = h_feat  # Assume square grid for interpolation
 
         # 1. Downsample the input mask [B, 1, H, W] to feature resolution [B, 1, h_feat, w_feat]
         downsampled_mask = F.interpolate(
@@ -292,15 +292,31 @@ class MoCoSiameseNetwork(nn.Module):
         )  # [B, 1, h_feat, w_feat]
 
         # Create the boolean index: True for UNMASKED (visible) patches.
-        patch_visibility_mask = (1.0 - downsampled_mask).flatten(1).bool()  # [B, S]
+        patch_visibility_mask_flat = (1.0 - downsampled_mask).flatten(1).bool()  # [B, h_feat*w_feat]
 
         # 3. Apply the mask and pool: For each sample, select only the visible patches
         online_pooled_features_list = []
         for i in range(B):
-            # Select the D-dim feature vectors where the patch is visible
-            # Indexing [S, D] with a 1D boolean mask [S] is the correct way to select rows.
-            print(online_features[i].shape, downsampled_mask.shape, patch_visibility_mask[i].shape)
-            visible_patches = online_features[i][patch_visibility_mask[i]]  # [S_visible, D]
+
+            # --- FIX 2: Ensure mask length exactly matches feature sequence length S ---
+            mask_i = patch_visibility_mask_flat[i]
+            mask_len = mask_i.shape[0]
+
+            if mask_len != S:
+                # The spatial approximation h_feat x w_feat resulted in an array
+                # that is too long or too short. We force it to length S.
+                if mask_len > S:
+                    # Truncate (less likely, but safer)
+                    current_mask = mask_i[:S]
+                else:
+                    # Pad with False (not visible) if mask is too short (most likely scenario)
+                    padding = torch.zeros(S - mask_len, dtype=torch.bool, device=focal_view.device)
+                    current_mask = torch.cat([mask_i, padding])
+            else:
+                current_mask = mask_i
+
+            # Indexing: online_features[i] is [S, D]. current_mask is [S]. This is the correct operation.
+            visible_patches = online_features[i][current_mask]  # [S_visible, D]
 
             # Pool over the visible patches only (average over S_visible)
             if visible_patches.numel() > 0:
@@ -314,14 +330,21 @@ class MoCoSiameseNetwork(nn.Module):
         online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
 
         # Apply the predictor head to get the final prediction P
+        # The flattened(-2, -1) is necessary only if D>1, which it is.
         prediction_p = self.online_head(online_pooled_features.flatten(-2, -1))
 
         # --- Target Path (Global View / UNMASKED) ---
         with torch.no_grad():
             self.target_encoder.eval()
-            target_pooled_features = get_pooled_features(global_view, self.target_encoder)
 
-            # Apply the Target Head to project 256 down to 128 (MUST be done before comparison)
+            # Helper function logic moved inline for clarity
+            target_output = self.target_encoder(pixel_values=global_view.squeeze(1))
+            target_features = target_output.last_hidden_state  # [B, S, D]
+
+            # Pool over the sequence dimension (dim=1) for the target features
+            target_pooled_features = target_features.mean(dim=1).reshape(target_features.shape[0], -1)
+
+            # Apply the Target Head to project
             target_z = self.target_head(target_pooled_features)
 
             # The target embedding Z' must be detached
@@ -331,7 +354,5 @@ class MoCoSiameseNetwork(nn.Module):
         return prediction_p, target_z_detached
 
     def get_model_stride(self):
-        # NOTE: This line assumes a 'segformer' attribute exists in the backbone,
-        # which is true for HuggingFace's SegformerModel, but we should make sure
-        # to use the config object if possible.
-        return self.online_encoder.config.patch_sizes[-1]  # Approximation, usually 16 or 32 for the final layer
+        # Approximation for the effective stride of the final feature map
+        return self.online_encoder.config.patch_sizes[-1]
