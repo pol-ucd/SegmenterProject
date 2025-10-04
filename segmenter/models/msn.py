@@ -21,7 +21,7 @@ from typing import Tuple
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from transformers import SegformerModel
+from transformers import SegformerModel, SegformerForSemanticSegmentation, SegformerConfig
 
 
 class MaskedTiledViewGenerator:
@@ -125,40 +125,38 @@ class SegFormerAdapter(nn.Module):
     Calls a pretrained SegFormer encoder and returns a (B, C, H, W) feature map.
     Adjust token->spatial conversion to match the specific SegFormer variant you use.
     """
-    def __init__(self, pretrained_name, out_stride=256, target_resolution=None):
+    def __init__(self, pretrained_name):
         super().__init__()
-        # load backbone; use SegformerModel for encoder-only outputs
-        self.backbone = SegformerModel.from_pretrained(pretrained_name)
-        # If using SegformerForSemanticSegmentation you may access .encoder or .last_hidden_state similarly
-        self.target_resolution = target_resolution  # (H, W) or None; used to upsample features
-        self.out_stride = out_stride  # e.g., 4, 8, 16 — depends on the variant
+        if pretrained_name is not None:
+            self.config = SegformerConfig.from_pretrained(pretrained_name)
+        else:
+            self.config = SegformerConfig()
+
+        if self.pretrained_model is not None:
+            self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+                pretrained_name,
+                config=self.config,
+                ignore_mismatched_sizes=True
+            )
+        else:
+            self.base_model = SegformerForSemanticSegmentation(config=self.config)
+
 
     def forward(self, x):
-        # x: (B, 3, H, W) in pixel space
-        # Many SegFormer variants expect pixel values normalized; ensure preprocessing matches pretrained model
-        outputs = self.backbone(pixel_values=x)  # returns BaseModelOutput or dict
-        # Typical key: last_hidden_state -> (B, seq_len, hidden_dim)
-        last_hidden = outputs.last_hidden_state  # shape (B, N, C)
-        print(last_hidden.shape)
-        B, N, C = last_hidden.shape
 
-        # Convert sequence tokens back to spatial layout:
-        # If SegFormer uses non-overlapping patches, seq_len = H_patch * W_patch.
-        # Compute patch grid size:
-        patch_h = patch_w = int(N ** 0.5)
-        if patch_h * patch_w != N:
-            # fall back to known stride logic: derive from input size and model stride, or raise informative error
-            # Here we assume square patch layout; adjust for your variant if different.
-            raise RuntimeError("Unexpected token layout: cannot reshape sequence length to square grid")
+        # The base model's forward pass handles the entire encoder and decoder.
+        # We only need the logits.
+        output = self.base_model(pixel_values=x.float()).logits
 
-        feat = last_hidden.permute(0, 2, 1).contiguous()    # (B, C, N)
-        feat = feat.view(B, C, patch_h, patch_w)            # (B, C, H_patch, W_patch)
+        # The Segformer model's output logits are at a reduced resolution (e.g., 1/4th).
+        # We upsample them back to the original input size.
+        logits = F.interpolate(output,
+                               size=x.shape[2:],
+                               mode='bilinear',
+                               align_corners=False)
 
-        # Optionally upsample to the requested resolution (H, W)
-        if self.target_resolution is not None:
-            feat = F.interpolate(feat, size=self.target_resolution, mode="bilinear", align_corners=False)
-
-        return feat  # (B, C, H_out, W_out)
+        # return logits
+        return logits
 
 
 class MoCoSegFormer(nn.Module):
