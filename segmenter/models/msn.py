@@ -221,16 +221,29 @@ class MoCoSiameseNetwork(nn.Module):
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         self.online_encoder = SegformerModel.from_pretrained(model_name)
 
+        # --- FIX 1: Robustly determine the feature dimension D for the head initialization ---
+        encoder_output_dim = None
         try:
-            # --- FIX 1: Use the standard 'hidden_size' property for the final embedding dimension ---
+            # 1. Try standard 'hidden_size' (common for final layer)
             encoder_output_dim = self.online_encoder.config.hidden_size
         except AttributeError:
-            # Fallback for common SegFormer hidden size D
-            encoder_output_dim = 256
+            # 2. Try 'hidden_sizes[-1]' (common for multi-stage models)
+            try:
+                encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
+            except (AttributeError, IndexError):
+                # 3. Fallback: Based on the previous runtime error, the actual output dimension D is 16.
+                # This needs to be manually set if the config properties are not available.
+                print(f"Warning: Could not auto-detect encoder dimension. Falling back to D=16 based on runtime error.")
+                encoder_output_dim = 16
+
+        # --- Check for successful dimension acquisition ---
+        if encoder_output_dim is None or encoder_output_dim <= 0:
+            # Should not happen with the fallback, but safety check.
+            encoder_output_dim = 256  # Default to a safe size if 16 is incorrect for other models
 
         # Online Predictor Head (h)
         self.online_head = nn.Sequential(
-            # This must match the encoder's pooled feature dimension (D)
+            # This must match the encoder's pooled feature dimension (D=16 in your case)
             nn.Linear(encoder_output_dim, encoder_output_dim // 4),
             nn.BatchNorm1d(encoder_output_dim // 4),
             nn.ReLU(),
@@ -331,7 +344,6 @@ class MoCoSiameseNetwork(nn.Module):
         online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
 
         # Apply the predictor head to get the final prediction P
-        # --- FIX 3: Removed redundant .flatten(-2, -1) call ---
         prediction_p = self.online_head(online_pooled_features)
 
         # --- Target Path (Global View / UNMASKED) ---
