@@ -19,6 +19,8 @@ from segmenter.utils.msn import load_data
 
 # Configuration
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+learning_rate=1e-04
+
 BATCH_SIZE = 12
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
@@ -221,7 +223,9 @@ def main():
     pretrain_loss_fn = InfoNCELoss(temperature=0.1)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
-    pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(), lr=1e-3, weight_decay=1e-4)
+    pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
+                                           lr=learning_rate,
+                                           weight_decay=1e-4)
     logger.info("Starting Pre-training Phase (Siamese Network) ---")
 
     pretrain_weights = pretrain_step(

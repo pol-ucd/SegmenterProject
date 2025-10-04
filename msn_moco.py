@@ -3,10 +3,12 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 from transformers import SegformerConfig
 
@@ -19,13 +21,42 @@ from segmenter.utils.msn import load_data
 
 # Configuration
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+learning_rate=1e-04
 BATCH_SIZE = 12
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE=(512, 512)
 
+WARMUP_EPOCHS = 5
+TOTAL_EPOCHS = 100
+STEPS_PER_EPOCH = 33000//BATCH_SIZE # Example: 33,000 images / 64 batch size = ~516 steps
+WARMUP_STEPS = WARMUP_EPOCHS * STEPS_PER_EPOCH
+TOTAL_STEPS = TOTAL_EPOCHS * STEPS_PER_EPOCH
+
+
 prefix='msn_moco'
+
+
+def get_linear_warmup_lambda(warmup_steps: int, total_steps: int) -> Callable[[int], float]:
+    """
+    Returns a function to compute the multiplicative factor for the LR.
+    LR starts at near zero and linearly ramps up to 1.0 (BASE_LR).
+    """
+
+    def lr_lambda(step: int) -> float:
+        if step < warmup_steps:
+            # Linear warmup: starts at 0, ramps up to 1.0
+            return float(step) / float(max(1, warmup_steps))
+
+        # Optionally, implement cosine decay after warmup (common practice)
+        # return 0.5 * (1. + math.cos(math.pi * (step - warmup_steps) / (total_steps - warmup_steps)))
+
+        # For this simple example, we hold it constant at 1.0 after warmup:
+        return 1.0
+
+    return lr_lambda
+
 
 
 def pretrain_step(model:MoCoSiameseNetwork,
@@ -230,10 +261,12 @@ def main():
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(model_name='nvidia/mit-b0', momentum=0.996).to(device)
 
-    pretrain_loss_fn = MSNLoss()
+    pretrain_loss_fn = MSNLoss(temperature=0.2, center_momentum=0.999)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
-    pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(), lr=1e-3, weight_decay=1e-4)
+    pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
+                                           lr=learning_rate,
+                                           weight_decay=1e-4)
     logger.info("Starting Pre-training Phase (Siamese Network) ---")
 
     pretrain_weights = pretrain_step(
