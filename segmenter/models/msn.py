@@ -15,6 +15,7 @@ Mixed Siamese Networks for Bring Your Own Labels (BYOL) implementation
 """
 import copy
 import random
+from copy import deepcopy
 from typing import Tuple
 
 import torch
@@ -333,8 +334,8 @@ class MoCoSiameseNetwork(nn.Module):
         )
         self.encoder_q = nn.Sequential(self.online_encoder,
                                        self.online_head)
-        self.encoder_k = nn.Sequential(self.online_encoder.__class__(pretrained_model),
-                                       self.online_head.__class__())
+        self.encoder_k = nn.Sequential(deepcopy(self.online_encoder),
+                                       deepcopy(self.online_head))
         self._init_momentum_encoder()
 
 
