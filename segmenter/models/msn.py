@@ -332,6 +332,7 @@ class MoCoSiameseNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(encoder_output_dim // 4, self.projection_dim)
         )
+
         self.encoder_q = nn.Sequential(self.online_encoder,
                                        self.online_head)
         self.encoder_k = nn.Sequential(deepcopy(self.online_encoder),
@@ -345,7 +346,7 @@ class MoCoSiameseNetwork(nn.Module):
                                                        return_metadata=True)
 
         self.register_buffer("queue", torch.randn(12800,
-                                                  self.online_head.self.projection_dim))
+                                                  self.online_head.projection_dim))
         self.queue = F.normalize(self.queue, dim=1)
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
