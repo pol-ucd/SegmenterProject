@@ -85,7 +85,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
         for batch_images in tqdm(dataloader):
             batch_anchor, batch_positive, batch_mask = [], [], []
 
-            for image in batch_images['images']:
+            # for image in batch_images['images']:
                 # # Mask is now returned here
                 # anchor, positive, mask = mask_generator.create_siamese_triple(image)
                 # batch_anchor.append(anchor)
@@ -96,7 +96,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
             # x1 = torch.stack(batch_anchor).to(device)
             # x2 = torch.stack(batch_positive).to(device)
             # x3 = torch.stack(batch_mask).to(device)
-            x = batch_images.to(device)
+            x = batch_images['images'].to(device)
 
             optimizer.zero_grad()
 
