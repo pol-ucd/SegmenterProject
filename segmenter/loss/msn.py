@@ -3,43 +3,89 @@ from torch import nn as nn
 from torch.nn import functional as F
 
 
-def msn_loss(online_preds, target_protos, temperature=0.1):
-    """
-    Calculates the Mixed Siamese Network (MSN) loss.
-    - online_preds: Predictions from the online network for MASKED patches.
-    - target_protos: Representations from the target network for ALL patches.
-    - temperature: Controls the sharpness of the target distribution.
-    """
-    # Normalize the prototypes and predictions
-    online_preds = F.normalize(online_preds, dim=1)
-    target_protos = F.normalize(target_protos, dim=1)
-
-    # Calculate similarity scores between each masked patch and all target patches
-    # Shape: (num_masked_patches, num_target_patches)
-    similarity_matrix = torch.matmul(online_preds, target_protos.t())
-
-    # Sharpen the target distribution and compute the loss
-    # The target is the softmax over similarities with the target prototypes
-    targets = F.softmax(similarity_matrix / temperature, dim=1)
-
-    # The prediction is the log-softmax over the same similarities
-    predictions = F.log_softmax(similarity_matrix, dim=1)
-
-    # Cross-entropy loss
-    loss = - (targets * predictions).sum(dim=1)
-    return loss.mean()
-
-
 class MSNLoss(nn.Module):
-    def __init__(self, margin=1.0, tau=0.1):
-        self.tau = tau
-        self.margin = margin
+    """
+    Implements the Mean-Shifted Network (MSN) objective, minimizing
+    KL divergence between online predictions (Q) and centered target assignments (P).
+    """
 
-    def __call__(self, online_preds, target_protos, temperature=0.1):
-        return msn_loss(online_preds, target_protos, temperature)
+    def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9):
+        super().__init__()
+        # 'temperature' controls the sharpness of the target distribution (P).
+        self.temperature = temperature
 
-    def forward(self, online_preds, target_protos, temperature=0.1):
-        return msn_loss(online_preds, target_protos, temperature)
+        # Center Momentum (m): Controls the speed of the EMA update.
+        # MSN often uses m close to 0 (e.g., 0.1), while MoCo/DINO use m close to 1.
+        self.center_momentum = center_momentum
+
+        # Initialize target_center as a persistent buffer, not a trainable parameter.
+        self.register_buffer("target_center", None)
+
+    @torch.no_grad()
+    def update_center(self, target_protos_current_batch: torch.Tensor):
+        """
+        Updates the target center using an Exponential Moving Average (EMA).
+        This method must be called once per iteration on the target network's outputs.
+        """
+        # Ensure target_protos are detached (they should be, but safety check) and normalized
+        target_protos = F.normalize(target_protos_current_batch.detach(), dim=1)
+
+        # Calculate the mean of the current batch's target prototypes
+        current_batch_center = target_protos.mean(dim=0, keepdim=True)
+
+        # Initialize the center if it's the first run
+        if self.target_center is None:
+            self.target_center = current_batch_center.clone()
+            return
+
+        # EMA Update: c_new = (m) * c_old + (1 - m) * c_batch_mean
+        new_center = self.target_center.clone() * self.center_momentum + \
+                     current_batch_center * (1.0 - self.center_momentum)
+
+        # Copy the updated value back to the registered buffer
+        self.target_center.copy_(new_center)
+
+    def forward(self, online_preds: torch.Tensor, target_protos: torch.Tensor) -> torch.Tensor:
+        """
+        Calculates the KL divergence between the online network's predictions (Q)
+        and the target network's assignments (P).
+
+        :param online_preds: Predictions from the online network for MASKED patches [N_masked, D].
+        :param target_protos: Representations from the target network for ALL patches [N_all, D].
+        :return: Scalar loss tensor (mean KL divergence).
+        """
+
+        # 1. Normalization
+        online_preds = F.normalize(online_preds, dim=1)
+        target_protos = F.normalize(target_protos, dim=1)
+
+        # 2. Mean-Shift / Centering (The critical MSN step)
+        # If center is not initialized, update_center should be called first,
+        # but we use a robust check here.
+        if self.target_center is None:
+            # If the center hasn't been initialized, use the current batch mean as a proxy
+            centered_target_protos = target_protos - target_protos.mean(dim=0, keepdim=True)
+        else:
+            # Subtract the stabilized moving average center from all target prototypes
+            centered_target_protos = target_protos - self.target_center
+
+        # 3. Similarity Matrix: Sim(Online_Masked, Centered_Target_All)
+        # Shape: (N_masked, N_all)
+        similarity_matrix = torch.matmul(online_preds, centered_target_protos.t())
+
+        # 4. Target Distribution (P) - Sharpened Softmax
+        # P = softmax(Sim / temperature). This is the 'teacher' signal.
+        targets = F.softmax(similarity_matrix / self.temperature, dim=1)
+
+        # 5. Prediction Distribution (log Q) - Log Softmax
+        # log Q = log(softmax(Sim)). This is the 'student' prediction.
+        predictions = F.log_softmax(similarity_matrix, dim=1)
+
+        # 6. KL Divergence / Cross-Entropy
+        # L = - sum(P * log Q) -> Minimizes KL(P || Q).
+        loss = - (targets * predictions).sum(dim=1)
+
+        return loss.mean()
 
 
 class SimSiamLoss(nn.Module):
@@ -81,77 +127,6 @@ class SimSiamLoss(nn.Module):
 
         return total_loss
 
-#
-# class InfoNCELoss(nn.Module):
-#     """
-#     SimCLR/MoCo-style InfoNCE Loss for contrastive learning.
-#     This simplifies the loss to focus on bringing the positive pair (Anchor vs Occluded) closer.
-#     """
-#
-#     def __init__(self, temperature=0.07):
-#         super().__init__()
-#         self.temperature = temperature
-#
-#     def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
-#         """
-#         Calculates the InfoNCE loss for a single positive pair (anchor, positive).
-#         The negative samples are implicitly all other samples in the batch.
-#         :param z_anchor: Anchor embeddings [B, D].
-#         :param z_positive: Positive embeddings [B, D].
-#         :return: Scalar loss tensor.
-#         """
-#         # Normalize embeddings
-#         z_anchor = F.normalize(z_anchor, dim=1)
-#         z_positive = F.normalize(z_positive, dim=1)
-#
-#         # Concatenate anchor and positive embeddings to form the main batch
-#         # [2B, D]
-#         features = torch.cat([z_anchor, z_positive], dim=0)
-#
-#         # Compute cosine similarity matrix: [2B, 2B]
-#         similarity_matrix = torch.matmul(features, features.T) / self.temperature
-#
-#         # Create mask for positive pairs: 1 for positive, 0 otherwise
-#         batch_size = z_anchor.shape[0]
-#         mask = torch.eye(2 * batch_size, dtype=torch.bool, device=features.device)
-#
-#         # The positive pairs are at (i, i+B) and (i+B, i)
-#         # 1. Anchor i to Positive i+B
-#         pos_mask_1 = torch.roll(torch.eye(batch_size, device=features.device), shifts=batch_size, dims=1)
-#         # 2. Positive i+B to Anchor i
-#         pos_mask_2 = torch.roll(torch.eye(batch_size, device=features.device), shifts=batch_size, dims=0)
-#
-#         # Combine into the full mask for the 2B x 2B matrix
-#         # [B, B] [B, B]
-#         # [B, B] [B, B]
-#         # We need the positive pair connections:
-#         # A_i -> P_i and P_i -> A_i
-#
-#         positive_pairs_mask = torch.zeros_like(similarity_matrix, dtype=torch.bool)
-#
-#         # Anchor to Positive (i, i+B)
-#         positive_pairs_mask[:batch_size, batch_size:] = torch.eye(batch_size, dtype=torch.bool, device=features.device)
-#         # Positive to Anchor (i+B, i)
-#         positive_pairs_mask[batch_size:, :batch_size] = torch.eye(batch_size, dtype=torch.bool, device=features.device)
-#
-#         # Exclude self-similarities (diagonal)
-#         similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
-#         positive_pairs_mask = positive_pairs_mask[~mask].view(positive_pairs_mask.shape[0], -1)
-#
-#         # Select the similarities for the positive pairs
-#         positives = similarity_matrix[positive_pairs_mask].view(2 * batch_size, -1)
-#
-#         # The numerator of the InfoNCE loss (similarity with positive)
-#         logits = positives
-#
-#         # All other samples (excluding self) are negatives
-#         labels = torch.zeros(logits.shape[0], dtype=torch.long, device=features.device)
-#
-#         # InfoNCE Loss: -log( exp(pos) / sum(exp(all)) )
-#         # Using CrossEntropyLoss with logits and labels of 0 is equivalent to this:
-#         loss = F.cross_entropy(logits, labels)
-#
-#         return loss
 
 
 class InfoNCELoss(nn.Module):
