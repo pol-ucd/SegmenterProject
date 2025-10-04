@@ -61,8 +61,6 @@ class MaskedTiledViewGenerator:
         # B, N, C, th, tw = masked_tiles.shape
         B, C, N, th, tw = masked_tiles.shape
         tiles_per_row = W // tw
-        print(B, N, C, th, tw)
-        print(B, tiles_per_row, -1, C, th, tw)
         tiles = masked_tiles.reshape(B, tiles_per_row, -1, C, th, tw)
         rows = [torch.cat([tiles[b, r] for r in range(tiles_per_row)], dim=2)
                 for b in range(B)]
@@ -74,7 +72,6 @@ class MaskedTiledViewGenerator:
         tiles = self.tile_image(image)  # (B, C, N, th, tw)
         masked_tiles, metadata = self.apply_masks(tiles)
         masked_tiles = masked_tiles.permute(0, 2, 1, 3, 4)  # (B, N, C, th, tw)
-        print("__call__: ", image.shape, masked_tiles.shape)
         masked_image = self.stitch_tiles(masked_tiles, H, W)
 
         if self.return_metadata:
@@ -123,6 +120,44 @@ class SurgicalMaskComposer:
         return masked, {'cx': cx, 'cy': cy, 'radius': radius}
 
 
+class SegFormerAdapter(nn.Module):
+    """
+    Calls a pretrained SegFormer encoder and returns a (B, C, H, W) feature map.
+    Adjust token->spatial conversion to match the specific SegFormer variant you use.
+    """
+    def __init__(self, pretrained_name, out_stride=256, target_resolution=None):
+        super().__init__()
+        # load backbone; use SegformerModel for encoder-only outputs
+        self.backbone = SegformerModel.from_pretrained(pretrained_name)
+        # If using SegformerForSemanticSegmentation you may access .encoder or .last_hidden_state similarly
+        self.target_resolution = target_resolution  # (H, W) or None; used to upsample features
+        self.out_stride = out_stride  # e.g., 4, 8, 16 — depends on the variant
+
+    def forward(self, x):
+        # x: (B, 3, H, W) in pixel space
+        # Many SegFormer variants expect pixel values normalized; ensure preprocessing matches pretrained model
+        outputs = self.backbone(pixel_values=x)  # returns BaseModelOutput or dict
+        # Typical key: last_hidden_state -> (B, seq_len, hidden_dim)
+        last_hidden = outputs.last_hidden_state  # shape (B, N, C)
+        B, N, C = last_hidden.shape
+
+        # Convert sequence tokens back to spatial layout:
+        # If SegFormer uses non-overlapping patches, seq_len = H_patch * W_patch.
+        # Compute patch grid size:
+        patch_h = patch_w = int(N ** 0.5)
+        if patch_h * patch_w != N:
+            # fall back to known stride logic: derive from input size and model stride, or raise informative error
+            # Here we assume square patch layout; adjust for your variant if different.
+            raise RuntimeError("Unexpected token layout: cannot reshape sequence length to square grid")
+
+        feat = last_hidden.permute(0, 2, 1).contiguous()    # (B, C, N)
+        feat = feat.view(B, C, patch_h, patch_w)            # (B, C, H_patch, W_patch)
+
+        # Optionally upsample to the requested resolution (H, W)
+        if self.target_resolution is not None:
+            feat = F.interpolate(feat, size=self.target_resolution, mode="bilinear", align_corners=False)
+
+        return feat  # (B, C, H_out, W_out)
 
 
 class MoCoSegFormer(nn.Module):
@@ -325,9 +360,13 @@ class MoCoSiameseNetwork(nn.Module):
 
         # Create online and target networks
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
-        self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
+        # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
+        self.online_encoder = SegFormerAdapter(pretrained_model, target_resolution=target_resolution)
+        # after adapter we have channels = backbone.config.hidden_size
+        encoder_output_dim = self.online_encoder.backbone.config.hidden_sizes[-1] if hasattr(self.online_encoder.backbone.config,
+                                                                               "hidden_sizes") else self.online_encoder.backbone.config.hidden_size
 
-        encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
+        # encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
 
         # Online Predictor Head (h)
         self.online_head = nn.Sequential(
