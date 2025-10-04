@@ -333,7 +333,7 @@ class MoCoSiameseNetwork(nn.Module):
         )
         self.encoder_q = nn.Sequential(self.online_encoder,
                                        self.online_head)
-        self.encoder_k = nn.Sequential(self.online_encoder.__class__(),
+        self.encoder_k = nn.Sequential(self.online_encoder.__class__(pretrained_model),
                                        self.online_head.__class__())
         self._init_momentum_encoder()
 
