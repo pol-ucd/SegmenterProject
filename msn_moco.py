@@ -86,21 +86,23 @@ def pretrain_step(model: MoCoSiameseNetwork,
             batch_anchor, batch_positive, batch_mask = [], [], []
 
             for image in batch_images['images']:
-                # Mask is now returned here
-                anchor, positive, mask = mask_generator.create_siamese_triple(image)
-                batch_anchor.append(anchor)
-                batch_positive.append(positive)
-                batch_mask.append(mask)
+                # # Mask is now returned here
+                # anchor, positive, mask = mask_generator.create_siamese_triple(image)
+                # batch_anchor.append(anchor)
+                # batch_positive.append(positive)
+                # batch_mask.append(mask)
 
             # x1 = Focal/Online View (Anchor), x2 = Global/Target View (Positive), x3 = Mask
-            x1 = torch.stack(batch_anchor).to(device)
-            x2 = torch.stack(batch_positive).to(device)
-            x3 = torch.stack(batch_mask).to(device)
+            # x1 = torch.stack(batch_anchor).to(device)
+            # x2 = torch.stack(batch_positive).to(device)
+            # x3 = torch.stack(batch_mask).to(device)
+            x = batch_images.to(device)
 
             optimizer.zero_grad()
 
             # Pass the mask to the forward method
-            prediction_p, target_z_detached = model(x1, x2, x3)
+            # prediction_p, target_z_detached = model(x1, x2, x3)
+            prediction_p, target_z_detached = model(x)
 
             # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
             loss = loss_fn(prediction_p, target_z_detached)

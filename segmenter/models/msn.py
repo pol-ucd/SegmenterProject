@@ -345,10 +345,10 @@ class MoCoSiameseNetwork(nn.Module):
                                                        self.tile_size,
                                                        return_metadata=True)
 
-        self.register_buffer("queue", torch.randn(12800,
-                                                  self.projection_dim))
-        self.queue = F.normalize(self.queue, dim=1)
-        self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
+        # self.register_buffer("queue", torch.randn(12800,
+        #                                           self.projection_dim))
+        # self.queue = F.normalize(self.queue, dim=1)
+        # self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
     def _init_momentum_encoder(self):
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
@@ -379,14 +379,15 @@ class MoCoSiameseNetwork(nn.Module):
             k = F.normalize(k, dim=1)
 
         # Compute contrastive loss
-        logits = torch.mm(q, self.queue.T) / self.temperature
-        labels = torch.arange(q.size(0), device=q.device)
-        loss = F.cross_entropy(logits, labels)
+        # logits = torch.mm(q, self.queue.T) / self.temperature
+        # labels = torch.arange(q.size(0), device=q.device)
+        # loss = F.cross_entropy(logits, labels)
 
         # Update queue
-        self._dequeue_and_enqueue(k)
+        # self._dequeue_and_enqueue(k)
 
-        return loss, {'meta_q': meta_q, 'meta_k': meta_k}
+        # return loss, {'meta_q': meta_q, 'meta_k': meta_k}
+        return q, k
 
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys):
