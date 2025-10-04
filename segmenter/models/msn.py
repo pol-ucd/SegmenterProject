@@ -226,15 +226,18 @@ class MoCoSiameseNetwork(nn.Module):
         try:
             # 1. Try standard 'hidden_size' (common for final layer)
             encoder_output_dim = self.online_encoder.config.hidden_size
+            print("Step 1", encoder_output_dim)
         except AttributeError:
             # 2. Try 'hidden_sizes[-1]' (common for multi-stage models)
             try:
                 encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
+                print("Step 2", encoder_output_dim)
             except (AttributeError, IndexError):
                 # 3. Fallback: Based on the previous runtime error, the actual output dimension D is 16.
                 # This needs to be manually set if the config properties are not available.
                 print(f"Warning: Could not auto-detect encoder dimension. Falling back to D=16 based on runtime error.")
                 encoder_output_dim = 16
+                print("Step 3", encoder_output_dim)
 
         # --- Check for successful dimension acquisition ---
         if encoder_output_dim is None or encoder_output_dim <= 0:
