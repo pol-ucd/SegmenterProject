@@ -23,22 +23,22 @@ from segmenter.utils.msn import load_data
 # Configuration
 config = Config("config/msn_common.json")
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-learning_rate=1e-04
+learning_rate = 1e-04
 BATCH_SIZE = 12
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
-IMAGE_SIZE=(512, 512)
+IMAGE_SIZE = (512, 512)
 
 WARMUP_EPOCHS = 5
 TOTAL_EPOCHS = 100
-STEPS_PER_EPOCH = 33000//BATCH_SIZE # Example: 33,000 images / 64 batch size = ~516 steps
+STEPS_PER_EPOCH = 33000 // BATCH_SIZE  # Example: 33,000 images / 64 batch size = ~516 steps
 WARMUP_STEPS = WARMUP_EPOCHS * STEPS_PER_EPOCH
 TOTAL_STEPS = TOTAL_EPOCHS * STEPS_PER_EPOCH
 
-
-prefix='msn_moco'
+prefix = 'msn_moco'
 
 
 def get_linear_warmup_lambda(warmup_steps: int, total_steps: int) -> Callable[[int], float]:
@@ -61,8 +61,7 @@ def get_linear_warmup_lambda(warmup_steps: int, total_steps: int) -> Callable[[i
     return lr_lambda
 
 
-
-def pretrain_step(model:MoCoSiameseNetwork,
+def pretrain_step(model: MoCoSiameseNetwork,
                   dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer,
                   loss_fn: nn.Module,
@@ -87,7 +86,6 @@ def pretrain_step(model:MoCoSiameseNetwork,
             batch_anchor, batch_positive, batch_mask = [], [], []
 
             for image in batch_images['images']:
-
                 # Mask is now returned here
                 anchor, positive, mask = mask_generator.create_siamese_triple(image)
                 batch_anchor.append(anchor)
@@ -245,8 +243,6 @@ def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     logger.info(f"Validation Dice Score (Foreground): {avg_dice:.4f}")
 
 
-
-
 def main():
     logger = logging.getLogger()
     logger.info(f"Starting pretraining run {prefix.upper()}")
@@ -262,7 +258,7 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = MoCoSiameseNetwork(model_name='nvidia/mit-b0', momentum=0.996).to(device)
+    siamese_model = MoCoSiameseNetwork(model_name=backbone_model, momentum=0.996).to(device)
 
     pretrain_loss_fn = MSNLoss(temperature=0.2, center_momentum=0.999)
 
@@ -287,7 +283,7 @@ def main():
     logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
 
     # Configure the standard SegFormer for the segmentation task
-    segformer_config = SegformerConfig.from_pretrained('nvidia/segformer-b0', num_labels=NUM_CLASSES)
+    segformer_config = SegformerConfig.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512", num_labels=NUM_CLASSES)
 
     # Instantiate the supervised model
     supervised_model = SupervisedSegFormer(segformer_config).to(device)

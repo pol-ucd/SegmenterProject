@@ -21,6 +21,8 @@ from segmenter.utils.msn import load_data
 # Configuration
 config = Config("config/msn_common.json")
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
+
 learning_rate=1e-04
 BATCH_SIZE = 12
 NUM_WORKERS = 4
@@ -213,7 +215,7 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = SimSiamSegFormer(model_name='nvidia/mit-b0').to(device)
+    siamese_model = SimSiamSegFormer(model_name=backbone_model).to(device)
     pretrain_loss_fn = SimSiamLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
@@ -237,7 +239,7 @@ def main():
     logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
 
     # Configure the standard SegFormer for the segmentation task
-    segformer_config = SegformerConfig.from_pretrained('nvidia/segformer-b0', num_labels=NUM_CLASSES)
+    segformer_config = SegformerConfig.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512", num_labels=NUM_CLASSES)
 
     # Instantiate the supervised model
     supervised_model = SupervisedSegFormer(segformer_config).to(device)
