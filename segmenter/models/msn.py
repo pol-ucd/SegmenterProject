@@ -360,7 +360,7 @@ class MoCoSiameseNetwork(nn.Module):
         # Create online and target networks
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
-        self.online_encoder = SegFormerAdapter(pretrained_model, target_resolution=target_size)
+        self.online_encoder = SegFormerAdapter(pretrained_model)
         # after adapter we have channels = backbone.config.hidden_size
         encoder_output_dim = self.online_encoder.backbone.config.hidden_sizes[-1] if hasattr(self.online_encoder.backbone.config,
                                                                                "hidden_sizes") else self.online_encoder.backbone.config.hidden_size
