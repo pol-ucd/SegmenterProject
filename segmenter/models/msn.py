@@ -128,18 +128,18 @@ class SegFormerAdapter(nn.Module):
     def __init__(self, pretrained_name):
         super().__init__()
         if pretrained_name is not None:
-            self.config = SegformerConfig.from_pretrained(pretrained_name)
+            config = SegformerConfig.from_pretrained(pretrained_name)
         else:
-            self.config = SegformerConfig()
+            config = SegformerConfig()
 
-        if self.pretrained_model is not None:
+        if pretrained_name is not None:
             self.base_model = SegformerForSemanticSegmentation.from_pretrained(
                 pretrained_name,
-                config=self.config,
+                config=config,
                 ignore_mismatched_sizes=True
             )
         else:
-            self.base_model = SegformerForSemanticSegmentation(config=self.config)
+            self.base_model = SegformerForSemanticSegmentation(config=config)
 
 
     def forward(self, x):
