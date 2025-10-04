@@ -344,7 +344,7 @@ class MoCoSiameseNetwork(nn.Module):
             online_pooled_features_list.append(online_pooled_features)
 
         online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
-        print(online_pooled_features.shape)
+        print(online_pooled_features.shape, visible_patches.shape)
 
         # Apply the predictor head to get the final prediction P
         prediction_p = self.online_head(online_pooled_features)
