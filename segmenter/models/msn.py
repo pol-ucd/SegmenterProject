@@ -346,7 +346,7 @@ class MoCoSiameseNetwork(nn.Module):
                                                        return_metadata=True)
 
         self.register_buffer("queue", torch.randn(12800,
-                                                  self.online_head.projection_dim))
+                                                  self.projection_dim))
         self.queue = F.normalize(self.queue, dim=1)
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
