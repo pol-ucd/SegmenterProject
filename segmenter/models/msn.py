@@ -275,13 +275,13 @@ class MoCoSiameseNetwork(nn.Module):
             # Pool over the sequence dimension (dim=1) and reshape to [B, D]
             return features.mean(dim=1).reshape(features.shape[0], -1).squeeze(-1)
 
-            # --- Online Path (Focal View / MASKED) ---
-
+        # --- Online Path (Focal View / MASKED) ---
         online_output = self.online_encoder(focal_view.squeeze(1))
         online_features = online_output.last_hidden_state  # [B, S, D]
 
         S, D = online_features.shape[1], online_features.shape[2]
         h_feat = w_feat = int(torch.sqrt(torch.tensor(S).float()).item())
+        print(S.item(), D.item(), h_feat, w_feat)
 
         # 1. Downsample the input mask [B, 1, H, W] to feature resolution [B, 1, h_feat, w_feat]
         downsampled_mask = F.interpolate(
@@ -290,8 +290,7 @@ class MoCoSiameseNetwork(nn.Module):
             mode='nearest'
         )  # [B, 1, h_feat, w_feat]
 
-        # Create the boolean index: True for UNMASKED (visible) patches
-        # FIX: Use flatten(1) to get shape [B, S], necessary for indexing.
+        # Create the boolean index: True for UNMASKED (visible) patches.
         patch_visibility_mask = (1.0 - downsampled_mask).flatten(1).bool()  # [B, S]
 
         # 3. Apply the mask and pool: For each sample, select only the visible patches
@@ -299,7 +298,7 @@ class MoCoSiameseNetwork(nn.Module):
         for i in range(B):
             # Select the D-dim feature vectors where the patch is visible
             # Indexing [S, D] with a 1D boolean mask [S] is the correct way to select rows.
-            print(online_features[i].shape, downsampled_mask.shape, patch_visibility_mask[i].size)
+            print(online_features[i].shape, downsampled_mask.shape, patch_visibility_mask[i].shape)
             visible_patches = online_features[i][patch_visibility_mask[i]]  # [S_visible, D]
 
             # Pool over the visible patches only (average over S_visible)
