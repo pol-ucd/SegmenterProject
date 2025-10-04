@@ -299,7 +299,7 @@ class MoCoSiameseNetwork(nn.Module):
         for i in range(B):
             # Select the D-dim feature vectors where the patch is visible
             # Indexing [S, D] with a 1D boolean mask [S] is the correct way to select rows.
-            print(online_features[i].shape, patch_visibility_mask[i], downsampled_mask)
+            print(online_features[i].shape, downsampled_mask.shape, patch_visibility_mask[i].size)
             visible_patches = online_features[i][patch_visibility_mask[i]]  # [S_visible, D]
 
             # Pool over the visible patches only (average over S_visible)
