@@ -139,6 +139,7 @@ class SegFormerAdapter(nn.Module):
         outputs = self.backbone(pixel_values=x)  # returns BaseModelOutput or dict
         # Typical key: last_hidden_state -> (B, seq_len, hidden_dim)
         last_hidden = outputs.last_hidden_state  # shape (B, N, C)
+        print(last_hidden.shape)
         B, N, C = last_hidden.shape
 
         # Convert sequence tokens back to spatial layout:
