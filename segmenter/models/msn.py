@@ -60,7 +60,9 @@ class MaskedTiledViewGenerator:
     def stitch_tiles(self, masked_tiles, H, W):
         B, N, C, th, tw = masked_tiles.shape
         tiles_per_row = W // tw
-        tiles = masked_tiles.view(B, tiles_per_row, -1, C, th, tw)
+        print(B, N, C, th, tw)
+        print(B, tiles_per_row, -1, C, th, tw)
+        tiles = masked_tiles.reshape(B, tiles_per_row, -1, C, th, tw)
         rows = [torch.cat([tiles[b, r] for r in range(tiles_per_row)], dim=2)
                 for b in range(B)]
         stitched = torch.cat(rows, dim=2)  # (B, C, H, W)
