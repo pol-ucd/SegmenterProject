@@ -232,6 +232,7 @@ class MoCoSiameseNetwork(nn.Module):
             try:
                 encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
                 print("Step 2", encoder_output_dim)
+                print(self.online_encoder.config.hidden_sizes)
             except (AttributeError, IndexError):
                 # 3. Fallback: Based on the previous runtime error, the actual output dimension D is 16.
                 # This needs to be manually set if the config properties are not available.
