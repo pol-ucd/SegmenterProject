@@ -350,7 +350,7 @@ class MoCoSiameseNetwork(nn.Module):
     now including the logic to mask online features.
     """
 
-    def __init__(self, pretrained_model, projection_dim=128,
+    def __init__(self, pretrained_model, projection_dim=128, target_size=(512,512),
                  tile_size=(64, 64), temperature=0.2, momentum=0.999):
         super().__init__()
         self.momentum = momentum
@@ -361,7 +361,7 @@ class MoCoSiameseNetwork(nn.Module):
         # Create online and target networks
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
-        self.online_encoder = SegFormerAdapter(pretrained_model, target_resolution=target_resolution)
+        self.online_encoder = SegFormerAdapter(pretrained_model, target_resolution=target_size)
         # after adapter we have channels = backbone.config.hidden_size
         encoder_output_dim = self.online_encoder.backbone.config.hidden_sizes[-1] if hasattr(self.online_encoder.backbone.config,
                                                                                "hidden_sizes") else self.online_encoder.backbone.config.hidden_size
