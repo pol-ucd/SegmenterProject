@@ -157,7 +157,7 @@ class SegFormerAdapter(nn.Module):
         logits = F.interpolate(output,
                                size=x.shape[2:],
                                mode='bilinear',
-                               align_corners=False)
+                               align_corners=False).permute(0, 2, 3, 1).contiguous()
 
         # return logits
         print(f"SegFormerAdapter logits shape: {logits.shape} / x: {x.shape}")
