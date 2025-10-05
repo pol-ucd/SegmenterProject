@@ -149,6 +149,7 @@ class InfoNCELoss(nn.Module):
         """
         B, C, H, W = z_anchor.shape
         print(f"B: {B}, C: {C}, H: {H}, W: {W}")
+        print(f"z_positive shape: {z_positive.shape}")
 
         # Normalize embeddings (Crucial for cosine similarity)
         z_anchor = F.normalize(z_anchor, dim=1)
