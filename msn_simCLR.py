@@ -53,23 +53,10 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
             # Dataloader yields raw images [B, C, H, W] as the 'images' value
             x = batch_images['images'].to(device)
 
-            # Create Siamese Pairs dynamically for the batch
-            batch_anchor = []
-            batch_positive = []
-
-            for image in batch_images['images']:
-                anchor, positive = mask_generator.create_siamese_pair(image)
-                batch_anchor.append(anchor)
-                batch_positive.append(positive)
-
-
-            x_anchor = torch.stack(batch_anchor).to(device)
-            x_positive = torch.stack(batch_positive).to(device)
-
             optimizer.zero_grad()
 
             # Forward pass through the Siamese network
-            z_anchor, z_positive = model(x_anchor, x_positive)
+            z_anchor, z_positive = model(x)
 
             # Calculate InfoNCE Loss
             loss = loss_fn(z_anchor, z_positive)
