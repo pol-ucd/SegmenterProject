@@ -130,7 +130,6 @@ class SimSiamLoss(nn.Module):
         return total_loss
 
 
-
 class InfoNCELoss(nn.Module):
     """
     SimCLR-style InfoNCE Loss for contrastive learning.
@@ -143,74 +142,37 @@ class InfoNCELoss(nn.Module):
 
     def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
         """
-        :param z_anchor: Anchor embeddings [B, D].
-        :param z_positive: Positive embeddings [B, D].
+        :param z_anchor: Anchor embeddings [B, C(lasses), H, W].
+        :param z_positive: Positive embeddings [B, C(lasses), H, W].
         :return: Scalar InfoNCE loss.
         """
         B, C, H, W = z_anchor.shape
-        print(f"B: {B}, C: {C}, H: {H}, W: {W}")
-        print(f"z_positive shape: {z_positive.shape}")
 
         # Normalize embeddings (Crucial for cosine similarity)
         z_anchor = F.normalize(z_anchor, dim=1)
         z_positive = F.normalize(z_positive, dim=1)
 
-        # Concatenate both views to form the full batch of features: [2B, D]
-        features = torch.cat([z_anchor, z_positive], dim=0)
-        print(f"features: {features.shape}")
-        # 2. Compute full cosine similarity matrix: [2B, 2B]
-        similarity_matrix = torch.matmul(features, features.transpose(-1, -2)) / self.temperature
+        similarity_matrix = torch.einsum('i c h w, j c h w -> i j c h w',
+                                         z_anchor, z_positive) / self.temperature
 
-        # Create a mask to remove self-similarities (diagonal)
-        # This mask will be used to filter the logits matrix.
-        mask_diag = torch.eye(2 * B, dtype=torch.bool, device=features.device)
-
-        # Separate positive and negative logits
-
-        # Positives (Numerator): Sim(A_i, P_i) and Sim(P_i, A_i)
-        # These are at (i, i+B) and (i+B, i) in the similarity matrix.
-        print("A: ", torch.diagonal(similarity_matrix[:B, B:],dim1=-2, dim2=-1).shape)
-        print("B: ", torch.diagonal(similarity_matrix[B:, :B],dim1=-2, dim2=-1).shape)
-        positives = torch.cat([
-            torch.diagonal(similarity_matrix[:B, B:],dim1=-2, dim2=-1),  # A_i -> P_i
-            torch.diagonal(similarity_matrix[B:, :B],dim1=-2, dim2=-1)  # P_i -> A_i
-        ], dim=0).view(2 * B, 1)
-
-        # Negatives (Denominator): All other similarities, excluding self-similarity.
-        # This matrix still contains the positive similarity, but we will put it in front.
-        # First, remove the diagonal (self-similarity)
-        # negatives_and_positives = similarity_matrix[~mask_diag].view(2 * B, -1)
-
-        # Now, `negatives_and_positives` is a [2B, 2B-1] matrix.
-        # For each anchor, one column is the positive similarity and the rest are negatives.
-
-        # 5. Construct the final logits matrix: [Positives | Negatives]
-        # We concatenate the separated `positives` with the filtered matrix,
-        # then remove the duplicate positive similarity from the second part.
-
-        # The indices of the positive pair in the flattened matrix (2B, 2B-1) are complex.
-        # We must create a mask to remove the positive pair from the `negatives_and_positives` matrix.
-
-        # A robust way is to use the full positive mask to select what to KEEP.
-
-        # Mask for the positive pair connections in the (2B, 2B) matrix:
-        mask_pos = torch.zeros_like(similarity_matrix, dtype=torch.bool)
-        mask_pos[:B, B:] = torch.eye(B, dtype=torch.bool, device=features.device)
-        mask_pos[B:, :B] = torch.eye(B, dtype=torch.bool, device=features.device)
-
-        # Combine masks: remove both the diagonal AND the positive connections
-        mask_neg = ~(mask_diag | mask_pos)
-
-        # Select the true negatives from the full similarity matrix: [2B, 2B-2]
-        negatives = similarity_matrix[mask_neg].view(2 * B, -1)
-
-        # Final logits matrix: [Positive Logit | All Negative Logits] -> [2B, 2B-1]
-        logits = torch.cat([positives, negatives], dim=1)
+        logits = similarity_matrix.reshape(B*B, -1)
 
         # The label for the positive pair is always 0 (it is in the 0th column)
-        labels = torch.zeros(2 * B, dtype=torch.long, device=features.device)
+        labels = torch.eye(B, dtype=torch.long, device=logits.device).reshape(B*B)
 
-        # 6. Apply Cross Entropy Loss (equivalent to InfoNCE)
+        # Apply Cross Entropy Loss (equivalent to InfoNCE)
         loss = F.cross_entropy(logits, labels)
 
         return loss
+
+
+if __name__ == '__main__':
+    temperature = 0.2
+    B, C, H, W = 4, 11, 512, 512
+
+    z_anchor = torch.randint(-255, 255, (B, C, H, W)).float() / 255
+    z_positive = torch.randint(-255, 255, (B, C, H, W)).float() / 255
+
+
+    loss = InfoNCELoss(temperature=temperature)(z_anchor, z_positive)
+    print(loss)
