@@ -382,7 +382,7 @@ class MoCoSiameseNetwork(nn.Module):
         # Online Predictor Head (h)
         self.online_head = nn.Sequential(
             nn.Linear(encoder_output_dim, encoder_output_dim // 4),
-            nn.BatchNorm1d(encoder_output_dim // 4),
+            nn.BatchNorm2d(encoder_output_dim // 4),
             nn.ReLU(),
             nn.Linear(encoder_output_dim // 4, self.projection_dim)
         )
@@ -420,7 +420,7 @@ class MoCoSiameseNetwork(nn.Module):
         # Generate masked views
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(x)
-        print(">>>>> x_q, X_k: ", x_q.shape, x_k.shape)
+
         # Encode query
         q = self.encoder_q(x_q)  # (B, D)
         q = F.normalize(q, dim=1)
@@ -431,15 +431,6 @@ class MoCoSiameseNetwork(nn.Module):
             k = self.encoder_k(x_k)
             k = F.normalize(k, dim=1)
 
-        # Compute contrastive loss
-        # logits = torch.mm(q, self.queue.T) / self.temperature
-        # labels = torch.arange(q.size(0), device=q.device)
-        # loss = F.cross_entropy(logits, labels)
-
-        # Update queue
-        # self._dequeue_and_enqueue(k)
-
-        # return loss, {'meta_q': meta_q, 'meta_k': meta_k}
         return q, k
 
     # @torch.no_grad()
