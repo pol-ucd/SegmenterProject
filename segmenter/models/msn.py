@@ -23,6 +23,8 @@ from torch import nn as nn
 from torch.nn import functional as F
 from transformers import SegformerModel, SegformerForSemanticSegmentation, SegformerConfig
 
+from segmenter.models.base import MedianPool2d
+
 
 class MaskedTiledViewGenerator:
     def __init__(self, mask_composer,
@@ -130,8 +132,9 @@ class SegFormerAdapter(nn.Module):
     Adjust token->spatial conversion to match the specific SegFormer variant you use.
     """
 
-    def __init__(self, pretrained_name):
+    def __init__(self, pretrained_name:str=None, num_classes:int=2, k:int=3):
         super().__init__()
+        self.num_classes = num_classes
         if pretrained_name is not None:
             config = SegformerConfig.from_pretrained(pretrained_name)
         else:
@@ -146,6 +149,25 @@ class SegFormerAdapter(nn.Module):
         else:
             self.base_model = SegformerForSemanticSegmentation(config=config)
 
+        # Get the number of channels from the previous layer to properly
+        # define the input to our new classifier.
+        classifier_in_channels = self.base_model.decode_head.linear_fuse.out_channels
+
+        # Replace the original classifier with a custom Sequential module.
+        self.base_model.decode_head.classifier = nn.Sequential(
+            # First convolution layer to process the features.
+            nn.Conv2d(classifier_in_channels,
+                      classifier_in_channels//4,
+                      kernel_size=3, padding=1),
+            # Batch normalization for training stability.
+            nn.BatchNorm2d(classifier_in_channels//4),
+            # ReLU activation for non-linearity.
+            nn.ReLU(inplace=True),
+            # Final convolution to map features to the desired number of classes.
+            nn.Conv2d(classifier_in_channels//4, num_classes, kernel_size=3, padding=1)
+        )
+        self.median = MedianPool2d(kernel_size=k, padding=k // 2)
+
     def forward(self, x):
 
         # The base model's forward pass handles the entire encoder and decoder.
@@ -157,20 +179,12 @@ class SegFormerAdapter(nn.Module):
         logits = F.interpolate(output,
                                size=x.shape[2:],
                                mode='bilinear',
-                               align_corners=False).permute(0, 2, 3, 1).contiguous()
+                               align_corners=False)  #.permute(0, 2, 3, 1).contiguous()
 
-        # return logits
-        print(f"SegFormerAdapter logits shape: {logits.shape} / x: {x.shape}")
-        return logits
+        return self.median(logits)   # Smoothed logits
 
-    def encoder_output_dim(self):
-        # after adapter we have channels = backbone.config.hidden_size
-        _encoder_output_dim = (self.base_model.config.hidden_sizes[-1]
-                               if hasattr(self.base_model.config,
-                                          "hidden_sizes")
-                               else self.base_model.config.hidden_size)
-
-        return _encoder_output_dim
+    def output_dim(self):
+        return self.num_classes
 
 
 class MoCoSegFormer(nn.Module):
@@ -250,7 +264,7 @@ class SimSiamSegFormer(nn.Module):
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
         self.online_encoder = SegFormerAdapter(pretrained_model)
 
-        encoder_output_dim = self.online_encoder.encoder_output_dim()
+        encoder_output_dim = self.online_encoder.output_dim()
 
         # Projection Head (g) - Maps features to embedding space (z)
         self.projection_head = nn.Sequential(
@@ -325,7 +339,7 @@ class SimCLRSegFormer(nn.Module):
         self.online_encoder = SegFormerAdapter(pretrained_model)
 
         # For MiT-B0, the last feature dimension is typically 512
-        encoder_output_dim = self.online_encoder.encoder_output_dim()
+        encoder_output_dim = self.online_encoder.output_dim()
 
         # Projection Head (MLP) for Contrastive Learning
         # This maps the high-dimensional feature into a lower-dimensional embedding (z)
@@ -378,7 +392,7 @@ class MoCoSiameseNetwork(nn.Module):
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
         self.online_encoder = SegFormerAdapter(pretrained_model)
-        encoder_output_dim = self.online_encoder.encoder_output_dim()
+        encoder_output_dim = self.online_encoder.output_dim()
         print("encoder_output_dim", encoder_output_dim)
 
         # Online Predictor Head (h)
