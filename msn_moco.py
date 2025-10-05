@@ -115,7 +115,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
             # Update the Target Encoder weights using EMA, and,
             # Update the MSNLoss() Target Center (AFTER forward/backward)
             # This keeps the target center stable and prevents collapse.
-            model._update_target_network()
+            model.update_momentum_encoder()
             loss_fn.update_center(target_z_detached)
 
             total_loss += loss.item()

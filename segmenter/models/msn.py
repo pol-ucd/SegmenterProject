@@ -407,7 +407,7 @@ class MoCoSiameseNetwork(nn.Module):
             param_k.requires_grad = False
 
     @torch.no_grad()
-    def _update_momentum_encoder(self):
+    def update_momentum_encoder(self):
         """
         Performs the Exponential Moving Average (EMA) update for both the target encoder and target head.
         """
@@ -425,7 +425,7 @@ class MoCoSiameseNetwork(nn.Module):
 
         # Encode key (no grad)
         with torch.no_grad():
-            self._update_momentum_encoder()
+            self.update_momentum_encoder()
             k = self.encoder_k(x_k)
             k = F.normalize(k, dim=1)
 
