@@ -215,7 +215,7 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = SimSiamSegFormer(model_name=backbone_model).to(device)
+    siamese_model = SimSiamSegFormer(pretrained_model=backbone_model).to(device)
     pretrain_loss_fn = SimSiamLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)

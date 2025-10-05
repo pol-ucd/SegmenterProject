@@ -229,10 +229,11 @@ class SimSiamSegFormer(nn.Module):
     to stop the gradient flow.
     """
 
-    def __init__(self, model_name: str = 'nvidia/mit-b0', projection_dim: int = 128):
+    def __init__(self, pretrained_model: str = 'nvidia/mit-b0', projection_dim: int = 128):
         super().__init__()
         # Load the SegFormer Model (only the encoder/backbone) - Shared Encoder
-        self.online_encoder = SegformerModel.from_pretrained(model_name)
+        # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
+        self.online_encoder = SegFormerAdapter(pretrained_model)
 
         encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
 
@@ -303,9 +304,10 @@ class SimCLRSegFormer(nn.Module):
     There is no concept of a "momentum" encoder or separate updates.
     """
 
-    def __init__(self, model_name: str = 'nvidia/mit-b0', projection_dim: int = 128):
+    def __init__(self, pretrained_model: str = 'nvidia/mit-b0', projection_dim: int = 128):
         super().__init__()
-        self.online_encoder = SegformerModel.from_pretrained(model_name)
+        # self.online_encoder = SegformerModel.from_pretrained(model_name)
+        self.online_encoder = SegFormerAdapter(pretrained_model)
 
         # For MiT-B0, the last feature dimension is typically 512
         encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
