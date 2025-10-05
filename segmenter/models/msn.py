@@ -416,7 +416,7 @@ class MoCoSiameseNetwork(nn.Module):
         # Generate masked views
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(x)
-
+        print(">>>>> x_q, X_k: ", x_q.shape, x_k.shape)
         # Encode query
         q = self.encoder_q(x_q)  # (B, D)
         q = F.normalize(q, dim=1)
