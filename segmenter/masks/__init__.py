@@ -8,11 +8,12 @@ from .fluid import FluidMask
 from .fold import FoldMask
 from .instrument import InstrumentMask
 from .polygon import RandomShapeMask
-from .msn import MaskGenerator
+from .msn import MaskGenerator, apply_custom_augmentations
 
 __all__ = ['BaseMask',
            'RandomShapeMask',
            'InstrumentMask',
            'FluidMask',
            'FoldMask',
-           'MaskGenerator',]
+           'MaskGenerator',
+           'apply_custom_augmentations']

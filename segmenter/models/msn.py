@@ -24,6 +24,7 @@ from torch.nn import functional as F
 from transformers import SegformerModel, SegformerForSemanticSegmentation, SegformerConfig
 
 from segmenter.models.base import MedianPool2d
+from segmenter.masks import apply_custom_augmentations
 
 
 class MaskedTiledViewGenerator:
@@ -338,38 +339,41 @@ class SimCLRSegFormer(nn.Module):
         # self.online_encoder = SegformerModel.from_pretrained(model_name)
         self.online_encoder = SegFormerAdapter(pretrained_model)
 
-        # For MiT-B0, the last feature dimension is typically 512
-        encoder_output_dim = self.online_encoder.output_dim()
+        self.mask_composer = SurgicalMaskComposer()
+        self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
+                                                       self.tile_size,
+                                                       return_metadata=True)
 
-        # Projection Head (MLP) for Contrastive Learning
-        # This maps the high-dimensional feature into a lower-dimensional embedding (z)
-        self.projection_head = nn.Sequential(
-            nn.Linear(encoder_output_dim, encoder_output_dim),
-            nn.ReLU(),
-            nn.Linear(encoder_output_dim, projection_dim)
-        )
+    def _siamese_pair(self, batch):
+        # Create Siamese Pairs dynamically for the batch
+        batch_anchor = []
+        batch_positive = []
 
-    def forward(self, x_anchor: torch.Tensor, x_positive: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        for image in batch:
+            # Apply baseline augmentations to the raw image BEFORE masking
+            augmented = apply_custom_augmentations(image.clone())
+            # Anchor (View 1) is the fully augmented, but unmasked image.
+            batch_anchor.append(augmented)
+        x_anchor = torch.stack(batch_anchor)
+
+        # anchor, positive = mask_generator.create_siamese_pair(image)
+        x_positive_mask, meta_positive = self.view_generator(x_anchor)
+
+        x_positive = x_anchor*(1 - x_positive_mask)
+        return x_anchor, x_positive
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Processes anchor and positive pairs through the shared encoder and head.
         :return: (Anchor Embeddings, Positive Embeddings)
         """
+        x_anchor, x_positive = self._siamese_pair(x)
         # Anchor Stream
         # [B, H*W, D] -> We need to pool or average it to [B, D]
-        anchor_features = self.online_encoder(x_anchor.squeeze()).last_hidden_state
-
-        # Global Average Pooling across the spatial dimension (H*W)
-        # [B, H*W, D] -> [B, D]
-        z_anchor_pooled = anchor_features.mean(dim=1).reshape(anchor_features.shape[0], -1)
+        z_anchor = self.online_encoder(x_anchor)
 
         # Positive Stream
-        positive_features = self.online_encoder(x_positive.squeeze()).last_hidden_state
-        # z_positive_pooled = positive_features.mean(dim=1)
-        z_positive_pooled = positive_features.mean(dim=1).reshape(positive_features.shape[0], -1)
-
-        # Projection Head
-        z_anchor = self.projection_head(z_anchor_pooled)
-        z_positive = self.projection_head(z_positive_pooled)
+        z_positive = self.online_encoder(x_positive)
 
         return z_anchor, z_positive
 

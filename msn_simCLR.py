@@ -50,7 +50,9 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
     best_model = None
     for epoch in range(num_epochs):
         for batch_images in tqdm(dataloader):
-            # Assuming dataloader yields raw images [B, C, H, W]
+            # Dataloader yields raw images [B, C, H, W] as the 'images' value
+            x = batch_images['images'].to(device)
+
             # Create Siamese Pairs dynamically for the batch
             batch_anchor = []
             batch_positive = []
