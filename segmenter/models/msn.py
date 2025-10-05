@@ -160,6 +160,7 @@ class SegFormerAdapter(nn.Module):
                                align_corners=False)
 
         # return logits
+        print(f"SegFormerAdapter logits shape: {logits.shape}")
         return logits
 
     def encoder_output_dim(self):
@@ -378,6 +379,7 @@ class MoCoSiameseNetwork(nn.Module):
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
         self.online_encoder = SegFormerAdapter(pretrained_model)
         encoder_output_dim = self.online_encoder.encoder_output_dim()
+        print("encoder_output_dim", encoder_output_dim)
 
         # Online Predictor Head (h)
         self.online_head = nn.Sequential(
