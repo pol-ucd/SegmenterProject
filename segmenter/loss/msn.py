@@ -71,8 +71,9 @@ class MSNLoss(nn.Module):
 
         # Similarity Matrix: Sim(Online_Masked, Centered_Target_All)
         # Shape: (N_masked, N_all)
-        print("MSNLoss: ", online_preds.shape, target_protos.shape, centered_target_protos.shape)
-        similarity_matrix = torch.matmul(online_preds, centered_target_protos.t())
+
+        similarity_matrix = torch.matmul(online_preds,
+                                         centered_target_protos.transpose(-1, -2))
 
         # 4. Target Distribution (P) - Sharpened Softmax
         # P = softmax(Sim / temperature). This is the 'teacher' signal.
