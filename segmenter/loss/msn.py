@@ -157,15 +157,15 @@ class InfoNCELoss(nn.Module):
 
         # Concatenate both views to form the full batch of features: [2B, D]
         features = torch.cat([z_anchor, z_positive], dim=0)
-
+        print(f"features: {features.shape}")
         # 2. Compute full cosine similarity matrix: [2B, 2B]
         similarity_matrix = torch.matmul(features, features.transpose(-1, -2)) / self.temperature
 
-        # 3. Create a mask to remove self-similarities (diagonal)
+        # Create a mask to remove self-similarities (diagonal)
         # This mask will be used to filter the logits matrix.
         mask_diag = torch.eye(2 * B, dtype=torch.bool, device=features.device)
 
-        # 4. Separate positive and negative logits
+        # Separate positive and negative logits
 
         # Positives (Numerator): Sim(A_i, P_i) and Sim(P_i, A_i)
         # These are at (i, i+B) and (i+B, i) in the similarity matrix.
