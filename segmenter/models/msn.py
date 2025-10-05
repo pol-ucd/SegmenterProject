@@ -158,6 +158,15 @@ class SegFormerAdapter(nn.Module):
         # return logits
         return logits
 
+    def encoder_output_dim(self):
+        # after adapter we have channels = backbone.config.hidden_size
+        _encoder_output_dim = (self.base_model.config.hidden_sizes[-1]
+                               if hasattr(self.base_model.config,
+                                          "hidden_sizes")
+                               else self.base_model.config.hidden_size)
+
+        return _encoder_output_dim
+
 
 class MoCoSegFormer(nn.Module):
     """
@@ -235,7 +244,7 @@ class SimSiamSegFormer(nn.Module):
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
         self.online_encoder = SegFormerAdapter(pretrained_model)
 
-        encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
+        encoder_output_dim = self.online_encoder.encoder_output_dim()
 
         # Projection Head (g) - Maps features to embedding space (z)
         self.projection_head = nn.Sequential(
@@ -310,7 +319,7 @@ class SimCLRSegFormer(nn.Module):
         self.online_encoder = SegFormerAdapter(pretrained_model)
 
         # For MiT-B0, the last feature dimension is typically 512
-        encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
+        encoder_output_dim = self.online_encoder.encoder_output_dim()
 
         # Projection Head (MLP) for Contrastive Learning
         # This maps the high-dimensional feature into a lower-dimensional embedding (z)
@@ -363,11 +372,7 @@ class MoCoSiameseNetwork(nn.Module):
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
         self.online_encoder = SegFormerAdapter(pretrained_model)
-        # after adapter we have channels = backbone.config.hidden_size
-        encoder_output_dim = self.online_encoder.base_model.config.hidden_sizes[-1] if hasattr(self.online_encoder.base_model.config,
-                                                                               "hidden_sizes") else self.online_encoder.base_model.config.hidden_size
-
-        # encoder_output_dim = self.online_encoder.config.hidden_sizes[-1]
+        encoder_output_dim = self.online_encoder.encoder_output_dim()
 
         # Online Predictor Head (h)
         self.online_head = nn.Sequential(
@@ -433,105 +438,9 @@ class MoCoSiameseNetwork(nn.Module):
         # return loss, {'meta_q': meta_q, 'meta_k': meta_k}
         return q, k
 
-    @torch.no_grad()
-    def _dequeue_and_enqueue(self, keys):
-        batch_size = keys.shape[0]
-        ptr = int(self.queue_ptr)
-        self.queue[ptr:ptr + batch_size] = keys
-        self.queue_ptr[0] = (ptr + batch_size) % self.queue.shape[0]
-
-    # def forward(self, online_view: torch.Tensor, target_view: torch.Tensor, mask: torch.Tensor):
-    #     """
-    #     Processes focal_view (online/masked) and global_view (target/unmasked).
-    #
-    #     :param online_view: The anchor/online view [B, C, H, W].
-    #     :param target_view: The positive/target view [B, C, H, W].
-    #     :param mask: The synthetic binary mask [B, 1, H, W]. (1=occlusion area)
-    #     :return: (P, Z') prediction and detached target embedding.
-    #     """
-    #     B, C, H, W = online_view.shape
-    #
-    #     # --- Online Path (Focal View / MASKED) ---
-    #     # NOTE: SegFormer expects the input to be named 'pixel_values'
-    #     online_output = self.online_encoder(pixel_values=online_view.squeeze(1))
-    #     online_features = online_output.last_hidden_state  # [B, S, D]
-    #
-    #     S, D = online_features.shape[1], online_features.shape[2]
-    #
-    #     # --- FIX 1: Robustly calculate spatial dimensions of the feature grid ---
-    #     # Ensure torch.round() is applied to a Tensor, not a float.
-    #     s_tensor = torch.tensor(S, dtype=torch.float32, device=online_features.device)
-    #     h_feat = int(torch.round(torch.sqrt(s_tensor)).item())
-    #     w_feat = h_feat  # Assume square grid for interpolation
-    #
-    #     # 1. Downsample the input mask [B, 1, H, W] to feature resolution [B, 1, h_feat, w_feat]
-    #     downsampled_mask = F.interpolate(
-    #         mask.float(),
-    #         size=(h_feat, w_feat),
-    #         mode='nearest'
-    #     )  # [B, 1, h_feat, w_feat]
-    #
-    #     # Create the boolean index: True for UNMASKED (visible) patches.
-    #     patch_visibility_mask_flat = (1.0 - downsampled_mask).flatten(1).bool()  # [B, h_feat*w_feat]
-    #
-    #     # 3. Apply the mask and pool: For each sample, select only the visible patches
-    #     online_pooled_features_list = []
-    #     for i in range(B):
-    #
-    #         # --- FIX 2: Ensure mask length exactly matches feature sequence length S ---
-    #         mask_i = patch_visibility_mask_flat[i]
-    #         mask_len = mask_i.shape[0]
-    #
-    #         if mask_len != S:
-    #             # The spatial approximation h_feat x w_feat resulted in an array
-    #             # that is too long or too short. We force it to length S.
-    #             if mask_len > S:
-    #                 # Truncate (less likely, but safer)
-    #                 current_mask = mask_i[:S]
-    #             else:
-    #                 # Pad with False (not visible) if mask is too short (most likely scenario)
-    #                 padding = torch.zeros(S - mask_len, dtype=torch.bool, device=online_view.device)
-    #                 current_mask = torch.cat([mask_i, padding])
-    #         else:
-    #             current_mask = mask_i
-    #
-    #         # Indexing: online_features[i] is [S, D]. current_mask is [S]. This is the correct operation.
-    #         visible_patches = online_features[i][current_mask]  # [S_visible, D]
-    #
-    #         # Pool over the visible patches only (average over S_visible)
-    #         if visible_patches.numel() > 0:
-    #             online_pooled_features = visible_patches.mean(dim=0)  # [D]
-    #         else:
-    #             # Fallback: if completely masked, use the full feature mean
-    #             online_pooled_features = online_features[i].mean(dim=0)  # [D]
-    #
-    #         online_pooled_features_list.append(online_pooled_features)
-    #
-    #     online_pooled_features = torch.stack(online_pooled_features_list)  # [B, D]
-    #
-    #     # Apply the predictor head to get the final prediction P
-    #     prediction_p = self.online_head(online_pooled_features)
-    #
-    #     # --- Target Path (Global View / UNMASKED) ---
-    #     with torch.no_grad():
-    #         self.target_encoder.eval()
-    #
-    #         # Helper function logic moved inline for clarity
-    #         target_output = self.target_encoder(pixel_values=target_view.squeeze(1))
-    #         target_features = target_output.last_hidden_state  # [B, S, D]
-    #
-    #         # Pool over the sequence dimension (dim=1) for the target features
-    #         target_pooled_features = target_features.mean(dim=1).reshape(target_features.shape[0], -1)
-    #
-    #         # Apply the Target Head to project
-    #         target_z = self.target_head(target_pooled_features)
-    #
-    #         # The target embedding Z' must be detached
-    #         target_z_detached = target_z.detach()
-    #
-    #     # Returns P (prediction) and Z' (detached target embedding)
-    #     return prediction_p, target_z_detached
-    #
-    # def get_model_stride(self):
-    #     # Approximation for the effective stride of the final feature map
-    #     return self.online_encoder.config.patch_sizes[-1]
+    # @torch.no_grad()
+    # def _dequeue_and_enqueue(self, keys):
+    #     batch_size = keys.shape[0]
+    #     ptr = int(self.queue_ptr)
+    #     self.queue[ptr:ptr + batch_size] = keys
+    #     self.queue_ptr[0] = (ptr + batch_size) % self.queue.shape[0]
