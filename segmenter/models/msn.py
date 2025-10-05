@@ -62,11 +62,13 @@ class MaskedTiledViewGenerator:
     def stitch_tiles(self, masked_tiles, H, W):
         # B, N, C, th, tw = masked_tiles.shape
         B, C, N, th, tw = masked_tiles.shape
-        tiles_per_row = W // tw
-        tiles = masked_tiles.reshape(B, tiles_per_row, -1, C, th, tw)
-        rows = [torch.cat([tiles[b, r] for r in range(tiles_per_row)], dim=2)
-                for b in range(B)]
-        stitched = torch.cat(rows, dim=2)  # (B, C, H, W)
+        tiles_per_row, tiles_per_col = W // tw, H // th
+        tiles = masked_tiles.reshape(B, C, tiles_per_row, tiles_per_col, th, tw)
+
+        rows = [torch.cat([tiles[:,:, r, c, ...] for r in range(tiles_per_row)], dim=2)
+                for c in range(tiles_per_col)]
+                # for b in range(B)]
+        stitched = torch.cat(rows, dim=-1)  # (B, C, H, W)
         return stitched
 
     def __call__(self, image):
@@ -464,8 +466,17 @@ if __name__ == "__main__":
 
     test_images = torch.randn(b, c, h, w).clip(0,1)
 
-    tile = gen.tile_image(test_images)
-    print(f"Image shape: {test_images.shape}, Generated tile shape {tile.shape}")
+    tiles = gen.tile_image(test_images)
+    print(f"Image shape: {test_images.shape}, Generated tile shape {tiles.shape}")
+
+    masked_tiles, metadata = gen.apply_masks(tiles)
+
+    print(f"After apply_masks(), mask_tiles: {masked_tiles.shape}, metadata: {len(metadata)}")
+
+    masked_tiles = masked_tiles.permute(0, 2, 1, 3, 4)
+    masked_image = gen.stitch_tiles(masked_tiles, h, w)
+
+    print(f'After stitch_tiles(), masked_image.shape: {masked_image.shape}')
 
     mask = gen(test_images)
     print(mask[0].shape)    # The generated mask
