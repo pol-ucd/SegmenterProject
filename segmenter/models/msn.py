@@ -392,9 +392,6 @@ class MoCoSiameseNetwork(nn.Module):
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
         self.encoder_q = SegFormerAdapter(pretrained_model)
-        encoder_output_dim = self.online_encoder.output_dim()
-        print("encoder_output_dim", encoder_output_dim)
-
 
         self.encoder_k = deepcopy(self.encoder_q)
         self._init_momentum_encoder()
@@ -403,11 +400,6 @@ class MoCoSiameseNetwork(nn.Module):
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
                                                        self.tile_size,
                                                        return_metadata=True)
-
-        # self.register_buffer("queue", torch.randn(12800,
-        #                                           self.projection_dim))
-        # self.queue = F.normalize(self.queue, dim=1)
-        # self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
     def _init_momentum_encoder(self):
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
