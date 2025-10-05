@@ -147,9 +147,10 @@ class InfoNCELoss(nn.Module):
         :param z_positive: Positive embeddings [B, D].
         :return: Scalar InfoNCE loss.
         """
-        B = z_anchor.shape[0]
+        B, C, H, W = z_anchor.shape
+        print(f"B: {B}, C: {C}, H: {H}, W: {W}")
 
-        # 1. Normalize embeddings (Crucial for cosine similarity)
+        # Normalize embeddings (Crucial for cosine similarity)
         z_anchor = F.normalize(z_anchor, dim=1)
         z_positive = F.normalize(z_positive, dim=1)
 
