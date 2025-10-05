@@ -168,8 +168,8 @@ class InfoNCELoss(nn.Module):
         # Positives (Numerator): Sim(A_i, P_i) and Sim(P_i, A_i)
         # These are at (i, i+B) and (i+B, i) in the similarity matrix.
         positives = torch.cat([
-            similarity_matrix[:B, B:].diag(),  # A_i -> P_i
-            similarity_matrix[B:, :B].diag()  # P_i -> A_i
+            torch.diagonal(similarity_matrix[:B, B:],dim1=-2, dim2=-1),  # A_i -> P_i
+            torch.diagonal(similarity_matrix[B:, :B],dim1=-2, dim2=-1)  # P_i -> A_i
         ], dim=0).view(2 * B, 1)
 
         # Negatives (Denominator): All other similarities, excluding self-similarity.
