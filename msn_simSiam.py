@@ -232,39 +232,41 @@ def main():
         device
     )
 
+    logger.info("Completed Pre-training Phase (Siamese Network) ---")
+
     # ----------------------------------------------------
     # 2. FINE-TUNING PHASE
     # ----------------------------------------------------
 
-    logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
-
-    # Configure the standard SegFormer for the segmentation task
-    segformer_config = SegformerConfig.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512", num_labels=NUM_CLASSES)
-
-    # Instantiate the supervised model
-    supervised_model = SupervisedSegFormer(segformer_config).to(device)
-
-    # Load the pre-trained weights into the encoder
-    supervised_model.load_pretrain_weights(pretrain_weights)
-
-    # Use a small LR for fine-tuning to preserve pre-trained knowledge
-    finetune_optimizer = torch.optim.AdamW(supervised_model.parameters(), lr=5e-5)
-
-    # Perform a single epoch of fine-tuning for demonstration
-    finetune_step(
-        supervised_model,
-        finetune_dataloader,
-        finetune_optimizer,
-        device
-    )
-
-    # ----------------------------------------------------
-    # 3. VALIDATION PHASE
-    # ----------------------------------------------------
-
-    logger.info("Starting Validation Phase ---")
-
-    validate_step(supervised_model, validation_dataloader, device)
+    # logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
+    #
+    # # Configure the standard SegFormer for the segmentation task
+    # segformer_config = SegformerConfig.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512", num_labels=NUM_CLASSES)
+    #
+    # # Instantiate the supervised model
+    # supervised_model = SupervisedSegFormer(segformer_config).to(device)
+    #
+    # # Load the pre-trained weights into the encoder
+    # supervised_model.load_pretrain_weights(pretrain_weights)
+    #
+    # # Use a small LR for fine-tuning to preserve pre-trained knowledge
+    # finetune_optimizer = torch.optim.AdamW(supervised_model.parameters(), lr=5e-5)
+    #
+    # # Perform a single epoch of fine-tuning for demonstration
+    # finetune_step(
+    #     supervised_model,
+    #     finetune_dataloader,
+    #     finetune_optimizer,
+    #     device
+    # )
+    #
+    # # ----------------------------------------------------
+    # # 3. VALIDATION PHASE
+    # # ----------------------------------------------------
+    #
+    # logger.info("Starting Validation Phase ---")
+    #
+    # validate_step(supervised_model, validation_dataloader, device)
 
 if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -17,7 +17,7 @@ from segmenter.loss import DiceLoss, MSNLoss
 # from segmenter.loss.msn import SimSiamLoss
 from segmenter.masks import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
-from segmenter.models.msn import MoCoSiameseNetwork
+from segmenter.models.msn import MoCoSiameseNetwork, SegFormerAdapter
 from segmenter.utils.msn import load_data
 
 # Configuration
@@ -113,7 +113,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
             try:
-                best_model = model.online_encoder.state_dict()
+                best_model = model.encoder_q.state_dict()
                 torch.save(best_model,
                            f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth')
             except Exception as e:
@@ -128,7 +128,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
     return best_model  # Return the pre-trained encoder weights
 
 
-def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader,
+def finetune_step(model: SegFormerAdapter, dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer, device: torch.device, num_epochs=100):
     logger = logging.getLogger(__name__)
     CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
@@ -177,7 +177,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
             try:
-                best_model = model.online_encoder.state_dict()
+                best_model = model.state_dict()
                 torch.save(best_model,
                            model_name)
             except Exception as e:
@@ -192,7 +192,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     return best_model  # Return the pre-trained encoder weights
 
 
-def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataLoader, device: torch.device):
+def validate_step(model: SegFormerAdapter, dataloader: torch.utils.data.DataLoader, device: torch.device):
     logger = logging.getLogger(__name__)
     model.eval()
     total_dice = 0.0
@@ -264,39 +264,41 @@ def main():
         device
     )
 
+    logger.info("Completed Pre-training Phase (Siamese Network) ---")
+
     # ----------------------------------------------------
     # 2. FINE-TUNING PHASE
     # ----------------------------------------------------
 
-    logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
+    # logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
 
     # Configure the standard SegFormer for the segmentation task
-    segformer_config = SegformerConfig.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512", num_labels=NUM_CLASSES)
+    # segformer_config = SegformerConfig.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512", num_labels=NUM_CLASSES)
 
     # Instantiate the supervised model
-    supervised_model = SupervisedSegFormer(segformer_config).to(device)
-
-    # Load the pre-trained weights into the encoder
-    supervised_model.load_pretrain_weights(pretrain_weights)
-
-    # Use a small LR for fine-tuning to preserve pre-trained knowledge
-    finetune_optimizer = torch.optim.AdamW(supervised_model.parameters(), lr=5e-5)
-
-    # Perform a single epoch of fine-tuning for demonstration
-    finetune_step(
-        supervised_model,
-        finetune_dataloader,
-        finetune_optimizer,
-        device
-    )
+    # supervised_model = SupervisedSegFormer(segformer_config).to(device)
+    # supervised_model = SegFormerAdapter("nvidia/segformer-b4-finetuned-ade-512-512")
+    # # Load the pre-trained weights into the encoder
+    # supervised_model.load_pretrain_weights(pretrain_weights)
+    #
+    # # Use a small LR for fine-tuning to preserve pre-trained knowledge
+    # finetune_optimizer = torch.optim.AdamW(supervised_model.parameters(), lr=5e-5)
+    #
+    # # Perform a single epoch of fine-tuning for demonstration
+    # finetune_step(
+    #     supervised_model,
+    #     finetune_dataloader,
+    #     finetune_optimizer,
+    #     device
+    # )
 
     # ----------------------------------------------------
     # 3. VALIDATION PHASE
     # ----------------------------------------------------
 
-    logger.info("Starting Validation Phase ---")
+    # logger.info("Starting Validation Phase ---")
 
-    validate_step(supervised_model, validation_dataloader, device)
+    # validate_step(supervised_model, validation_dataloader, device)
 
 
 if __name__ == "__main__":
