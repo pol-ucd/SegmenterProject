@@ -13,7 +13,6 @@ Mixed Siamese Networks for Bring Your Own Labels (BYOL) implementation
 
     Validate with the remaining annotated images
 """
-import copy
 import random
 from copy import deepcopy
 from typing import Tuple
@@ -21,10 +20,10 @@ from typing import Tuple
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from transformers import SegformerModel, SegformerForSemanticSegmentation, SegformerConfig
+from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
-from segmenter.models.base import MedianPool2d
 from segmenter.masks import apply_custom_augmentations
+from segmenter.models.base import MedianPool2d
 
 
 class MaskedTiledViewGenerator:
@@ -251,10 +250,12 @@ class SegFormerAdapter(nn.Module):
 #         return self.online_encoder.segformer.config.strides[-1]
 
 class MSNSegFormerBase(nn.Module):
-    def __init__(self, pretrained_model:str=None, num_classes:int=2, k:int=3):
+    def __init__(self, pretrained_model:str=None, num_classes:int=2, k:int=3,
+                 tile_size: Tuple[int, int]=(64, 64),):
         super().__init__()
         self.num_classes = max(num_classes, 1)
         self.k = max(k, 1)
+        self.tile_size = tile_size
         self.online_encoder = SegFormerAdapter(pretrained_model,
                                                num_classes=self.num_classes,
                                                k=self.k)
@@ -290,8 +291,8 @@ class SimSiamSegFormer(MSNSegFormerBase):
     """
 
     def __init__(self, pretrained_model: str = 'nvidia/mit-b0',
-                 num_classes:int=2, k:int=3):
-        super().__init__(pretrained_model, num_classes=num_classes, k=k)
+                 num_classes:int=2, k:int=3, tile_size=(64, 64),):
+        super().__init__(pretrained_model, num_classes=num_classes, k=k, tile_size=tile_size)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> Tuple[
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -346,8 +347,7 @@ class SimCLRSegFormer(MSNSegFormerBase):
 
     def __init__(self, pretrained_model:str=None, num_classes:int=2, k:int=3,
                  tile_size=(64, 64)):
-        super().__init__(pretrained_model, num_classes=num_classes, k=k)
-        self.tile_size = tile_size
+        super().__init__(pretrained_model, num_classes=num_classes, k=k, tile_size=tile_size)
 
 
     def _siamese_pair(self, batch):
@@ -383,13 +383,10 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
     """
 
     def __init__(self, pretrained_model, num_classes:int=2, k:int=3,
-                 projection_dim=128, tile_size=(64, 64),
-                 temperature=0.2, momentum=0.999):
-        super().__init__(pretrained_model, num_classes=num_classes, k=k)
+                 tile_size=(64, 64), temperature=0.2, momentum=0.999):
+        super().__init__(pretrained_model, num_classes=num_classes, k=k, tile_size=tile_size)
         self.momentum = momentum
         self.temperature = temperature
-        self.tile_size = tile_size
-        self.projection_dim = projection_dim
 
         # Create online and target networks
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
