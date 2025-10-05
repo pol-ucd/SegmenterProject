@@ -265,23 +265,29 @@ class SimSiamSegFormer(nn.Module):
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
         self.online_encoder = SegFormerAdapter(pretrained_model)
 
-        encoder_output_dim = self.online_encoder.output_dim()
+        self.mask_composer = SurgicalMaskComposer()
+        self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
+                                                       self.tile_size,
+                                                       return_metadata=True)
 
-        # Projection Head (g) - Maps features to embedding space (z)
-        self.projection_head = nn.Sequential(
-            nn.Linear(encoder_output_dim, encoder_output_dim),
-            nn.BatchNorm1d(encoder_output_dim),
-            nn.ReLU(),
-            nn.Linear(encoder_output_dim, projection_dim)
-        )
-
-        # Predictor Head (h) - Maps the embedding (z) to a prediction (p)
-        self.predictor_head = nn.Sequential(
-            nn.Linear(projection_dim, projection_dim // 4),
-            nn.BatchNorm1d(projection_dim // 4),
-            nn.ReLU(),
-            nn.Linear(projection_dim // 4, projection_dim)
-        )
+        #
+        # encoder_output_dim = self.online_encoder.output_dim()
+        #
+        # # Projection Head (g) - Maps features to embedding space (z)
+        # self.projection_head = nn.Sequential(
+        #     nn.Linear(encoder_output_dim, encoder_output_dim),
+        #     nn.BatchNorm1d(encoder_output_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(encoder_output_dim, projection_dim)
+        # )
+        #
+        # # Predictor Head (h) - Maps the embedding (z) to a prediction (p)
+        # self.predictor_head = nn.Sequential(
+        #     nn.Linear(projection_dim, projection_dim // 4),
+        #     nn.BatchNorm1d(projection_dim // 4),
+        #     nn.ReLU(),
+        #     nn.Linear(projection_dim // 4, projection_dim)
+        # )
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> Tuple[
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -334,14 +340,16 @@ class SimCLRSegFormer(nn.Module):
     There is no concept of a "momentum" encoder or separate updates.
     """
 
-    def __init__(self, pretrained_model: str = 'nvidia/mit-b0', projection_dim: int = 128):
+    def __init__(self, pretrained_model: str = 'nvidia/mit-b0', projection_dim: int = 128,
+                 tile_size=(64, 64)):
         super().__init__()
-        # self.online_encoder = SegformerModel.from_pretrained(model_name)
+        self.tile_size = tile_size
+
         self.online_encoder = SegFormerAdapter(pretrained_model)
 
         self.mask_composer = SurgicalMaskComposer()
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
-                                                       self.tile_size,
+                                                       tile_size,
                                                        return_metadata=True)
 
     def _siamese_pair(self, batch):
@@ -384,7 +392,7 @@ class MoCoSiameseNetwork(nn.Module):
     now including the logic to mask online features.
     """
 
-    def __init__(self, pretrained_model, projection_dim=128, target_size=(512, 512),
+    def __init__(self, pretrained_model, projection_dim=128,
                  tile_size=(64, 64), temperature=0.2, momentum=0.999):
         super().__init__()
         self.momentum = momentum
@@ -434,13 +442,6 @@ class MoCoSiameseNetwork(nn.Module):
             k = F.normalize(k, dim=1)
 
         return q, k
-
-    # @torch.no_grad()
-    # def _dequeue_and_enqueue(self, keys):
-    #     batch_size = keys.shape[0]
-    #     ptr = int(self.queue_ptr)
-    #     self.queue[ptr:ptr + batch_size] = keys
-    #     self.queue_ptr[0] = (ptr + batch_size) % self.queue.shape[0]
 
 
 if __name__ == "__main__":
