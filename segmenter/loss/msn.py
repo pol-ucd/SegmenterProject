@@ -157,7 +157,7 @@ class InfoNCELoss(nn.Module):
         features = torch.cat([z_anchor, z_positive], dim=0)
 
         # 2. Compute full cosine similarity matrix: [2B, 2B]
-        similarity_matrix = torch.matmul(features, features.T) / self.temperature
+        similarity_matrix = torch.matmul(features, features.transpose(-1, -2)) / self.temperature
 
         # 3. Create a mask to remove self-similarities (diagonal)
         # This mask will be used to filter the logits matrix.
