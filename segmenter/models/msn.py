@@ -250,8 +250,38 @@ class SegFormerAdapter(nn.Module):
 #     def get_model_stride(self):
 #         return self.online_encoder.segformer.config.strides[-1]
 
+class MSNSegFormerBase(nn.Module):
+    def __init__(self, pretrained_model:str=None, num_classes:int=2, k:int=3):
+        super().__init__()
+        self.num_classes = max(num_classes, 1)
+        self.k = max(k, 1)
+        self.online_encoder = SegFormerAdapter(pretrained_model,
+                                               num_classes=self.num_classes,
+                                               k=self.k)
 
-class SimSiamSegFormer(nn.Module):
+        self.mask_composer = SurgicalMaskComposer()
+        self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
+                                                       self.tile_size,
+                                                       return_metadata=True)
+
+    def forward(self, x:torch.Tensor):
+        return self.online_encoder(x)
+
+    def output_dim(self):
+        return self.num_classes
+
+    @staticmethod
+    def augment(batch):
+        batch_anchor = []
+        for image in batch:
+            # Apply baseline augmentations to the raw image BEFORE masking
+            augmented = apply_custom_augmentations(image.clone())
+            # Anchor (View 1) is the fully augmented, but unmasked image.
+            batch_anchor.append(augmented)
+        return torch.stack(batch_anchor)
+
+
+class SimSiamSegFormer(MSNSegFormerBase):
     """
     SegFormer Encoder wrapped in a SimSiam architecture for pre-training.
     Uses a Projection Head and a Predictor Head.
@@ -259,35 +289,9 @@ class SimSiamSegFormer(nn.Module):
     to stop the gradient flow.
     """
 
-    def __init__(self, pretrained_model: str = 'nvidia/mit-b0', projection_dim: int = 128):
-        super().__init__()
-        # Load the SegFormer Model (only the encoder/backbone) - Shared Encoder
-        # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
-        self.online_encoder = SegFormerAdapter(pretrained_model)
-
-        self.mask_composer = SurgicalMaskComposer()
-        self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
-                                                       self.tile_size,
-                                                       return_metadata=True)
-
-        #
-        # encoder_output_dim = self.online_encoder.output_dim()
-        #
-        # # Projection Head (g) - Maps features to embedding space (z)
-        # self.projection_head = nn.Sequential(
-        #     nn.Linear(encoder_output_dim, encoder_output_dim),
-        #     nn.BatchNorm1d(encoder_output_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(encoder_output_dim, projection_dim)
-        # )
-        #
-        # # Predictor Head (h) - Maps the embedding (z) to a prediction (p)
-        # self.predictor_head = nn.Sequential(
-        #     nn.Linear(projection_dim, projection_dim // 4),
-        #     nn.BatchNorm1d(projection_dim // 4),
-        #     nn.ReLU(),
-        #     nn.Linear(projection_dim // 4, projection_dim)
-        # )
+    def __init__(self, pretrained_model: str = 'nvidia/mit-b0',
+                 num_classes:int=2, k:int=3):
+        super().__init__(pretrained_model, num_classes=num_classes, k=k)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> Tuple[
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -321,7 +325,7 @@ class SimSiamSegFormer(nn.Module):
         return p1, z2.detach(), p2, z1.detach()
 
 
-class SimCLRSegFormer(nn.Module):
+class SimCLRSegFormer(MSNSegFormerBase):
     """
     An implementation of SimCLR architecture using a single, shared encoder for both the anchor
     and positive image streams.
@@ -340,31 +344,16 @@ class SimCLRSegFormer(nn.Module):
     There is no concept of a "momentum" encoder or separate updates.
     """
 
-    def __init__(self, pretrained_model: str = 'nvidia/mit-b0', projection_dim: int = 128,
+    def __init__(self, pretrained_model:str=None, num_classes:int=2, k:int=3,
                  tile_size=(64, 64)):
-        super().__init__()
+        super().__init__(pretrained_model, num_classes=num_classes, k=k)
         self.tile_size = tile_size
 
-        self.online_encoder = SegFormerAdapter(pretrained_model)
-
-        self.mask_composer = SurgicalMaskComposer()
-        self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
-                                                       tile_size,
-                                                       return_metadata=True)
 
     def _siamese_pair(self, batch):
         # Create Siamese Pairs dynamically for the batch
-        batch_anchor = []
-        batch_positive = []
+        x_anchor = self.augment(batch)
 
-        for image in batch:
-            # Apply baseline augmentations to the raw image BEFORE masking
-            augmented = apply_custom_augmentations(image.clone())
-            # Anchor (View 1) is the fully augmented, but unmasked image.
-            batch_anchor.append(augmented)
-        x_anchor = torch.stack(batch_anchor)
-
-        # anchor, positive = mask_generator.create_siamese_pair(image)
         x_positive_mask, meta_positive = self.view_generator(x_anchor)
 
         x_positive = x_anchor*(1 - x_positive_mask)
@@ -375,6 +364,7 @@ class SimCLRSegFormer(nn.Module):
         Processes anchor and positive pairs through the shared encoder and head.
         :return: (Anchor Embeddings, Positive Embeddings)
         """
+
         x_anchor, x_positive = self._siamese_pair(x)
         # Anchor Stream
         # [B, H*W, D] -> We need to pool or average it to [B, D]
@@ -386,15 +376,16 @@ class SimCLRSegFormer(nn.Module):
         return z_anchor, z_positive
 
 
-class MoCoSiameseNetwork(nn.Module):
+class MoCoSiameseNetwork(MSNSegFormerBase):
     """
     Implements a MoCo/BYOL/MSN-style architecture with Online and Target Encoders,
     now including the logic to mask online features.
     """
 
-    def __init__(self, pretrained_model, projection_dim=128,
-                 tile_size=(64, 64), temperature=0.2, momentum=0.999):
-        super().__init__()
+    def __init__(self, pretrained_model, num_classes:int=2, k:int=3,
+                 projection_dim=128, tile_size=(64, 64),
+                 temperature=0.2, momentum=0.999):
+        super().__init__(pretrained_model, num_classes=num_classes, k=k)
         self.momentum = momentum
         self.temperature = temperature
         self.tile_size = tile_size
@@ -403,9 +394,9 @@ class MoCoSiameseNetwork(nn.Module):
         # Create online and target networks
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
-        self.encoder_q = SegFormerAdapter(pretrained_model)
+        self.online_encoder = SegFormerAdapter(pretrained_model)
 
-        self.encoder_k = deepcopy(self.encoder_q)
+        self.encoder_k = deepcopy(self.online_encoder)
         self._init_momentum_encoder()
 
         self.mask_composer = SurgicalMaskComposer()
@@ -414,7 +405,7 @@ class MoCoSiameseNetwork(nn.Module):
                                                        return_metadata=True)
 
     def _init_momentum_encoder(self):
-        for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
+        for param_q, param_k in zip(self.online_encoder.parameters(), self.encoder_k.parameters()):
             param_k.data.copy_(param_q.data)
             param_k.requires_grad = False
 
@@ -423,16 +414,16 @@ class MoCoSiameseNetwork(nn.Module):
         """
         Performs the Exponential Moving Average (EMA) update for both the target encoder and target head.
         """
-        for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
+        for param_q, param_k in zip(self.online_encoder.parameters(), self.encoder_k.parameters()):
             param_k.data = param_k.data * self.momentum + param_q.data * (1. - self.momentum)
 
     def forward(self, x):
         # Generate masked views
         x_q, meta_q = self.view_generator(x)
-        x_k, meta_k = self.view_generator(x)
+        x_k, meta_k = self.view_generator(self.augment(x))
 
         # Encode query
-        q = self.encoder_q(x_q)  # (B, D)
+        q = self.online_encoder(x_q)  # (B, D)
         q = F.normalize(q, dim=1)
 
         # Encode key (no grad)
