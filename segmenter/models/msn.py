@@ -25,15 +25,17 @@ from transformers import SegformerModel, SegformerForSemanticSegmentation, Segfo
 
 
 class MaskedTiledViewGenerator:
-    def __init__(self, mask_composer, tile_size=(64, 64), return_metadata=False):
-        self.mask_composer = mask_composer  # e.g., SurgicalMaskComposer
+    def __init__(self, mask_composer,
+                 tile_size=(64, 64),
+                 return_metadata=False):
+        self.mask_composer = mask_composer  # e.g., SurgicalMaskComposer, kwargs passed as params
         self.tile_size = tile_size
         self.return_metadata = return_metadata
 
     def tile_image(self, image):
         B, C, H, W = image.shape
         th, tw = self.tile_size
-        assert H % th == 0 and W % tw == 0, "Image must be divisible by tile size"
+        assert H % th == 0 and W % tw == 0, "Image H,W must be divisible by tile h,w"
         tiles = image.unfold(2, th, th).unfold(3, tw, tw)
         tiles = tiles.contiguous().view(B, C, -1, th, tw)  # (B, C, N_tiles, th, tw)
         return tiles
@@ -96,7 +98,7 @@ class SurgicalMaskComposer:
         y = random.randint(0, tile.shape[1] // 2)
         w = random.randint(tile.shape[2] // 4, tile.shape[2] // 2)
         h = random.randint(tile.shape[1] // 8, tile.shape[1] // 4)
-        occlusion[:, y:y+h, x:x+w] = 1.0
+        occlusion[:, y:y + h, x:x + w] = 1.0
         masked = tile * (1 - occlusion)
         return masked, {'x': x, 'y': y, 'w': w, 'h': h}
 
@@ -114,7 +116,7 @@ class SurgicalMaskComposer:
         cy = random.randint(tile.shape[1] // 4, tile.shape[1] * 3 // 4)
         radius = random.randint(tile.shape[1] // 6, tile.shape[1] // 3)
         yy, xx = torch.meshgrid(torch.arange(tile.shape[1]), torch.arange(tile.shape[2]), indexing='ij')
-        mask = ((xx - cx)**2 + (yy - cy)**2) < radius**2
+        mask = ((xx - cx) ** 2 + (yy - cy) ** 2) < radius ** 2
         fold[:, mask] = 0.0
         masked = tile * fold
         return masked, {'cx': cx, 'cy': cy, 'radius': radius}
@@ -125,6 +127,7 @@ class SegFormerAdapter(nn.Module):
     Calls a pretrained SegFormer encoder and returns a (B, C, H, W) feature map.
     Adjust token->spatial conversion to match the specific SegFormer variant you use.
     """
+
     def __init__(self, pretrained_name):
         super().__init__()
         if pretrained_name is not None:
@@ -140,7 +143,6 @@ class SegFormerAdapter(nn.Module):
             )
         else:
             self.base_model = SegformerForSemanticSegmentation(config=config)
-
 
     def forward(self, x):
 
@@ -185,6 +187,7 @@ T   arget/Momentum Encoder (self.target_encoder):
     Provides a slowly evolving target, decoupling the two views in time/weight space.
 
     """
+
     def __init__(self, backbone, momentum=0.996):
         super().__init__()
         self.momentum = momentum
@@ -215,7 +218,7 @@ T   arget/Momentum Encoder (self.target_encoder):
 
         # Select only the features from the MASKED patches
         # mask shape: (B, num_patches), online_features shape: (B, num_patches, C)
-        masked_online_features = online_features #[mask.reshape(online_features.shape)]
+        masked_online_features = online_features  #[mask.reshape(online_features.shape)]
 
         # Get target representations from the global view (weakly augmented)
         with torch.no_grad():
@@ -360,7 +363,7 @@ class MoCoSiameseNetwork(nn.Module):
     now including the logic to mask online features.
     """
 
-    def __init__(self, pretrained_model, projection_dim=128, target_size=(512,512),
+    def __init__(self, pretrained_model, projection_dim=128, target_size=(512, 512),
                  tile_size=(64, 64), temperature=0.2, momentum=0.999):
         super().__init__()
         self.momentum = momentum
@@ -387,7 +390,6 @@ class MoCoSiameseNetwork(nn.Module):
         self.encoder_k = nn.Sequential(deepcopy(self.online_encoder),
                                        deepcopy(self.online_head))
         self._init_momentum_encoder()
-
 
         self.mask_composer = SurgicalMaskComposer()
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
@@ -444,3 +446,27 @@ class MoCoSiameseNetwork(nn.Module):
     #     ptr = int(self.queue_ptr)
     #     self.queue[ptr:ptr + batch_size] = keys
     #     self.queue_ptr[0] = (ptr + batch_size) % self.queue.shape[0]
+
+
+if __name__ == "__main__":
+    b, c, h, w = 8, 3, 512, 512
+    tile_size = (32, 32)
+    instrument_prob, fluid_prob, fold_prob = 0.3, 0.3, 0.3
+
+
+    composer = SurgicalMaskComposer(instrument_prob=instrument_prob,
+                                    fluid_prob=fluid_prob,
+                                    fold_prob=fold_prob)
+
+    gen = MaskedTiledViewGenerator(mask_composer=SurgicalMaskComposer(),
+                                   tile_size=tile_size,
+                                   return_metadata=True)
+
+    test_images = torch.randn(b, c, h, w).clip(0,1)
+
+    tile = gen.tile_image(test_images)
+    print(f"Image shape: {test_images.shape}, Generated tile shape {tile.shape}")
+
+    mask = gen(test_images)
+    print(mask[0].shape)    # The generated mask
+    # print(mask[1])          # The generated mask metadata as Dict{'type': ..., 'params': ....}
