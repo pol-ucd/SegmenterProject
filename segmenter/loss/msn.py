@@ -54,8 +54,8 @@ class MSNLoss(nn.Module):
         :param target_protos: Representations from the target network for ALL patches [N_all, D].
         :return: Scalar loss tensor (mean KL divergence).
         """
-
-        # 1. Normalization
+        B = online_preds.shape[0]
+        # Normalization
         online_preds = F.normalize(online_preds, dim=1)
         target_protos = F.normalize(target_protos, dim=1)
 
@@ -75,15 +75,15 @@ class MSNLoss(nn.Module):
         similarity_matrix = torch.matmul(online_preds,
                                          centered_target_protos.transpose(-1, -2))
 
-        # 4. Target Distribution (P) - Sharpened Softmax
+        # Target Distribution (P) - Sharpened Softmax
         # P = softmax(Sim / temperature). This is the 'teacher' signal.
         targets = F.softmax(similarity_matrix / self.temperature, dim=1)
 
-        # 5. Prediction Distribution (log Q) - Log Softmax
+        # Prediction Distribution (log Q) - Log Softmax
         # log Q = log(softmax(Sim)). This is the 'student' prediction.
         predictions = F.log_softmax(similarity_matrix, dim=1)
 
-        # 6. KL Divergence / Cross-Entropy
+        # KL Divergence / Cross-Entropy
         # L = - sum(P * log Q) -> Minimizes KL(P || Q).
         loss = - (targets * predictions).sum(dim=1)
 
@@ -111,23 +111,24 @@ class SimSiamLoss(nn.Module):
         :param z1_detached: Target embedding from detached view 1 (Anchor) [B, D].
         :return: Scalar total symmetric loss tensor.
         """
-        # 1. Normalize embeddings before calculating loss (as per SimSiam implementation)
+        B = p1.shape[0]
+        # Normalize embeddings before calculating loss (as per SimSiam implementation)
         p1 = F.normalize(p1, dim=1)
         z2_detached = F.normalize(z2_detached, dim=1)
         p2 = F.normalize(p2, dim=1)
         z1_detached = F.normalize(z1_detached, dim=1)
 
-        # 2. Calculate the two symmetric loss terms (MSE)
+        # Calculate the two symmetric loss terms (MSE)
         # Term 1: Prediction from view 1 vs Target from detached view 2
         loss1 = self.mse_loss(p1, z2_detached)
 
-        # Term 2: Prediction from view 2 vs Target from detached view 1
+        # Prediction from view 2 vs Target from detached view 1
         loss2 = self.mse_loss(p2, z1_detached)
 
         # 3. Total Symmetric Loss (Averaged)
         total_loss = 0.5 * (loss1 + loss2)
 
-        return total_loss
+        return total_loss / B
 
 
 class InfoNCELoss(nn.Module):
@@ -163,7 +164,7 @@ class InfoNCELoss(nn.Module):
         # Apply Cross Entropy Loss (equivalent to InfoNCE)
         loss = F.cross_entropy(logits, labels)
 
-        return loss
+        return loss/(B*B)
 
 
 if __name__ == '__main__':
