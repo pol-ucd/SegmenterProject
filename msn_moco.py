@@ -26,7 +26,7 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
 learning_rate = 1e-04
-BATCH_SIZE = 12
+BATCH_SIZE = 8
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
