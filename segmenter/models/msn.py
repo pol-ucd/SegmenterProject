@@ -186,68 +186,68 @@ class SegFormerAdapter(nn.Module):
     def output_dim(self):
         return self.num_classes
 
-
-class MoCoSegFormer(nn.Module):
-    """
-    Siamese Network Architecture Pattern: Momentum Contrast (MoCo)
-
-    utilizes a core concept seen in MoCo and BYOL: two separate, yet related, encoders:
-
-    Online Encoder (self.online_encoder):
-            This is the main encoder whose weights are updated directly
-            via standard backpropagation gradients.
-
-T   arget/Momentum Encoder (self.target_encoder):
-            This is a copy of the online encoder, but its weights
-            are not updated via backpropagation.
-
-    Provides a slowly evolving target, decoupling the two views in time/weight space.
-
-    """
-
-    def __init__(self, backbone, momentum=0.996):
-        super().__init__()
-        self.momentum = momentum
-
-        # Create online and target networks
-        self.online_encoder = backbone
-        self.target_encoder = copy.deepcopy(self.online_encoder)
-
-        # Disable gradients for the target network
-        for p in self.target_encoder.parameters():
-            p.requires_grad = False
-
-    @torch.no_grad()
-    def _update_target_network(self):
-        """
-        Performs the Exponential Moving Average (EMA) update for the target network.
-        This is a key component of self-supervised methods like MoCo, BYOL, and MSN.
-        The update rule is: θ_t = m * θ_t + (1 - m) * θ_o
-        """
-        for online_param, target_param in zip(self.online_encoder.parameters(), self.target_encoder.parameters()):
-            target_param.data = target_param.data * self.momentum + online_param.data * (1. - self.momentum)
-
-    def forward(self, focal_view, global_view):
-        # Get online predictions from the focal view (strongly augmented)
-        # Reshape to (B, C, H*W) -> (B, H*W, C) for masking
-
-        online_features = self.online_encoder(focal_view).flatten(2).transpose(1, 2)
-
-        # Select only the features from the MASKED patches
-        # mask shape: (B, num_patches), online_features shape: (B, num_patches, C)
-        masked_online_features = online_features  #[mask.reshape(online_features.shape)]
-
-        # Get target representations from the global view (weakly augmented)
-        with torch.no_grad():
-            self.target_encoder.eval()
-            target_features = self.target_encoder(global_view).flatten(2).transpose(1, 2)
-            # Detach to ensure no gradients flow back to the target encoder
-            target_features = target_features.detach()
-
-        return masked_online_features, target_features
-
-    def get_model_stride(self):
-        return self.online_encoder.segformer.config.strides[-1]
+#
+# class MoCoSegFormer(nn.Module):
+#     """
+#     Siamese Network Architecture Pattern: Momentum Contrast (MoCo)
+#
+#     utilizes a core concept seen in MoCo and BYOL: two separate, yet related, encoders:
+#
+#     Online Encoder (self.online_encoder):
+#             This is the main encoder whose weights are updated directly
+#             via standard backpropagation gradients.
+#
+# T   arget/Momentum Encoder (self.target_encoder):
+#             This is a copy of the online encoder, but its weights
+#             are not updated via backpropagation.
+#
+#     Provides a slowly evolving target, decoupling the two views in time/weight space.
+#
+#     """
+#
+#     def __init__(self, backbone, momentum=0.996):
+#         super().__init__()
+#         self.momentum = momentum
+#
+#         # Create online and target networks
+#         self.online_encoder = backbone
+#         self.target_encoder = copy.deepcopy(self.online_encoder)
+#
+#         # Disable gradients for the target network
+#         for p in self.target_encoder.parameters():
+#             p.requires_grad = False
+#
+#     @torch.no_grad()
+#     def _update_target_network(self):
+#         """
+#         Performs the Exponential Moving Average (EMA) update for the target network.
+#         This is a key component of self-supervised methods like MoCo, BYOL, and MSN.
+#         The update rule is: θ_t = m * θ_t + (1 - m) * θ_o
+#         """
+#         for online_param, target_param in zip(self.online_encoder.parameters(), self.target_encoder.parameters()):
+#             target_param.data = target_param.data * self.momentum + online_param.data * (1. - self.momentum)
+#
+#     def forward(self, focal_view, global_view):
+#         # Get online predictions from the focal view (strongly augmented)
+#         # Reshape to (B, C, H*W) -> (B, H*W, C) for masking
+#
+#         online_features = self.online_encoder(focal_view).flatten(2).transpose(1, 2)
+#
+#         # Select only the features from the MASKED patches
+#         # mask shape: (B, num_patches), online_features shape: (B, num_patches, C)
+#         masked_online_features = online_features  #[mask.reshape(online_features.shape)]
+#
+#         # Get target representations from the global view (weakly augmented)
+#         with torch.no_grad():
+#             self.target_encoder.eval()
+#             target_features = self.target_encoder(global_view).flatten(2).transpose(1, 2)
+#             # Detach to ensure no gradients flow back to the target encoder
+#             target_features = target_features.detach()
+#
+#         return masked_online_features, target_features
+#
+#     def get_model_stride(self):
+#         return self.online_encoder.segformer.config.strides[-1]
 
 
 class SimSiamSegFormer(nn.Module):
@@ -391,22 +391,12 @@ class MoCoSiameseNetwork(nn.Module):
         # Create online and target networks
         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
-        self.online_encoder = SegFormerAdapter(pretrained_model)
+        self.encoder_q = SegFormerAdapter(pretrained_model)
         encoder_output_dim = self.online_encoder.output_dim()
         print("encoder_output_dim", encoder_output_dim)
 
-        # Online Predictor Head (h)
-        self.online_head = nn.Sequential(
-            nn.Linear(encoder_output_dim, encoder_output_dim // 4),
-            nn.BatchNorm2d(encoder_output_dim // 4),
-            nn.ReLU(),
-            nn.Linear(encoder_output_dim // 4, self.projection_dim)
-        )
 
-        self.encoder_q = nn.Sequential(self.online_encoder,
-                                       self.online_head)
-        self.encoder_k = nn.Sequential(deepcopy(self.online_encoder),
-                                       deepcopy(self.online_head))
+        self.encoder_k = deepcopy(self.encoder_q)
         self._init_momentum_encoder()
 
         self.mask_composer = SurgicalMaskComposer()
