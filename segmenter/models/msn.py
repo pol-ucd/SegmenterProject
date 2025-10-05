@@ -160,7 +160,7 @@ class SegFormerAdapter(nn.Module):
                                align_corners=False)
 
         # return logits
-        print(f"SegFormerAdapter logits shape: {logits.shape}")
+        print(f"SegFormerAdapter logits shape: {logits.shape} / x: {x.shape}")
         return logits
 
     def encoder_output_dim(self):
