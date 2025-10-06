@@ -262,9 +262,9 @@ def main():
     # 3. VALIDATION PHASE
     # ----------------------------------------------------
 
-    logger.info(f"Starting Validation Phase for {prefix.upper()} ---")
-
-    validate_step(supervised_model, validation_dataloader, device)
+    # logger.info(f"Starting Validation Phase for {prefix.upper()} ---")
+    #
+    # validate_step(supervised_model, validation_dataloader, device)
 
 if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
