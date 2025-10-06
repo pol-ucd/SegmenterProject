@@ -9,15 +9,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import autocast
-from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
-from transformers import SegformerConfig
 
 from segmenter.core import Config
 from segmenter.loss import DiceLoss, MSNLoss
 # from segmenter.loss.msn import SimSiamLoss
-from segmenter.masks import MaskGenerator
-from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import MoCoSiameseNetwork, SegFormerAdapter
 from segmenter.torch_utils import get_default_device_type
 from segmenter.utils.msn import load_data
@@ -80,7 +76,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
 
     model.train()
     total_loss = 0
-    mask_generator = MaskGenerator(size=IMAGE_SIZE)
 
     best_loss = float('inf')
     min_delta = 0.00001
