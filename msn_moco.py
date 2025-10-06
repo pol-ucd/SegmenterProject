@@ -23,7 +23,7 @@ config = Config("config/msn_common.json")
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-learning_rate = 1e-04
+learning_rate = 1e-05
 BATCH_SIZE = 8
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
@@ -257,12 +257,12 @@ def main():
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model, momentum=0.996).to(device)
 
-    pretrain_loss_fn = MSNLoss(temperature=0.2, center_momentum=0.9)
+    pretrain_loss_fn = MSNLoss(temperature=0.2, center_momentum=0.95)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
                                            lr=learning_rate,
-                                           weight_decay=1e-4)
+                                           weight_decay=1e-2)
     logger.info("Starting Pre-training Phase (Siamese Network) ---")
 
     pretrain_weights = pretrain_step(
