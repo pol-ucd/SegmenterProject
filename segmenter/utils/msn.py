@@ -15,9 +15,47 @@ PRETRAIN_DATASET = '../segmenter/data/pretrain_images.h5'
 FINETUNE_DATASET = '../segmenter/data/Classica.h5'
 
 
+class MSNDataHandler:
+    def __init__(self, config: Any):
+        self.config = config
+        self.batch_size = config['run']['batch_size']
+        self.num_workers = config['run']['num_workers']
+
+        data_opts = config['run']['data']
+        self.pretrain_dataset = data_opts['pretrain_dataset']
+        self.train_dataset = data_opts['train_dataset']
+
+        self.eval_percent = data_opts['eval_percent']
+        self.image_size = data_opts['image_size']
+
+        self.image_augment = T.Compose([T.Resize(self.image_size,
+                                                 T.InterpolationMode.BICUBIC),
+                                        T.Normalize(mean=[0.485, 0.456, 0.406],
+                                                    std=[0.229, 0.224, 0.225])
+                                        ])
+
+    def load_pretrain_dataset(self):
+        pretrain_ds = HDF5DatasetOptimized(hdf5_path=self.pretrain_dataset,
+                                           data_keys=['images'],
+                                           transform=self.image_augment)
+
+        custom_sampler = HDF5BatchSampler(pretrain_ds.dataset_len,
+                                          self.batch_size, shuffle=True)
+
+        pretrain_dl = torch.utils.data.DataLoader(
+            pretrain_ds,
+            batch_size=None,
+            sampler=custom_sampler,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            worker_init_fn=hdf5_worker_init_fn
+        )
+
+
 def load_data(batch_size: int, finetune_percent: float,
               image_size=(512, 512),
-              num_workers:int=4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
+              num_workers: int = 4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
     image_augment = T.Compose([T.Resize(image_size,
                                         T.InterpolationMode.BICUBIC),
                                T.Normalize(mean=[0.485, 0.456, 0.406],

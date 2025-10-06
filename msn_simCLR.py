@@ -23,7 +23,7 @@ config = Config("config/msn_common.json")
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-learning_rate=config['optimizer']['params']['learning_rate']
+learning_rate=config['optimizer']['params']['lr']
 # batch_size=config['optimizer']['params']['batch_size']
 
 BATCH_SIZE = 12

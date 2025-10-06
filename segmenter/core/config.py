@@ -88,7 +88,6 @@ class Config:
         self._env_var = env_var
         self._path = config_path
         self._initialized = True
-        print("__intialize__", self._path, config_path)
 
     # --- Loading logic ------------------------------------------------
     def _resolve_path(self) -> str:

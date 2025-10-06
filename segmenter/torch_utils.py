@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 
 from segmenter.loss.factory import LossFactory
 from segmenter.loss.hybrid import HybridLoss
-from segmenter.modules import ImageLightingAugmentation
+# from segmenter.modules import ImageLightingAugmentation
 
 # Pre-define a mapping of class names to their actual classes
 # This avoids needing a separate factory file
@@ -246,10 +246,12 @@ class RunManager:
 
 def get_module_class(class_name: str) -> nn.Module:
     """
-    Parse a string name of a module.class and return the module and class
+    Parse a string name of a module.class and return the class with the importlib already
+    performed so the class can be directly instantiated
+
     as a tuple after checking everything is valid.
     :param class_name: a string name of a module.class e.g segmenter.models.AugurSegformerSegmentation
-    :return: the class ( with the importlib already performed so the class can be directly instantiated)
+    :return: the class
     """
     module_name, class_name = class_name.rsplit('.', maxsplit=1)
     try:

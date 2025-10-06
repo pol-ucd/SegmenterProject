@@ -8,6 +8,7 @@ from typing import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import autocast
 from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 from transformers import SegformerConfig
@@ -71,6 +72,10 @@ def pretrain_step(model: MoCoSiameseNetwork,
 
     if loss_fn is None or loss_fn == nn.MSELoss:
         loss_fn = nn.MSELoss()
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+    scaler = None
+    if torch.cuda.is_available():
+        scaler = torch.amp.GradScaler()
 
     model.train()
     total_loss = 0
@@ -86,16 +91,21 @@ def pretrain_step(model: MoCoSiameseNetwork,
 
             x = batch_images['images'].to(device)
 
+            # optimizer.zero_grad()
+            with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+                prediction_p, target_z_detached = model(x)
+
+                # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
+                loss = loss_fn(prediction_p, target_z_detached)
+
             optimizer.zero_grad()
-
-            prediction_p, target_z_detached = model(x)
-
-            # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
-            loss = loss_fn(prediction_p, target_z_detached)
-
-            # Backpropagation
-            loss.backward()
-            optimizer.step()
+            if scaler is not None:
+                scaler.scale(loss).backward()  # Fails on MPS, works on CPU/CUDA
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
 
             # CRITICAL:
             # Update the Target Encoder weights using EMA, and,
@@ -105,6 +115,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
             loss_fn.update_center(target_z_detached)
 
             total_loss += loss.item()
+        if scheduler is not None:
+            scheduler.step()
 
         avg_loss = total_loss / len(dataloader)
         logger.info(f"Pretraining Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
