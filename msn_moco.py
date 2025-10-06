@@ -95,6 +95,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
                 loss = loss_fn(prediction_p, target_z_detached)
 
             # optimizer.zero_grad()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             if scaler is not None:
                 scaler.scale(loss).backward()  # Fails on MPS, works on CPU/CUDA
                 scaler.step(optimizer)
@@ -108,7 +109,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
             # Update the MSNLoss() Target Center (AFTER forward/backward)
             # This keeps the target center stable and prevents collapse.
             model.update_momentum_encoder()
-            loss_fn.update_center(target_z_detached)
+            # loss_fn.update_center(target_z_detached)
+            loss_fn.update_center(F.normalize(target_z_detached, dim=1))
 
             total_loss += loss.item()
 
