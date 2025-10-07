@@ -111,6 +111,9 @@ def pretrain_step(model: MoCoSiameseNetwork,
             model.update_momentum_encoder()
             # loss_fn.update_center(target_z_detached)
             loss_fn.update_center(F.normalize(target_z_detached, dim=1))
+            if loss_fn.target_center is not None:
+                center_norm = loss_fn.target_center.norm().item()
+                logger.info(f"Center norm: {center_norm:.4f}")
 
             total_loss += loss.item()
 
