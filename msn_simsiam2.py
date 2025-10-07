@@ -12,10 +12,10 @@ from transformers import SegformerConfig
 
 from segmenter.core import Config
 from segmenter.loss import DiceLoss
-from segmenter.loss.msn import InfoNCELoss
+from segmenter.loss.msn import SimSiamLoss
 from segmenter.masks import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
-from segmenter.models.msn import SimCLRSegFormer
+from segmenter.models.msn import SimSiamSegFormer
 from segmenter.utils.msn import load_data
 
 # Configuration
@@ -23,26 +23,19 @@ config = Config("config/msn_common.json")
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-learning_rate=config['optimizer']['params']['lr']
-# batch_size=config['optimizer']['params']['batch_size']
-
+learning_rate=1e-04
 BATCH_SIZE = 12
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE=(512, 512)
 
-prefix='msn_simclr'
+prefix='msn_simsiam'
 
-# Assumes:
-# - model is SimCLRSegFormer instance
-# - simclr_loss is a contrastive loss function expecting (z_i, z_j) pairs, e.g., NT-Xent
-# - optimizer and optional scaler are defined
-# - dataloader yields dict with "images": tensor (B, C, H, W)
-# - device set
-def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device,
-                  scaler=None, num_epochs=100):
+
+def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoader,
+                  optimizer: torch.optim.Optimizer, loss_fn: SimSiamLoss, device: torch.device,
+                  num_epochs=100):
     logger = logging.getLogger(__name__)
     model.train()
     total_loss = 0
@@ -57,14 +50,18 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
         for batch_idx, batch in enumerate(dataloader):
             x = batch["images"].to(device)
 
+            # Build the Siamese pair inside forward by passing `batch`
             optimizer.zero_grad()
             with torch.cuda.amp.autocast(enabled=(scaler is not None)):
-                z_anchor, z_positive = model(x, return_patches=False)
-                # ensure float32 for loss calculations
-                z_anchor = z_anchor.to(dtype=torch.float32)
-                z_positive = z_positive.to(dtype=torch.float32)
+                outputs = model(batch=x, return_patches=False, epoch=epoch, batch_index=batch_idx)
+                p1, z2_det, p2, z1_det = outputs
+                # ensure float32 for loss computation stability
+                p1 = p1.to(dtype=torch.float32)
+                p2 = p2.to(dtype=torch.float32)
+                z1_det = z1_det.to(dtype=torch.float32)
+                z2_det = z2_det.to(dtype=torch.float32)
 
-                loss = simclr_loss(z_anchor, z_positive)
+                loss = model.compute_loss(p1, z2_det, p2, z1_det)
 
             if scaler is not None:
                 scaler.scale(loss).backward()
@@ -205,13 +202,7 @@ def validate_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
 
 def main():
     logger = logging.getLogger()
-    logger.info(f"Starting pretraining run for {prefix.upper()}")
-
-    # Mock Configuration
-    IMAGE_SIZE = 512
-    BATCH_SIZE = 4
-    NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
-    finetune_percent = 0.1
+    logger.info(f"Starting pretraining run {prefix.upper()}")
 
     logger.info(f"Using device: {device}")
 
@@ -224,8 +215,8 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = SimCLRSegFormer(pretrained_model=backbone_model).to(device)
-    pretrain_loss_fn = InfoNCELoss(temperature=0.1)
+    siamese_model = SimSiamSegFormer(pretrained_model=backbone_model).to(device)
+    pretrain_loss_fn = SimSiamLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
@@ -238,16 +229,15 @@ def main():
         pretrain_dataloader,
         pretrain_optimizer,
         pretrain_loss_fn,
-        scaler=scaler,
-        device=device
+        device
     )
 
     logger.info("Completed Pre-training Phase (Siamese Network) ---")
 
-    # # ----------------------------------------------------
-    # # 2. FINE-TUNING PHASE
-    # # ----------------------------------------------------
-    #
+    # ----------------------------------------------------
+    # 2. FINE-TUNING PHASE
+    # ----------------------------------------------------
+
     # logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
     #
     # # Configure the standard SegFormer for the segmentation task
@@ -269,12 +259,12 @@ def main():
     #     finetune_optimizer,
     #     device
     # )
-
-    # ----------------------------------------------------
-    # 3. VALIDATION PHASE
-    # ----------------------------------------------------
-
-    # logger.info(f"Starting Validation Phase for {prefix.upper()} ---")
+    #
+    # # ----------------------------------------------------
+    # # 3. VALIDATION PHASE
+    # # ----------------------------------------------------
+    #
+    # logger.info("Starting Validation Phase ---")
     #
     # validate_step(supervised_model, validation_dataloader, device)
 

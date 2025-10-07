@@ -391,7 +391,7 @@ class SegFormerFeatureWrapper(nn.Module):
     def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
         outs = encoder_module(x.float())
         feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
-        return feat.last_hidden_state.to(self.device)  # (B, D, H', W')
+        return feat.last_hidden_state.to(self._device)  # (B, D, H', W')
 
     def _flatten_patches(self, feat: torch.Tensor):
         B, D, H, W = feat.shape
@@ -403,7 +403,7 @@ class SegFormerFeatureWrapper(nn.Module):
         flat = patches.reshape(B * N, D)
         proj = projector(flat)  # (B*N, P)
         proj = F.normalize(proj, dim=1)
-        return proj.reshape(B, N, -1).to(self.device)
+        return proj.reshape(B, N, -1).to(self._device)
 
     def _spatial_block_mask(self, B: int, H: int, W: int, mask_ratio: float, block_size: int,
                             device: torch.device, batch_index: int, epoch: int):
@@ -574,50 +574,146 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
             batch_anchor.append(augmented)
         return torch.stack(batch_anchor)
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Optional, Tuple
 
 class SimSiamSegFormer(MSNSegFormerBase):
     """
-    SegFormer Encoder wrapped in a SimSiam architecture for pre-training.
-    Uses a Projection Head and a Predictor Head.
-    Processes both views symmetrically and uses .detach() on the target branch
-    to stop the gradient flow.
+    SimSiam using the shared SegFormerFeatureWrapper from MSNSegFormerBase.
+
+    forward accepts either:
+      - two image tensors x1, x2 (B, C, H, W) already prepared, OR
+      - when used in training loop you can call _siamese_pair(batch) to create views.
+    Returns:
+      - p1, z2_detached, p2, z1_detached  (predictor outputs and detached targets),
+    and optionally raw patches when return_patches=True.
     """
 
-    def __init__(self, pretrained_model: str = 'nvidia/mit-b0',
-                 num_classes:int=2, k:int=3, tile_size=(64, 64),):
-        super().__init__(pretrained_model, num_classes=num_classes, k=k, tile_size=tile_size)
+    def __init__(
+        self,
+        pretrained_model: Optional[str] = None,
+        proj_dim: int = 128,
+        predictor_hidden: int = 512,
+        predictor_out: Optional[int] = None,
+        stage_idx: int = -1,
+        block_size: int = 7,
+        mask_ratio: float = 0.6,
+        seed: int = 0,
+        tile_size: Tuple[int, int] = (64, 64),
+    ):
+        super().__init__(
+            pretrained_model=pretrained_model,
+            proj_dim=proj_dim,
+            mask_ratio=mask_ratio,
+            stage_idx=stage_idx,
+            block_size=block_size,
+            seed=seed,
+            tile_size=tile_size,
+        )
 
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> Tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        predictor_out = proj_dim if predictor_out is None else predictor_out
+        self.predictor = nn.Sequential(
+            nn.Linear(proj_dim, predictor_hidden),
+            nn.BatchNorm1d(predictor_hidden),
+            nn.ReLU(inplace=True),
+            nn.Linear(predictor_hidden, predictor_out),
+        )
+
+    def _pool_patches_to_image(self, patches: torch.Tensor) -> torch.Tensor:
         """
-        Processes two augmented views (x1, x2) symmetrically.
-
-        :param x1: View 1 (e.g., Anchor Image).
-        :param x2: View 2 (e.g., Positive/Occluded Image).
-        :return: (p1, z2_detached, p2, z1_detached)
+        patches: (B, N, D_in) raw encoder patch features before projector
+        Uses the shared online_wrapper.projector, then mean-pooled and L2-normalized.
+        Returns (B, proj_dim).
         """
+        B, N, D = patches.shape
+        flat = patches.reshape(B * N, D)
+        projector = self.online_wrapper.projector
+        proj_flat = projector(flat)               # (B*N, proj_dim)
+        proj = proj_flat.reshape(B, N, -1)        # (B, N, proj_dim)
+        img_repr = proj.mean(dim=1)               # (B, proj_dim)
+        img_repr = F.normalize(img_repr, dim=1)
+        return img_repr
 
-        # Helper function to compute z and p for a view
-        def get_p_and_z(x):
-            # Encoder
-            features = self.online_encoder(x).last_hidden_state
-            # Pool features over the sequence dimension (dim=1) and explicitly reshape to [B, D]
-            z_pooled = features.mean(dim=1).reshape(features.shape[0], -1)
-            # Projection Head (z)
-            z = self.projection_head(z_pooled)
-            # Predictor Head (p)
-            p = self.predictor_head(z)
-            return p, z
+    def _siamese_pair(self, batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Build anchor (augmented) and positive (augmented + occluded) images using base utilities.
+        """
+        x_anchor = self.augment(batch)                     # (B, C, H, W)
+        x_positive_masked, _ = self.view_generator(x_anchor)
+        x_positive = x_positive_masked
+        return x_anchor, x_positive
 
-        # Process View 1 (Anchor)
-        p1, z1 = get_p_and_z(x1.squeeze(1))
+    def forward(
+        self,
+        x1: Optional[torch.Tensor] = None,
+        x2: Optional[torch.Tensor] = None,
+        *,
+        batch: Optional[torch.Tensor] = None,
+        return_patches: bool = False,
+        epoch: int = 0,
+        batch_index: int = 0,
+    ):
+        """
+        Two modes:
+          - Provide x1, x2 directly (both (B, C, H, W))
+          - Or provide `batch` and let _siamese_pair build views
 
-        # Process View 2 (Positive)
-        p2, z2 = get_p_and_z(x2.squeeze(1))
+        Returns: (p1, z2_detached, p2, z1_detached)
+        If return_patches=True also returns (patches1, patches2) where patches shape = (B, N, D_in)
+        """
+        if batch is not None:
+            x1, x2 = self._siamese_pair(batch)
+        else:
+            assert x1 is not None and x2 is not None, "Provide x1/x2 or batch"
 
-        # Symmetrical output for loss calculation:
-        return p1, z2.detach(), p2, z1.detach()
+        # Extract raw encoder stage features and flatten to patches
+        # Use helper methods from the wrapper to get (B, N, D_in)
+        features1 = self.online_wrapper._extract_encoder_stage(self.online_wrapper.encoder, x1)
+        patches1, H1, W1 = self.online_wrapper._flatten_patches(features1)
 
+        features2 = self.online_wrapper._extract_encoder_stage(self.online_wrapper.encoder, x2)
+        patches2, H2, W2 = self.online_wrapper._flatten_patches(features2)
+
+        # Image-level projected representations
+        z1 = self._pool_patches_to_image(patches1)  # (B, proj_dim)
+        z2 = self._pool_patches_to_image(patches2)  # (B, proj_dim)
+
+        # Predictor outputs (trained) - use float32 for predictor stability
+        p1 = self.predictor(z1.to(dtype=torch.float32))
+        p2 = self.predictor(z2.to(dtype=torch.float32))
+
+        # Normalize predictor outputs before computing cosine similarity loss
+        p1 = F.normalize(p1, dim=1)
+        p2 = F.normalize(p2, dim=1)
+
+        # Detach targets for stop-gradient
+        z1_det = z1.detach()
+        z2_det = z2.detach()
+
+        if return_patches:
+            return p1, z2_det, p2, z1_det, patches1, patches2
+        return p1, z2_det, p2, z1_det
+
+    @staticmethod
+    def negative_cosine_similarity(p: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        """
+        p: (B, D') predicted vectors (already normalized)
+        z: (B, D) target vectors (should be normalized prior to use)
+        Returns mean negative cosine similarity per batch.
+        """
+        z = F.normalize(z, dim=1)
+        return - (p * z).sum(dim=1).mean()
+
+    def compute_loss(self, p1: torch.Tensor, z2_det: torch.Tensor, p2: torch.Tensor, z1_det: torch.Tensor) -> torch.Tensor:
+        """
+        Symmetric SimSiam loss:
+          loss = 0.5 * (neg_cos(p1, z2_det) + neg_cos(p2, z1_det))
+        """
+        loss1 = self.negative_cosine_similarity(p1, z2_det)
+        loss2 = self.negative_cosine_similarity(p2, z1_det)
+        return 0.5 * (loss1 + loss2)
 
 class SimCLRSegFormer(MSNSegFormerBase):
     """
