@@ -389,7 +389,7 @@ class SegFormerFeatureWrapper(nn.Module):
 
     @torch.no_grad()
     def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
-        outs = encoder_module(x.float()).to(self._device)
+        outs = encoder_module(x)
         feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
         return feat.last_hidden_state.to(self._device)  # (B, D, H', W')
 
