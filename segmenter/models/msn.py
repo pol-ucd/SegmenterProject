@@ -455,7 +455,8 @@ class SegFormerFeatureWrapper(nn.Module):
         device = x.device if self._device is None else self._device
 
         # Extract online features
-        features_online = self._extract_encoder_stage(self.encoder, x).logits  # (B, D, H', W')
+        features_online = self._extract_encoder_stage(self.encoder, x)
+        print(features_online) # (B, D, H', W')
         B, D, H, W = features_online.shape
 
         if not self._proj_built:
