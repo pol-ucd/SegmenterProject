@@ -41,6 +41,7 @@ class MSNLoss(nn.Module):
         # EMA Update: c_new = (m) * c_old + (1 - m) * c_batch_mean
         new_center = self.target_center.clone() * self.center_momentum + \
                      current_batch_center * (1.0 - self.center_momentum)
+        print(new_center.shape)
 
         # Copy the updated value back to the registered buffer
         self.target_center.copy_(new_center)
@@ -156,15 +157,15 @@ class InfoNCELoss(nn.Module):
         similarity_matrix = torch.einsum('i c h w, j c h w -> i j c h w',
                                          z_anchor, z_positive) / self.temperature
 
-        logits = similarity_matrix.reshape(B*B, -1)
+        logits = similarity_matrix.reshape(B * B, -1)
 
         # The label for the positive pair is always 0 (it is in the 0th column)
-        labels = torch.eye(B, dtype=torch.long, device=logits.device).reshape(B*B)
+        labels = torch.eye(B, dtype=torch.long, device=logits.device).reshape(B * B)
 
         # Apply Cross Entropy Loss (equivalent to InfoNCE)
         loss = F.cross_entropy(logits, labels)
 
-        return loss/(B*B)
+        return loss / (B * B)
 
 
 if __name__ == '__main__':
@@ -174,6 +175,13 @@ if __name__ == '__main__':
     z_anchor = torch.randint(-255, 255, (B, C, H, W)).float() / 255
     z_positive = torch.randint(-255, 255, (B, C, H, W)).float() / 255
 
-
-    loss = InfoNCELoss(temperature=temperature)(z_anchor, z_positive)
+    loss_fn = MSNLoss(temperature=0.05, center_momentum=0.1)
+    loss = loss_fn(z_anchor, z_positive)
+    loss = loss_fn(z_anchor, z_positive)
+    print(loss)
+    loss_fn.update_center(F.normalize(z_positive, dim=1))
+    print(loss)
+    loss_fn.update_center(F.normalize(z_positive, dim=1))
+    print(loss)
+    loss_fn.update_center(F.normalize(z_positive, dim=1))
     print(loss)

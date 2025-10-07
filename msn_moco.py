@@ -90,6 +90,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
             optimizer.zero_grad()
             # with autocast(device_type=get_default_device_type(), dtype=torch.float16):
             prediction_p, target_z_detached = model(x)
+            raw_norm = target_z_detached.norm(dim=1).mean().item()
+            print(f"Raw target embedding norm: {raw_norm:.2f}"
 
             # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
             loss = loss_fn(prediction_p, target_z_detached)
@@ -111,9 +113,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
             model.update_momentum_encoder()
             # loss_fn.update_center(target_z_detached)
             loss_fn.update_center(F.normalize(target_z_detached, dim=1))
-            if loss_fn.target_center is not None:
-                center_norm = loss_fn.target_center.norm().item()
-                logger.info(f"Center norm: {center_norm:.4f}")
 
             total_loss += loss.item()
 
