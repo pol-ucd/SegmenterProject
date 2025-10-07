@@ -456,7 +456,7 @@ class SegFormerFeatureWrapper(nn.Module):
 
         # Extract online features
         features_online = self._extract_encoder_stage(self.encoder, x).last_hidden_state
-        print(features_online) # (B, D, H', W')
+
         B, D, H, W = features_online.shape
 
         if not self._proj_built:
