@@ -188,6 +188,31 @@ def contrastive_loss(out_1, out_2):
     loss = (- torch.log(pos_sim / sim_matrix.sum(dim=-1))).mean()
     return loss
 
+def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
+    """
+    Basic NT-Xent (SimCLR) loss for a batch of size B.
+    z1, z2: (B, D) L2-normalized embeddings
+    Returns scalar loss averaged over 2B samples.
+    """
+    B = z1.shape[0]
+    z = torch.cat([z1, z2], dim=0)             # (2B, D)
+    sim = torch.matmul(z, z.T) / temperature   # (2B, 2B)
+    # mask out self similarities
+    labels = torch.arange(B, device=z.device)
+    labels = torch.cat([labels, labels], dim=0)
+
+    # create mask to ignore same-sample similarities
+    diag_mask = torch.eye(2 * B, device=z.device).bool()
+    sim_masked = sim.masked_fill(diag_mask, -9e15)
+
+    # positive pairs indices: i <-> i+B
+    positives = torch.cat([torch.arange(B, 2 * B), torch.arange(0, B)], dim=0).to(z.device)
+
+    numerator = torch.exp(sim[torch.arange(2 * B), positives])
+    denominator = torch.exp(sim_masked).sum(dim=1)
+    loss = -torch.log(numerator / denominator)
+    return loss.mean()
+
 
 
 if __name__ == '__main__':

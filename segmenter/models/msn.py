@@ -620,51 +620,84 @@ class SimSiamSegFormer(MSNSegFormerBase):
 
 class SimCLRSegFormer(MSNSegFormerBase):
     """
-    An implementation of SimCLR architecture using a single, shared encoder for both the anchor
-    and positive image streams.
+    SimCLR-style wrapper using the shared online_wrapper from MSNSegFormerBase.
 
-    The shared encoder approach is standard in simpler Contrastive Learning frameworks like SimCLR.
-    Invariance Learning: The core goal is to teach the single encoder to produce similar embeddings
-    (z_anchor, and z_positive) for two different, augmented views (the original image and the occluded image)
-    of the same underlying scene. By using a single set of weights, you maximize the gradient flow,
-    forcing those weights to learn invariance to the occlusion augmentation simultaneously from both paths.
-
-    Simultaneous Update: The loss is calculated based on the similarity between the positive pair,
-    and dissimilarity with all other pairs in the batch (negatives). When you backpropagate the loss,
-    the gradients from both the anchor view and the positive (occluded) view update the same shared
-    weights in the encoder at the same time.
-
-    There is no concept of a "momentum" encoder or separate updates.
+    forward returns:
+      - z_anchor: (B, proj_dim)
+      - z_positive: (B, proj_dim)
+    If return_patches=True, also returns:
+      - patches_anchor: (B, N, D_in) raw encoder patch features before projector
+      - patches_positive: (B, N, D_in)
     """
 
-    def __init__(self, pretrained_model:str=None, num_classes:int=2, k:int=3,
-                 tile_size=(64, 64)):
-        super().__init__(pretrained_model, num_classes=num_classes, k=k, tile_size=tile_size)
+    def __init__(
+        self,
+        pretrained_model: Optional[str] = None,
+        proj_dim: int = 128,
+        mask_ratio: float = 0.6,
+        stage_idx: int = -1,
+        block_size: int = 7,
+        seed: int = 0,
+        tile_size: Tuple[int,int] = (64,64),
+    ):
+        super().__init__(
+            pretrained_model=pretrained_model,
+            proj_dim=proj_dim,
+            mask_ratio=mask_ratio,
+            stage_idx=stage_idx,
+            block_size=block_size,
+            seed=seed,
+            tile_size=tile_size,
+        )
 
+    def _pool_patches_to_image(self, patches: torch.Tensor) -> torch.Tensor:
+        """
+        patches: (B, N, D_in) raw encoder patch features before projector
+        Returns: (B, proj_dim) projected and L2-normalized pooled vectors
+        """
+        B, N, D = patches.shape
+        flat = patches.reshape(B * N, D)
+        projector = self.online_wrapper.projector
+        proj_flat = projector(flat)                 # (B*N, proj_dim)
+        proj = proj_flat.reshape(B, N, -1)          # (B, N, proj_dim)
+        img_repr = proj.mean(dim=1)                 # (B, proj_dim)
+        img_repr = F.normalize(img_repr, dim=1)     # L2-normalize per-image
+        return img_repr
 
-    def _siamese_pair(self, batch):
-        # Create Siamese Pairs dynamically for the batch
-        x_anchor = self.augment(batch)
-
-        x_positive_mask, meta_positive = self.view_generator(x_anchor)
-
-        x_positive = x_anchor*(1 - x_positive_mask)
+    def _siamese_pair(self, batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Build anchor and positive masked views using base augment + view_generator.
+        Anchor is augmented (unmasked). Positive is augmented and occluded by view_generator.
+        """
+        x_anchor = self.augment(batch)                   # (B, C, H, W)
+        x_positive_masked, meta_positive = self.view_generator(x_anchor)
+        # If view_generator returns masked tiled input directly, use it as positive.
+        x_positive = x_positive_masked
         return x_anchor, x_positive
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor, return_patches: bool = False) -> Tuple:
         """
-        Processes anchor and positive pairs through the shared encoder and head.
-        :return: (Anchor Embeddings, Positive Embeddings)
+        Returns:
+          (z_anchor, z_positive) if return_patches=False
+          (z_anchor, z_positive, patches_anchor, patches_positive) if return_patches=True
+        z_... shapes: (B, proj_dim)
+        patches_... shapes: (B, N, D_in)
         """
-
         x_anchor, x_positive = self._siamese_pair(x)
-        # Anchor Stream
-        # [B, H*W, D] -> We need to pool or average it to [B, D]
-        z_anchor = self.online_encoder(x_anchor)
 
-        # Positive Stream
-        z_positive = self.online_encoder(x_positive)
+        # Extract raw encoder stage features (B, D, H', W') then flatten to (B, N, D)
+        features_anchor = self.online_wrapper._extract_encoder_stage(self.online_wrapper.encoder, x_anchor)
+        patches_anchor, H_a, W_a = self.online_wrapper._flatten_patches(features_anchor)
 
+        features_positive = self.online_wrapper._extract_encoder_stage(self.online_wrapper.encoder, x_positive)
+        patches_positive, H_p, W_p = self.online_wrapper._flatten_patches(features_positive)
+
+        # Project, mean-pool and normalize to image-level vectors
+        z_anchor = self._pool_patches_to_image(patches_anchor)
+        z_positive = self._pool_patches_to_image(patches_positive)
+
+        if return_patches:
+            return z_anchor, z_positive, patches_anchor, patches_positive
         return z_anchor, z_positive
 
 
