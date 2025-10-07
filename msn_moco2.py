@@ -66,7 +66,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
 
             optimizer.zero_grad()
             with torch.amp.autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu',
-                                    dtype=torch.float16,
+                                    dtype=torch.float,
                                     enabled=(scaler is not None)):
                 online_emb, target_emb = model(x, epoch=epoch, batch_index=batch_idx)
                 online_emb = online_emb.to(dtype=torch.float32)
