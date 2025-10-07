@@ -374,7 +374,7 @@ class SegFormerFeatureWrapper(nn.Module):
         self.mask_ratio = float(mask_ratio)
         self._proj_dim = int(proj_dim)
         self._proj_built = False
-        self._device = device
+        self._device = device if device is not None else torch.device("cpu")
         self.seed = int(seed)
         # block_size in number of patches along each spatial dim
         self.block_size = int(block_size)
@@ -391,7 +391,7 @@ class SegFormerFeatureWrapper(nn.Module):
     def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
         outs = encoder_module(x.float())
         feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
-        return feat.last_hidden_state.to(x.device)  # (B, D, H', W')
+        return feat.last_hidden_state.to(self.device)  # (B, D, H', W')
 
     def _flatten_patches(self, feat: torch.Tensor):
         B, D, H, W = feat.shape
@@ -403,7 +403,7 @@ class SegFormerFeatureWrapper(nn.Module):
         flat = patches.reshape(B * N, D)
         proj = projector(flat)  # (B*N, P)
         proj = F.normalize(proj, dim=1)
-        return proj.reshape(B, N, -1)
+        return proj.reshape(B, N, -1).to(self.device)
 
     def _spatial_block_mask(self, B: int, H: int, W: int, mask_ratio: float, block_size: int,
                             device: torch.device, batch_index: int, epoch: int):
