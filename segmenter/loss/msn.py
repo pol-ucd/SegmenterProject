@@ -41,7 +41,6 @@ class MSNLoss(nn.Module):
         # EMA Update: c_new = (m) * c_old + (1 - m) * c_batch_mean
         new_center = self.target_center.clone() * self.center_momentum + \
                      current_batch_center * (1.0 - self.center_momentum)
-        print(new_center.shape)
 
         # Copy the updated value back to the registered buffer
         self.target_center.copy_(new_center)

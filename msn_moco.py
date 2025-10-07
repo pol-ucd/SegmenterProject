@@ -90,8 +90,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
             optimizer.zero_grad()
             # with autocast(device_type=get_default_device_type(), dtype=torch.float16):
             prediction_p, target_z_detached = model(x)
-            raw_norm = target_z_detached.norm(dim=1).mean().item()
-            print(f"Raw target embedding norm: {raw_norm:.2f}")
 
             # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
             loss = loss_fn(prediction_p, target_z_detached)
@@ -261,7 +259,7 @@ def main():
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model, momentum=0.996).to(device)
 
-    pretrain_loss_fn = MSNLoss(temperature=0.05, center_momentum=0.99)
+    pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.01)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
