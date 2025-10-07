@@ -22,6 +22,7 @@ from torch import nn as nn
 from torch.nn import functional as F
 from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
+from segmenter.masks import apply_custom_augmentations
 from segmenter.models.base import MedianPool2d
 
 
