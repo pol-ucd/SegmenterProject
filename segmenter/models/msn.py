@@ -15,14 +15,13 @@ Mixed Siamese Networks for Bring Your Own Labels (BYOL) implementation
 """
 import random
 from copy import deepcopy
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
 from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
-from segmenter.masks import apply_custom_augmentations
 from segmenter.models.base import MedianPool2d
 
 
@@ -334,75 +333,127 @@ class SegFormerMSNWithMomentum(nn.Module):
     def output_dim(self):
         return self.projector[-1].out_features
 
-
+# -------------------------
+# Feature wrapper with block / spatial masking
+# -------------------------
 class SegFormerFeatureWrapper(nn.Module):
     """
-    Extract high-level encoder features from SegFormer, project, normalize, and
-    provide masking helpers. Returns (online_selected, target_all, mask, (H,W)).
+    Extracts encoder features from SegFormer, projects to `proj_dim`, normalizes,
+    and provides spatial-block masking for the online branch.
+
+    Forward returns:
+      - online_selected: (N_masked_total, proj_dim)  -> unmasked patches concatenated across batch
+      - target_all:      (B * N_patches, proj_dim)  -> all patches from target encoder (detached by caller)
+      - mask:            (B, N_patches) boolean mask where True denotes masked patches
+      - (H, W):          spatial dims of extracted stage
     """
-    def __init__(self, pretrained_name=None, proj_dim=128, stage_idx=-1, mask_ratio=0.6, device=None):
+
+    def __init__(
+        self,
+        pretrained_name: Optional[str] = None,
+        proj_dim: int = 128,
+        stage_idx: int = -1,
+        mask_ratio: float = 0.6,
+        block_size: int = 7,
+        device: Optional[torch.device] = None,
+        seed: int = 0,
+    ):
         super().__init__()
         cfg = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
-        self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-            pretrained_name, config=cfg, ignore_mismatched_sizes=True
-        ) if pretrained_name else SegformerForSemanticSegmentation(config=cfg)
+        self.base_model = (
+            SegformerForSemanticSegmentation.from_pretrained(
+                pretrained_name, config=cfg, ignore_mismatched_sizes=True
+            )
+            if pretrained_name
+            else SegformerForSemanticSegmentation(config=cfg)
+        )
 
         self.encoder = self.base_model.segformer.encoder
         self.stage_idx = stage_idx
-        # infer last_hidden_dim reliably from config or from encoder output later
-        try:
-            last_hidden_dim = cfg.hidden_sizes[self.stage_idx]
-        except Exception:
-            # fallback, will infer at runtime if needed
-            last_hidden_dim = None
-
-        # lazy projector: build on first forward if last_hidden_dim unknown
-        self._proj_dim = proj_dim
-        self._proj_built = False
-        self._last_hidden_dim = last_hidden_dim
-
         self.mask_ratio = float(mask_ratio)
+        self._proj_dim = int(proj_dim)
+        self._proj_built = False
         self._device = device
+        self.seed = int(seed)
+        # block_size in number of patches along each spatial dim
+        self.block_size = int(block_size)
 
-    def _build_projector(self, hidden_dim):
-        self._last_hidden_dim = hidden_dim
+    def _build_projector(self, hidden_dim: int):
         self.projector = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.Linear(hidden_dim, max(hidden_dim // 2, self._proj_dim)),
             nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim // 2, self._proj_dim)
+            nn.Linear(max(hidden_dim // 2, self._proj_dim), self._proj_dim),
         )
         self._proj_built = True
 
     @torch.no_grad()
-    def _extract_encoder_stage(self, encoder_module, x):
+    def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
         outs = encoder_module(x.float())
         feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
         return feat  # (B, D, H', W')
 
-    def _flatten_patches(self, feat):
+    def _flatten_patches(self, feat: torch.Tensor):
         B, D, H, W = feat.shape
         patches = feat.permute(0, 2, 3, 1).reshape(B, H * W, D)  # (B, N, D)
         return patches, H, W
 
-    def _apply_projector_norm(self, patches, projector):
+    def _apply_projector_and_norm(self, patches: torch.Tensor, projector: nn.Module):
         B, N, D = patches.shape
         flat = patches.reshape(B * N, D)
         proj = projector(flat)  # (B*N, P)
         proj = F.normalize(proj, dim=1)
         return proj.reshape(B, N, -1)
 
-    def _random_mask(self, B, N, mask_ratio, device):
-        n_mask = int(round(N * mask_ratio))
+    def _spatial_block_mask(self, B: int, H: int, W: int, mask_ratio: float, block_size: int,
+                            device: torch.device, batch_index: int, epoch: int):
+        """
+        Create a block/spatial mask per sample. The mask is on H x W grid of patches.
+        - mask_ratio: fraction of total patches to mask
+        - block_size: approximate size of each block in patches (square blocks)
+        Returns boolean mask of shape (B, H*W), True = masked.
+        Deterministic per epoch/batch/sample through a Torch Generator seeded from (seed, epoch, batch_index, sample_idx).
+        """
+        N = H * W
         mask = torch.zeros((B, N), dtype=torch.bool, device=device)
-        for i in range(B):
-            perm = torch.randperm(N, device=device)
-            mask[i, perm[:n_mask]] = True
-        return mask
+        n_mask_total = int(round(N * mask_ratio))
+        # Calculate number of blocks required (ceil)
+        block_area = block_size * block_size
+        n_blocks = max(1, (n_mask_total + block_area - 1) // block_area)
 
-    def forward(self, x, return_aux=False):
+        for i in range(B):
+            g = torch.Generator(device=device)
+            seed_i = (self.seed + epoch * 1_000_000 + batch_index * 10_000 + i) & 0xFFFFFFFF
+            g.manual_seed(seed_i)
+            # For each block, choose a top-left coordinate on the HxW grid uniformly
+            chosen = torch.zeros((H, W), dtype=torch.bool, device=device)
+            for _b in range(n_blocks):
+                top = int(torch.randint(0, max(1, H - block_size + 1), (1,), generator=g, device=device).item())
+                left = int(torch.randint(0, max(1, W - block_size + 1), (1,), generator=g, device=device).item())
+                bottom = min(H, top + block_size)
+                right = min(W, left + block_size)
+                chosen[top:bottom, left:right] = True
+                # Stop early if we've masked enough
+                if chosen.sum().item() >= n_mask_total:
+                    break
+            flat = chosen.reshape(-1)
+            # If we overshot the mask total, randomly unmask a few using the generator
+            current_masked = flat.sum().item()
+            if current_masked > n_mask_total:
+                # indices of True positions
+                true_idx = torch.nonzero(flat, as_tuple=False).flatten()
+                # shuffle and keep only the first n_mask_total
+                perm = true_idx[torch.randperm(true_idx.numel(), generator=g, device=device)]
+                keep = perm[:n_mask_total]
+                new_flat = torch.zeros_like(flat)
+                new_flat[keep] = True
+                flat = new_flat
+            mask[i, :] = flat
+        return mask  # (B, N)
+
+    def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
         device = x.device if self._device is None else self._device
 
-        # online features
+        # Extract online features
         features_online = self._extract_encoder_stage(self.encoder, x)  # (B, D, H', W')
         B, D, H, W = features_online.shape
 
@@ -410,175 +461,117 @@ class SegFormerFeatureWrapper(nn.Module):
             self._build_projector(D)
 
         patches_online, H, W = self._flatten_patches(features_online)  # (B, N, D)
-        online_proj = self._apply_projector_norm(patches_online, self.projector)  # (B, N, P)
+        online_proj = self._apply_projector_and_norm(patches_online, self.projector)  # (B, N, P)
 
-        # target features via self.encoder (used in MoCo as a deepcopy / no-grad)
+        # Extract target features (caller may call this wrapper on encoder_k)
         with torch.no_grad():
-            # Note: when used as target encoder this method will be called on target_encoder instance
             features_target = self._extract_encoder_stage(self.encoder, x)
             patches_target, _, _ = self._flatten_patches(features_target)
-            # projector may be on target wrapper as separate module; assume same name
-            target_proj = self._apply_projector_norm(patches_target, self.projector)
+            target_proj = self._apply_projector_and_norm(patches_target, self.projector)
             target_proj = target_proj.detach()
 
         B, N, P = online_proj.shape
-        mask = self._random_mask(B, N, self.mask_ratio, device=device)  # True = masked
+        mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size,
+                                        device=device, batch_index=batch_index, epoch=epoch)
         unmask = ~mask
 
-        online_selected_list = [online_proj[i, unmask[i], :] for i in range(B)]
-        online_selected = torch.cat(online_selected_list, dim=0)  # (sum_unmasked, P)
+        # Gather unmasked online patches and concatenate across batch dimension
+        online_selected = [online_proj[i, unmask[i], :] for i in range(B)]
+        if len(online_selected) == 0:
+            online_selected = torch.empty((0, P), device=device, dtype=online_proj.dtype)
+        else:
+            online_selected = torch.cat(online_selected, dim=0)  # (sum_unmasked, P)
+
         target_all = target_proj.reshape(B * N, P)  # (B*N, P)
 
         if return_aux:
             return online_selected, target_all, mask, (H, W)
         return online_selected, target_all
 
-
-#
-# class MSNSegFormerBase(nn.Module):
-#     def __init__(self, pretrained_model:str=None, num_classes:int=2, k:int=3,
-#                  tile_size: Tuple[int, int]=(64, 64),):
-#         super().__init__()
-#         self.num_classes = max(num_classes, 1)
-#         self.k = max(k, 1)
-#         self.tile_size = tile_size
-#         self.online_encoder = SegFormerAdapter(pretrained_model,
-#                                                num_classes=self.num_classes,
-#                                                k=self.k)
-#
-#         self.mask_composer = SurgicalMaskComposer()
-#         self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
-#                                                        self.tile_size,
-#                                                        return_metadata=True)
-#
-#     def forward(self, x:torch.Tensor):
-#         return self.online_encoder(x)
-#
-#     def output_dim(self):
-#         return self.num_classes
-#
-#     @staticmethod
-#     def augment(batch):
-#         batch_anchor = []
-#         for image in batch:
-#             # Apply baseline augmentations to the raw image BEFORE masking
-#             augmented = apply_custom_augmentations(image.clone())
-#             # Anchor (View 1) is the fully augmented, but unmasked image.
-#             batch_anchor.append(augmented)
-#         return torch.stack(batch_anchor)
-
+# -------------------------
+# Base class for MSN using Segformer backbone
+# -------------------------
 class MSNSegFormerBase(nn.Module):
-    def __init__(self, pretrained_model:str=None, proj_dim=128, mask_ratio=0.6, tile_size=(64,64)):
+    def __init__(
+        self,
+        pretrained_model: Optional[str] = None,
+        proj_dim: int = 128,
+        mask_ratio: float = 0.6,
+        stage_idx: int = -1,
+        block_size: int = 7,
+        seed: int = 0,
+        tile_size: Tuple[int, int] = (64, 64),
+    ):
         super().__init__()
         self.tile_size = tile_size
-        # feature wrapper (online). The momentum/target copy will be created in subclass
-        self.online_encoder = SegFormerFeatureWrapper(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio)
+
+        self.online_wrapper = SegFormerFeatureWrapper(
+            pretrained_name=pretrained_model,
+            proj_dim=proj_dim,
+            stage_idx=stage_idx,
+            mask_ratio=mask_ratio,
+            block_size=block_size,
+            seed=seed,
+        )
+
         self.mask_composer = SurgicalMaskComposer()
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer, self.tile_size, return_metadata=True)
 
-    def forward(self, x):
-        return self.online_encoder(x)  # returns online_selected, target_all if called on online wrapper
+    def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0):
+        return self.online_wrapper(x, epoch=epoch, batch_index=batch_index)
 
-#
-# class MoCoSiameseNetwork(MSNSegFormerBase):
-#     """
-#     Implements a MoCo/BYOL/MSN-style architecture with Online and Target Encoders,
-#     now including the logic to mask online features.
-#     """
-#
-#     def __init__(self, pretrained_model, num_classes:int=2, k:int=3,
-#                  tile_size=(64, 64), temperature=0.2, momentum=0.999):
-#         super().__init__(pretrained_model, num_classes=num_classes, k=k, tile_size=tile_size)
-#         self.momentum = momentum
-#         self.temperature = temperature
-#
-#         # Create online and target networks
-#         # NOTE: SegformerModel needs an input of shape [B, C, H, W] when passing `pixel_values`
-#         # self.online_encoder = SegformerModel.from_pretrained(pretrained_model)
-#         self.online_encoder = SegFormerAdapter(pretrained_model)
-#
-#         self.encoder_k = deepcopy(self.online_encoder)
-#         self._init_momentum_encoder()
-#
-#         self.mask_composer = SurgicalMaskComposer()
-#         self.view_generator = MaskedTiledViewGenerator(self.mask_composer,
-#                                                        self.tile_size,
-#                                                        return_metadata=True)
-#
-#     def _init_momentum_encoder(self):
-#         for param_q, param_k in zip(self.online_encoder.parameters(), self.encoder_k.parameters()):
-#             param_k.data.copy_(param_q.data)
-#             param_k.requires_grad = False
-#
-#     @torch.no_grad()
-#     def update_momentum_encoder(self):
-#         """
-#         Performs the Exponential Moving Average (EMA) update for both the target encoder and target head.
-#         """
-#         for param_q, param_k in zip(self.online_encoder.parameters(), self.encoder_k.parameters()):
-#             param_k.data = param_k.data * self.momentum + param_q.data * (1. - self.momentum)
-#
-#     def forward(self, x):
-#         # Generate masked views
-#         x_q, meta_q = self.view_generator(x)
-#         x_k, meta_k = self.view_generator(self.augment(x))
-#
-#         # Encode query
-#         q = self.online_encoder(x_q)  # (B, D)
-#         q = F.normalize(q, dim=1)
-#
-#         # Encode key (no grad)
-#         with torch.no_grad():
-#             self.update_momentum_encoder()
-#             k = self.encoder_k(x_k)
-#             k = F.normalize(k, dim=1)
-#
-#         return q, k
-#
+
 
 class MoCoSiameseNetwork(MSNSegFormerBase):
-    def __init__(self, pretrained_model, proj_dim=128, mask_ratio=0.6, momentum=0.99, tile_size=(64,64)):
-        super().__init__(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio, tile_size=tile_size)
-        self.momentum = momentum
+    def __init__(
+        self,
+        pretrained_model: Optional[str],
+        proj_dim: int = 128,
+        mask_ratio: float = 0.6,
+        block_size: int = 7,
+        momentum: float = 0.99,
+        stage_idx: int = -1,
+        seed: int = 0,
+        tile_size: Tuple[int, int] = (64, 64),
+    ):
+        super().__init__(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio,
+                         stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
+        self.momentum = float(momentum)
 
-        # online wrapper already created by base as self.online_encoder (SegFormerFeatureWrapper)
-        # create the momentum copy (encoder + projector)
-        self.encoder_k = deepcopy(self.online_encoder)
-        # ensure the momentum copy uses separate params and gradients disabled
-        for p in self.encoder_k.parameters():
-            p.requires_grad = False
+        self.encoder_k = deepcopy(self.online_wrapper)
+        self._set_requires_grad(self.encoder_k, False)
+
+    @staticmethod
+    def _set_requires_grad(model: nn.Module, requires_grad: bool):
+        for p in model.parameters():
+            p.requires_grad = requires_grad
 
     @torch.no_grad()
     def update_momentum_encoder(self):
         m = self.momentum
-        # update encoder params and projector params
-        for param_q, param_k in zip(self.online_encoder.encoder.parameters(), self.encoder_k.encoder.parameters()):
-            param_k.data.mul_(m).add_(param_q.data * (1. - m))
-        # projector update (if projector exists)
-        for param_q, param_k in zip(self.online_encoder.projector.parameters(), self.encoder_k.projector.parameters()):
-            param_k.data.mul_(m).add_(param_q.data * (1. - m))
+        for q, k in zip(self.online_wrapper.encoder.parameters(), self.encoder_k.encoder.parameters()):
+            k.data.mul_(m).add_(q.data * (1.0 - m))
+        for q, k in zip(self.online_wrapper.projector.parameters(), self.encoder_k.projector.parameters()):
+            k.data.mul_(m).add_(q.data * (1.0 - m))
 
-    def forward(self, x):
-        # Generate views (your existing view logic)
+    def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0):
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(self.augment(x))
 
-        # Online branch: use online encoder wrapper forward.
-        # The online wrapper's forward returns (online_selected, target_all) but target_all here
-        # will be computed using the *online* encoder's own encoder; for correct MoCo we call the wrappers separately.
-        online_selected, _ = self.online_encoder(x_q)  # returns masked online embeddings
-
-        # Target branch: call the encoder_k wrapper but ensure no grads
+        online_selected, _ = self.online_wrapper(x_q, epoch=epoch, batch_index=batch_index)
         with torch.no_grad():
-            # don't update momentum here; call update_momentum_encoder AFTER optimizer.step()
-            target_selected = None
-            # encoder_k.forward produces online_selected, target_all too; we want target_all from encoder_k
-            _, target_all = self.encoder_k(x_k)
+            _, target_all = self.encoder_k(x_k, epoch=epoch, batch_index=batch_index)
             target_all = target_all.detach()
 
-        # online_selected and target_all are ready for loss (both normalized)
-        # Note: online_selected shape = (N_masked_total, D), target_all = (B*N, D)
         return online_selected, target_all
+
+    @staticmethod
+    def augment(batch):
+        batch_anchor = []
+        for image in batch:
+            augmented = apply_custom_augmentations(image.clone())
+            batch_anchor.append(augmented)
+        return torch.stack(batch_anchor)
 
 
 class SimSiamSegFormer(MSNSegFormerBase):

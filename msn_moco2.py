@@ -60,42 +60,37 @@ def pretrain_step(model: MoCoSiameseNetwork,
     max_boredom = 10
     best_model = None
     for epoch in range(num_epochs):
-        for batch_images in tqdm(dataloader):
+        for batch_idx, batch_images in enumerate(dataloader):
+            x = batch_images["images"].to(device)
 
-            x = batch_images['images'].to(device)
-
-            # with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-            # prediction_p, target_z_detached = model(x)
-
-            # forward
-            q, k = model(x)  # q: (N_masked_total, D), k: (B*N, D)
-
-            # loss
-            loss = loss_fn(q, k)  # MSNLoss expects normalized inputs; wrapper already normalizes projector output
-
-            # optimizer.zero_grad()
             optimizer.zero_grad()
+            with torch.cuda.amp.autocast(enabled=(scaler is not None)):
+                online_emb, target_emb = model(x, epoch=epoch, batch_index=batch_idx)
+                online_emb = online_emb.to(dtype=torch.float32)
+                target_emb = target_emb.to(dtype=torch.float32)
+
+                loss = loss_fn(online_emb, target_emb)
 
             if scaler is not None:
-                scaler.scale(loss).backward()  # Fails on MPS, works on CPU/CUDA
+                scaler.scale(loss).backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
-            # CRITICAL: AFTER optimizer step
-            # Update the Target Encoder weights using EMA, and,
-            # Update the MSNLoss() Target Center (AFTER forward/backward)
-            # This keeps the target center stable and prevents collapse.
-            model.update_momentum_encoder() # EMA update of target params
-            # loss_fn.update_center(target_z_detached)
-
-            # ensure k is float32 and detached
-            loss_fn.update_center(k.detach().to(torch.float32))
+            # AFTER optimizer.step: EMA then center update
+            model.update_momentum_encoder()
+            with torch.no_grad():
+                loss_fn.update_center(target_emb.detach().to(torch.float32))
 
             total_loss += loss.item()
+
+            print(
+                f"Epoch {epoch} Batch {batch_idx} Loss {loss.item():.4f} | "
+                f"Center norm {loss_fn.target_center.norm().item() if getattr(loss_fn, 'target_center', None) is not None else 'None'}")
 
         if scheduler is not None:
             scheduler.step()
