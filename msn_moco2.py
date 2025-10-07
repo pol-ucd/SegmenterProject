@@ -8,7 +8,7 @@ from typing import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import autocast
+from torch import autocast, GradScaler
 from tqdm import tqdm
 
 from segmenter.core import Config
@@ -42,12 +42,13 @@ def pretrain_step(model: MoCoSiameseNetwork,
                   dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer,
                   loss_fn: nn.Module,
+                  scaler=None,
                   device: torch.device,
                   num_epochs=100):
     logger = logging.getLogger(__name__)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
-    scaler = None
+    scaler = GradScaler()
     if torch.cuda.is_available():
         scaler = torch.amp.GradScaler()
 
