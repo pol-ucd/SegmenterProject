@@ -88,11 +88,11 @@ def pretrain_step(model: MoCoSiameseNetwork,
             x = batch_images['images'].to(device)
 
             optimizer.zero_grad()
-            with autocast(device_type=get_default_device_type(), dtype=torch.float16):
-                prediction_p, target_z_detached = model(x)
+            # with autocast(device_type=get_default_device_type(), dtype=torch.float16):
+            prediction_p, target_z_detached = model(x)
 
-                # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
-                loss = loss_fn(prediction_p, target_z_detached)
+            # Similarity loss (e.g., L2/MSE or Cosine Similarity Loss)
+            loss = loss_fn(prediction_p, target_z_detached)
 
             # optimizer.zero_grad()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
