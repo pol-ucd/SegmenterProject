@@ -506,8 +506,6 @@ class MSNSegFormerBase(nn.Module):
     ):
         super().__init__()
         self.tile_size = tile_size
-        self._device = next(self.parameters()).device
-        print(self._device)
 
         self.online_wrapper = SegFormerFeatureWrapper(
             pretrained_name=pretrained_model,
