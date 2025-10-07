@@ -391,7 +391,7 @@ class SegFormerFeatureWrapper(nn.Module):
     def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
         outs = encoder_module(x.float())
         feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
-        return feat.last_hidden_state  # (B, D, H', W')
+        return feat.last_hidden_state.to(x.device)  # (B, D, H', W')
 
     def _flatten_patches(self, feat: torch.Tensor):
         B, D, H, W = feat.shape
