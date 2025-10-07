@@ -522,7 +522,7 @@ class MSNSegFormerBase(nn.Module):
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0):
         return self.online_wrapper(x, epoch=epoch, batch_index=batch_index)
 
-w
+
 class MoCoSiameseNetwork(MSNSegFormerBase):
     def __init__(
         self,
