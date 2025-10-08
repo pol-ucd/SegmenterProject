@@ -69,8 +69,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
                                     enabled=(scaler is not None)):
                 online_emb, target_emb = model(x, epoch=epoch, batch_index=batch_idx)
                 # ensure float32 and detached target for center update
-                online_emb = F.normalize(online_emb.to(torch.float32))
-                target_emb = F.normalize(target_emb.to(torch.float32)).detach()
+                online_emb = F.normalize(online_emb.to(torch.float32), dim=-1)
+                target_emb = F.normalize(target_emb.to(torch.float32), dim=-1).detach()
                 loss = loss_fn(online_emb, target_emb)
 
             if scaler is not None:
