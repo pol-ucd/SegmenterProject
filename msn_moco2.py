@@ -69,8 +69,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
                                     enabled=(scaler is not None)):
                 online_emb, target_emb = model(x, epoch=epoch, batch_index=batch_idx)
                 # ensure float32 and detached target for center update
-                online_emb = online_emb.to(torch.float32)
-                target_emb = target_emb.to(torch.float32).detach()
+                online_emb = F.normalize(online_emb.to(torch.float32))
+                target_emb = F.normalize(target_emb.to(torch.float32)).detach()
                 loss = loss_fn(online_emb, target_emb)
 
             if scaler is not None:
@@ -241,8 +241,8 @@ def main():
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model, momentum=0.996).to(device)
 
-    # pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.95)
-    pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
+    pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.95)
+    # pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
