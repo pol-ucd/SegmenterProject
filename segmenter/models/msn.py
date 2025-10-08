@@ -458,8 +458,6 @@ class SegFormerFeatureWrapper(nn.Module):
         features_online = self._extract_encoder_stage(self.encoder, x)
 
         B, D, H, W = features_online.shape
-        print(B, D, H, W)
-        print(features_online.dtype)
 
         if not self._proj_built:
             self._build_projector(D)
