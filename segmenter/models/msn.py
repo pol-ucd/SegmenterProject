@@ -575,10 +575,6 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
             batch_anchor.append(augmented)
         return torch.stack(batch_anchor)
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from typing import Optional, Tuple
 
 class SimSiamSegFormer(MSNSegFormerBase):
     """
