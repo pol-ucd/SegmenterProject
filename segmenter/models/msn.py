@@ -402,10 +402,10 @@ class SegFormerFeatureWrapper(nn.Module):
 
     def _apply_projector_and_norm(self, patches: torch.Tensor, projector: nn.Module):
         B, N, D = patches.shape
-        flat = patches.reshape(B * N, D)
+        flat = patches.reshape(B * N, D).float()
         proj = projector(flat)  # (B*N, P)
         proj = F.normalize(proj, dim=1)
-        return proj.reshape(B, N, -1).to(self._device)
+        return proj.reshape(B, N, -1)  #.to(self._device)
 
     def _spatial_block_mask(self, B: int, H: int, W: int, mask_ratio: float, block_size: int,
                             device: torch.device, batch_index: int, epoch: int):
