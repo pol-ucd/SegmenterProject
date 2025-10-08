@@ -3,17 +3,13 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import autocast, GradScaler
-from tqdm import tqdm
 
 from segmenter.core import Config, set_default_device, get_default_device, get_default_device_type
 from segmenter.loss import DiceLoss, MSNLoss
-# from segmenter.loss.msn import SimSiamLoss
 from segmenter.models.msn import MoCoSiameseNetwork, SegFormerAdapter
 from segmenter.core.torch import get_default_device_type
 from segmenter.utils.msn import load_data
@@ -50,8 +46,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     scaler = None
-    # if torch.cuda.is_available():
-    #     scaler = GradScaler()
+    if torch.cuda.is_available():
+        scaler = torch.amp.GradScaler()
 
     model.train()
     total_loss = 0
