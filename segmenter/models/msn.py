@@ -363,10 +363,11 @@ class SegFormerFeatureWrapper(nn.Module):
         cfg = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
         self.base_model = (
             SegformerForSemanticSegmentation.from_pretrained(
-                pretrained_name, config=cfg, ignore_mismatched_sizes=True
+                pretrained_name, config=cfg, ignore_mismatched_sizes=True,
+                torch_dtype=torch.float
             )
             if pretrained_name
-            else SegformerForSemanticSegmentation(config=cfg)
+            else SegformerForSemanticSegmentation(config=cfg, torch_dtype=torch.float)
         )
 
         self.encoder = self.base_model.segformer.encoder
