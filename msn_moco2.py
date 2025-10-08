@@ -11,16 +11,16 @@ import torch.nn.functional as F
 from torch import autocast, GradScaler
 from tqdm import tqdm
 
-from segmenter.core import Config
+from segmenter.core import Config, set_default_device, get_default_device, get_default_device_type
 from segmenter.loss import DiceLoss, MSNLoss
 # from segmenter.loss.msn import SimSiamLoss
 from segmenter.models.msn import MoCoSiameseNetwork, SegFormerAdapter
-from segmenter.torch_utils import get_default_device_type
+from segmenter.core.torch import get_default_device_type
 from segmenter.utils.msn import load_data
 
 # Configuration
 config = Config("config/msn_common.json")
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
 learning_rate = 1e-05
@@ -38,12 +38,13 @@ TOTAL_STEPS = TOTAL_EPOCHS * STEPS_PER_EPOCH
 
 prefix = 'msn_moco'
 
+
 def pretrain_step(model: MoCoSiameseNetwork,
                   dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer,
                   loss_fn: nn.Module,
                   scaler=None,
-                  device: torch.device=None,
+                  device: torch.device = None,
                   num_epochs=100):
     logger = logging.getLogger(__name__)
 
@@ -63,12 +64,12 @@ def pretrain_step(model: MoCoSiameseNetwork,
     for epoch in range(num_epochs):
         for batch_idx, batch_images in enumerate(dataloader):
             x = batch_images["images"].to(device)
-            print("pretrain, x.device: ", x.device)
+            print("Pretrain x.device: ", x.device)
             optimizer.zero_grad()
             with torch.amp.autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu',
                                     dtype=torch.float16,
                                     enabled=(scaler is not None)):
-                online_emb, target_emb = model(x.cuda(), epoch=epoch, batch_index=batch_idx)
+                online_emb, target_emb = model(x, epoch=epoch, batch_index=batch_idx)
                 online_emb = online_emb.to(dtype=torch.float32).to(device)
                 target_emb = target_emb.to(dtype=torch.float32).to(device)
 
@@ -225,6 +226,8 @@ def validate_step(model: SegFormerAdapter, dataloader: torch.utils.data.DataLoad
 
 def main():
     logger = logging.getLogger()
+    device = get_default_device()
+    set_default_device(device)
     logger.info(f"Starting pretraining run {prefix.upper()}")
 
     logger.info(f"Using device: {device}")
@@ -253,7 +256,7 @@ def main():
         pretrain_dataloader,
         pretrain_optimizer,
         pretrain_loss_fn,
-        device
+        device=device
     )
 
     logger.info("Completed Pre-training Phase (Siamese Network) ---")

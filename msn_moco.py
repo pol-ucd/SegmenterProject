@@ -15,7 +15,7 @@ from segmenter.core import Config
 from segmenter.loss import DiceLoss, MSNLoss
 # from segmenter.loss.msn import SimSiamLoss
 from segmenter.models.msn import MoCoSiameseNetwork, SegFormerAdapter
-from segmenter.torch_utils import get_default_device_type
+from segmenter.core.torch import get_default_device_type
 from segmenter.utils.msn import load_data
 
 # Configuration
