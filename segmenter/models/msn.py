@@ -403,7 +403,7 @@ class SegFormerFeatureWrapper(nn.Module):
     def _apply_projector_and_norm(self, patches: torch.Tensor, projector: nn.Module):
         B, N, D = patches.shape
         flat = patches.reshape(B * N, D).float()
-        proj = projector(flat)  # (B*N, P)
+        proj = projector(flat.half())  # (B*N, P)
         proj = F.normalize(proj, dim=1)
         return proj.reshape(B, N, -1)  #.to(self._device)
 
