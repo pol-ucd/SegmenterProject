@@ -465,7 +465,8 @@ class SegFormerFeatureWrapper(nn.Module):
             self._build_projector(D)
 
         patches_online, H, W = self._flatten_patches(features_online)  # (B, N, D)
-        online_proj = self._apply_projector_and_norm(patches_online, self.projector)  # (B, N, P)
+        online_proj = self._apply_projector_and_norm(patches_online,
+                                                     self.projector)  # (B, N, P)
 
         # Extract target features (caller may call this wrapper on encoder_k)
         with torch.no_grad():

@@ -28,5 +28,5 @@ def set_default_device(device: torch.device):
 
     if torch.amp.autocast_mode.is_autocast_available(device.type):
         torch.autocast(device.type,
-                       dtype=torch.bfloat16).__enter__()
+                       dtype=torch.bfloat32).__enter__()
     return
