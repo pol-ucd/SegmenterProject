@@ -389,8 +389,6 @@ class SegFormerFeatureWrapper(nn.Module):
 
     @torch.no_grad()
     def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
-        print("x.device: ", x.device)
-        print("encoder_module: ", next(encoder_module.parameters()).device)
         outs = encoder_module(x)
         feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
         return feat.last_hidden_state.to(self._device)  # (B, D, H', W')
@@ -403,7 +401,7 @@ class SegFormerFeatureWrapper(nn.Module):
     def _apply_projector_and_norm(self, patches: torch.Tensor, projector: nn.Module):
         B, N, D = patches.shape
         flat = patches.reshape(B * N, D).float()
-        proj = projector(flat.half())  # (B*N, P)
+        proj = projector(flat)  # (B*N, P)
         proj = F.normalize(proj, dim=1)
         return proj.reshape(B, N, -1)  #.to(self._device)
 
@@ -460,6 +458,8 @@ class SegFormerFeatureWrapper(nn.Module):
         features_online = self._extract_encoder_stage(self.encoder, x)
 
         B, D, H, W = features_online.shape
+        print(B, D, H, W)
+        print(features_online.dtype)
 
         if not self._proj_built:
             self._build_projector(D)

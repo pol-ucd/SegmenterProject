@@ -64,7 +64,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
     for epoch in range(num_epochs):
         for batch_idx, batch_images in enumerate(dataloader):
             x = batch_images["images"].to(device)
-            print("Pretrain x.device: ", x.device)
             optimizer.zero_grad()
             with torch.amp.autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu',
                                     dtype=torch.float16,
