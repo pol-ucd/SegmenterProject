@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from segmenter.core import Config, set_default_device, get_default_device, get_default_device_type
 from segmenter.loss import DiceLoss, MSNLoss
@@ -132,7 +133,7 @@ def finetune_step(model: SegFormerAdapter, dataloader: torch.utils.data.DataLoad
     max_boredom = 10
     best_model = None
     for epoch in range(num_epochs):
-        for inputs, labels in dataloader:  # inputs=[B,C,H,W], labels=[B,H,W]
+        for inputs, labels in tqdm(dataloader):  # inputs=[B,C,H,W], labels=[B,H,W]
             inputs, labels = inputs.to(device), labels.to(device).long()
 
             optimizer.zero_grad()
