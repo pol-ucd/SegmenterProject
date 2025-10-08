@@ -24,7 +24,7 @@ def set_default_device(device: torch.device):
     if device.type == "cuda":
         torch.set_default_dtype(torch.float16)
     elif device.type == "mps" or device.type == "cpu":
-        torch.set_default_dtype(torch.float32)
+        torch.set_default_dtype(torch.float)
 
     if torch.amp.autocast_mode.is_autocast_available(device.type):
         torch.autocast(device.type,
