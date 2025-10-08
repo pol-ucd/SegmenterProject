@@ -87,9 +87,9 @@ def pretrain_step(model: MoCoSiameseNetwork,
 
             total_loss += loss.item()
 
-            print(
-                f"Epoch {epoch} Batch {batch_idx} Loss {loss.item():.4f} | "
-                f"Center norm {loss_fn.target_center.norm().item() if getattr(loss_fn, 'target_center', None) is not None else 'None'}")
+            # print(
+            #     f"Epoch {epoch} Batch {batch_idx} Loss {loss.item():.4f} | "
+            #     f"Center norm {loss_fn.target_center.norm().item() if getattr(loss_fn, 'target_center', None) is not None else 'None'}")
 
         if scheduler is not None:
             scheduler.step()
