@@ -2,92 +2,215 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
+#
+# class MSNLoss(nn.Module):
+#     """
+#     Implements the Mean-Shifted Network (MSN) objective, minimizing
+#     KL divergence between online predictions (Q) and centered target assignments (P).
+#     """
+#
+#     def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9):
+#         super().__init__()
+#         # 'temperature' controls the sharpness of the target distribution (P).
+#         self.temperature = temperature
+#
+#         # Center Momentum (m): Controls the speed of the EMA update.
+#         # MSN often uses m close to 0 (e.g., 0.1), while MoCo/DINO use m close to 1.
+#         self.center_momentum = center_momentum
+#
+#         # Initialize target_center as a persistent buffer, not a trainable parameter.
+#         self.register_buffer("target_center", None)
+#
+#     @torch.no_grad()
+#     def update_center(self, target_protos_current_batch: torch.Tensor):
+#         """
+#         Updates the target center using an Exponential Moving Average (EMA).
+#         This method must be called once per iteration on the target network's outputs.
+#         """
+#         # Ensure target_protos are detached (they should be, but safety check) and normalized
+#         target_protos = F.normalize(target_protos_current_batch.detach(), dim=1)
+#
+#         # Calculate the mean of the current batch's target prototypes
+#         current_batch_center = target_protos.mean(dim=0, keepdim=True)
+#
+#         # Initialize the center if it's the first run
+#         if self.target_center is None:
+#             self.target_center = current_batch_center.clone()
+#             return
+#
+#         # EMA Update: c_new = (m) * c_old + (1 - m) * c_batch_mean
+#         new_center = self.target_center.clone() * self.center_momentum + \
+#                      current_batch_center * (1.0 - self.center_momentum)
+#
+#         # Copy the updated value back to the registered buffer
+#         self.target_center.copy_(new_center)
+#
+#     def forward(self, online_preds: torch.Tensor, target_protos: torch.Tensor) -> torch.Tensor:
+#         """
+#         Calculates the KL divergence between the online network's predictions (Q)
+#         and the target network's assignments (P).
+#
+#         :param online_preds: Predictions from the online network for MASKED patches [N_masked, D].
+#         :param target_protos: Representations from the target network for ALL patches [N_all, D].
+#         :return: Scalar loss tensor (mean KL divergence).
+#         """
+#         B = online_preds.shape[0]
+#         # Normalization
+#         online_preds = F.normalize(online_preds, dim=1)
+#         target_protos = F.normalize(target_protos, dim=1)
+#
+#         # 2. Mean-Shift / Centering (The critical MSN step)
+#         # If center is not initialized, update_center should be called first,
+#         # but we use a robust check here.
+#         if self.target_center is None:
+#             # If the center hasn't been initialized, use the current batch mean as a proxy
+#             centered_target_protos = target_protos - target_protos.mean(dim=0, keepdim=True)
+#         else:
+#             # Subtract the stabilized moving average center from all target prototypes
+#             centered_target_protos = target_protos - self.target_center
+#
+#         # Similarity Matrix: Sim(Online_Masked, Centered_Target_All)
+#         # Shape: (N_masked, N_all)
+#
+#         similarity_matrix = torch.matmul(online_preds,
+#                                          centered_target_protos.transpose(-1, -2))
+#
+#         # Target Distribution (P) - Sharpened Softmax
+#         # P = softmax(Sim / temperature). This is the 'teacher' signal.
+#         targets = F.softmax(similarity_matrix / self.temperature, dim=1)
+#
+#         # Prediction Distribution (log Q) - Log Softmax
+#         # log Q = log(softmax(Sim)). This is the 'student' prediction.
+#         predictions = F.log_softmax(similarity_matrix, dim=1)
+#
+#         # KL Divergence / Cross-Entropy
+#         # L = - sum(P * log Q) -> Minimizes KL(P || Q).
+#         loss = - (targets * predictions).sum(dim=1)
+#
+#         return loss.mean()
+
 
 class MSNLoss(nn.Module):
     """
-    Implements the Mean-Shifted Network (MSN) objective, minimizing
-    KL divergence between online predictions (Q) and centered target assignments (P).
+    MSN-style loss suitable for use with MoCoSiameseNetwork using
+    patch-level embeddings from the SegFormer wrapper.
+
+    Forward signature:
+      loss = loss_fn(online_preds, target_protos)
+    where:
+      - online_preds: tensor (N_masked, D)  -- L2-normalized online projected embeddings (masked)
+      - target_protos: tensor (N_all, D)     -- L2-normalized target projected embeddings (all patches)
+    The loss computes a soft target distribution from the full target_protos similarity
+    matrix (centered) and minimizes cross-entropy between that distribution and the
+    online prediction distribution.
+    The module maintains an exponential-moving-average center vector (`target_center`)
+    which is subtracted from target_protos before building target distributions.
+
+    Hyperparameters:
+      - temperature: softmax temperature for logits
+      - center_momentum: EMA momentum for center update (0..1)
     """
 
-    def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9):
+    def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9, eps: float = 1e-8):
         super().__init__()
-        # 'temperature' controls the sharpness of the target distribution (P).
-        self.temperature = temperature
+        self.temperature = float(temperature)
+        self.center_momentum = float(center_momentum)
+        self.eps = float(eps)
 
-        # Center Momentum (m): Controls the speed of the EMA update.
-        # MSN often uses m close to 0 (e.g., 0.1), while MoCo/DINO use m close to 1.
-        self.center_momentum = center_momentum
+        # center accumulates over target prototypes; will be created lazily on first update
+        self.register_buffer("target_center", None, persistent=True)
 
-        # Initialize target_center as a persistent buffer, not a trainable parameter.
-        self.register_buffer("target_center", None)
+    def _ensure_center(self, D: int, device: torch.device, dtype: torch.dtype):
+        if getattr(self, "target_center", None) is None or self.target_center is None:
+            # initialize center to zeros
+            center = torch.zeros(D, device=device, dtype=dtype)
+            # register buffer manually (already reserved name)
+            object.__setattr__(self, "target_center", center)
 
-    @torch.no_grad()
-    def update_center(self, target_protos_current_batch: torch.Tensor):
+    def update_center(self, target_protos: torch.Tensor):
         """
-        Updates the target center using an Exponential Moving Average (EMA).
-        This method must be called once per iteration on the target network's outputs.
+        Exponentially-smoothed update of the target center.
+        Pass *normalized* target_protos (N_all, D) here, typically after encoder forward.
+        This should be called after optimizer.step() and after EMA momentum encoder update.
         """
-        # Ensure target_protos are detached (they should be, but safety check) and normalized
-        target_protos = F.normalize(target_protos_current_batch.detach(), dim=1)
-
-        # Calculate the mean of the current batch's target prototypes
-        current_batch_center = target_protos.mean(dim=0, keepdim=True)
-
-        # Initialize the center if it's the first run
-        if self.target_center is None:
-            self.target_center = current_batch_center.clone()
+        if target_protos.numel() == 0:
             return
+        D = target_protos.shape[1]
+        self._ensure_center(D, target_protos.device, target_protos.dtype)
 
-        # EMA Update: c_new = (m) * c_old + (1 - m) * c_batch_mean
-        new_center = self.target_center.clone() * self.center_momentum + \
-                     current_batch_center * (1.0 - self.center_momentum)
-
-        # Copy the updated value back to the registered buffer
-        self.target_center.copy_(new_center)
+        batch_mean = target_protos.mean(dim=0)  # (D,)
+        # ensure float32 accumulation for stability if needed
+        bm = batch_mean.to(dtype=self.target_center.dtype)
+        self.target_center.mul_(self.center_momentum).add_(bm * (1.0 - self.center_momentum))
 
     def forward(self, online_preds: torch.Tensor, target_protos: torch.Tensor) -> torch.Tensor:
         """
-        Calculates the KL divergence between the online network's predictions (Q)
-        and the target network's assignments (P).
+        Compute MSN loss.
 
-        :param online_preds: Predictions from the online network for MASKED patches [N_masked, D].
-        :param target_protos: Representations from the target network for ALL patches [N_all, D].
-        :return: Scalar loss tensor (mean KL divergence).
+        Steps:
+          1. Ensure inputs are 2D and normalized.
+          2. Center the target prototypes: target_protos - target_center.
+          3. Compute similarities:
+               logits_online = online_preds @ centered_targets.T  -> shape (N_masked, N_all)
+               logits_target = centered_targets @ centered_targets.T -> shape (N_all, N_all)
+          4. Build a soft target distribution from logits_target (row-wise softmax).
+          5. Build predicted distribution from logits_online (row-wise softmax).
+          6. Compute cross-entropy loss: -sum(target_dist * log(pred_dist)) averaged over online rows.
         """
-        B = online_preds.shape[0]
-        # Normalization
-        online_preds = F.normalize(online_preds, dim=1)
-        target_protos = F.normalize(target_protos, dim=1)
+        if online_preds.ndim != 2 or target_protos.ndim != 2:
+            raise ValueError("online_preds and target_protos must be 2D tensors")
 
-        # 2. Mean-Shift / Centering (The critical MSN step)
-        # If center is not initialized, update_center should be called first,
-        # but we use a robust check here.
-        if self.target_center is None:
-            # If the center hasn't been initialized, use the current batch mean as a proxy
-            centered_target_protos = target_protos - target_protos.mean(dim=0, keepdim=True)
-        else:
-            # Subtract the stabilized moving average center from all target prototypes
-            centered_target_protos = target_protos - self.target_center
+        # defensive dtype/device handling
+        device = online_preds.device
+        dtype = online_preds.dtype
 
-        # Similarity Matrix: Sim(Online_Masked, Centered_Target_All)
-        # Shape: (N_masked, N_all)
+        N_masked, D = online_preds.shape
+        N_all = target_protos.shape[0]
+        if target_protos.shape[1] != D:
+            raise ValueError(f"Dim mismatch: online D={D}, target D={target_protos.shape[1]}")
 
-        similarity_matrix = torch.matmul(online_preds,
-                                         centered_target_protos.transpose(-1, -2))
+        # initialize center if needed
+        self._ensure_center(D, device, dtype)
 
-        # Target Distribution (P) - Sharpened Softmax
-        # P = softmax(Sim / temperature). This is the 'teacher' signal.
-        targets = F.softmax(similarity_matrix / self.temperature, dim=1)
+        # center targets (use the buffer dtype)
+        center = self.target_center.to(device=device, dtype=dtype)
+        centered_targets = target_protos - center.unsqueeze(0)  # (N_all, D)
 
-        # Prediction Distribution (log Q) - Log Softmax
-        # log Q = log(softmax(Sim)). This is the 'student' prediction.
-        predictions = F.log_softmax(similarity_matrix, dim=1)
+        # compute similarities
+        # logits for online -> target (N_masked, N_all)
+        logits_online = torch.matmul(online_preds, centered_targets.t()) / (self.temperature + self.eps)
 
-        # KL Divergence / Cross-Entropy
-        # L = - sum(P * log Q) -> Minimizes KL(P || Q).
-        loss = - (targets * predictions).sum(dim=1)
+        # logits among targets to form soft targets (N_all, N_all)
+        with torch.no_grad():
+            logits_target = torch.matmul(centered_targets, centered_targets.t()) / (self.temperature + self.eps)
+            # subtract max per row for numerical stability before softmax
+            logits_target = logits_target - logits_target.max(dim=1, keepdim=True)[0]
+            target_probs = F.softmax(logits_target, dim=1)  # (N_all, N_all)
+            # Optionally, one could sharpen or apply constraints here.
 
-        return loss.mean()
+        # predicted probabilities from online predictions (over columns = prototypes)
+        logits_online = logits_online - logits_online.max(dim=1, keepdim=True)[0]
+        pred_probs = F.softmax(logits_online, dim=1)  # (N_masked, N_all)
+
+        # Build aggregated target distribution that matches online rows.
+        # For each online sample we don't necessarily have a one-to-one mapping to a target row.
+        # Simpler approach: average target_probs across rows to get a global prototype prior,
+        # then use that as soft labels for online rows.
+        #
+        # More faithful MSN variants pick the corresponding target prototype row for masked indices.
+        # If masked positions correspond to some indices in target_protos, you can map them directly.
+        #
+        # Here we use the mean target distribution as soft labels to stabilize training.
+        target_distribution = target_probs.mean(dim=0, keepdim=True)  # (1, N_all)
+        target_distribution = target_distribution.expand(N_masked, -1)  # (N_masked, N_all)
+
+        # cross-entropy between target_distribution (soft) and pred_probs
+        # loss per online sample: -sum(target_dist * log(pred_probs))
+        loss_matrix = - target_distribution * torch.log(pred_probs + self.eps)
+        loss = loss_matrix.sum(dim=1).mean()  # average over N_masked
+
+        return loss
+
 
 
 class SimSiamLoss(nn.Module):

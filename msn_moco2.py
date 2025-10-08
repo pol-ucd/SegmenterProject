@@ -67,8 +67,9 @@ def pretrain_step(model: MoCoSiameseNetwork,
                                     dtype=torch.float16,
                                     enabled=(scaler is not None)):
                 online_emb, target_emb = model(x, epoch=epoch, batch_index=batch_idx)
-                online_emb = online_emb.to(dtype=torch.float32).to(device)
-                target_emb = target_emb.to(dtype=torch.float32).to(device)
+                # ensure float32 and detached target for center update
+                online_emb = online_emb.to(torch.float32)
+                target_emb = target_emb.to(torch.float32).detach()
                 loss = loss_fn(online_emb, target_emb)
 
             if scaler is not None:
@@ -102,7 +103,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
             try:
-                best_model = model.online_encoder.state_dict()
+                best_model = model.online_wrapper.state_dict()
                 torch.save(best_model,
                            f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth')
             except Exception as e:
