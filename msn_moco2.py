@@ -61,16 +61,14 @@ def pretrain_step(model: MoCoSiameseNetwork,
         for batch_idx, batch_images in enumerate(dataloader):
             x = batch_images["images"].to(device)
             optimizer.zero_grad()
-            with torch.amp.autocast(device_type=get_default_device_type(),
-                                    dtype=torch.float16,
-                                    enabled=(scaler is not None)):
+            # with torch.amp.autocast(device_type=get_default_device_type(),
+            #                         dtype=torch.float16,
+            #                         enabled=(scaler is not None)):
+            with torch.amp.autocast():
                 online_emb, target_emb = model(x, epoch=epoch, batch_index=batch_idx)
                 online_emb = online_emb.to(dtype=torch.float32).to(device)
                 target_emb = target_emb.to(dtype=torch.float32).to(device)
-
-            loss = loss_fn(online_emb, target_emb)
-
-
+                loss = loss_fn(online_emb, target_emb)
 
             if scaler is not None:
                 scaler.scale(loss).backward()
