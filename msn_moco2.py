@@ -59,7 +59,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
     max_boredom = 10
     best_model = None
     for epoch in range(num_epochs):
-        for batch_idx, batch_images in enumerate(dataloader):
+        for batch_idx, batch_images in enumerate(tqdm(dataloader)):
             x = batch_images["images"].to(device)
             optimizer.zero_grad()
 
