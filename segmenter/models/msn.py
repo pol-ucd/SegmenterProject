@@ -381,9 +381,9 @@ class SegFormerFeatureWrapper(nn.Module):
 
     def _build_projector(self, hidden_dim: int):
         self.projector = nn.Sequential(
-            nn.Linear(hidden_dim, max(hidden_dim // 2, self._proj_dim)),
+            nn.Linear(hidden_dim, max(hidden_dim // 2, self._proj_dim), dtype=torch.float),
             nn.ReLU(inplace=True),
-            nn.Linear(max(hidden_dim // 2, self._proj_dim), self._proj_dim),
+            nn.Linear(max(hidden_dim // 2, self._proj_dim), self._proj_dim, dtype=torch.float),
         )
         self._proj_built = True
 
