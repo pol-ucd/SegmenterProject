@@ -523,7 +523,7 @@ class MSNSegFormerBase(nn.Module):
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer, self.tile_size, return_metadata=True)
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0):
-        return self.online_wrapper(x, epoch=epoch, batch_index=batch_index)
+        return self.online_wrapper(x, epoch=epoch, batch_index=batch_index).float()
 
 
 class MoCoSiameseNetwork(MSNSegFormerBase):
