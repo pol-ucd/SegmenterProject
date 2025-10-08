@@ -311,6 +311,23 @@ def contrastive_loss(out_1, out_2):
     loss = (- torch.log(pos_sim / sim_matrix.sum(dim=-1))).mean()
     return loss
 
+class NTXEntLoss(nn.Module):
+    def __init__(self, temperature:float=0.5, eps:float=1e-9):
+        super().__init__()
+        self.temperature = temperature
+        self.eps = eps
+
+    def forward(self, z1: torch.Tensor, z2:torch.Tensor, temperature:float=None):
+        self.temperature = temperature if temperature is not None else self.temperature
+        B = z1.shape[0]
+        z = torch.cat([z1, z2], dim=0)
+        sim = torch.matmul(z, z.T) / self.temperature
+        sim = sim - torch.eye(2*B, device=sim.device) * self.eps
+        positives = torch.cat([torch.arange(B,2*B), torch.arange(0,B)], dim=0).to(z.device)
+        log_prob = sim.log_softmax(dim=1)
+        loss = -log_prob[torch.arange(2*B), positives].mean()
+        return loss
+
 def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
     """
     Basic NT-Xent (SimCLR) loss for a batch of size B.
