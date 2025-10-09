@@ -23,14 +23,14 @@ config = Config("config/msn_common.json")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
 learning_rate = 1e-05
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE = (512, 512)
 
 WARMUP_EPOCHS = 5
-TOTAL_EPOCHS = 3
+TOTAL_EPOCHS = 100
 STEPS_PER_EPOCH = 33000 // BATCH_SIZE  # Example: 33,000 images / 64 batch size = ~516 steps
 WARMUP_STEPS = WARMUP_EPOCHS * STEPS_PER_EPOCH
 TOTAL_STEPS = TOTAL_EPOCHS * STEPS_PER_EPOCH
