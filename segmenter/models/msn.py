@@ -507,24 +507,10 @@ class MSNSegFormerBase(nn.Module):
             stage_idx: int = -1,
             block_size: int = 7,
             seed: int = 0,
-            tile_size: Tuple[int, int] = (64, 64),
-            device=None
+            tile_size: Tuple[int, int] = (64, 64)
     ):
         super().__init__()
         self.tile_size = tile_size
-
-        if next(self.parameters(), None) is not None:
-            self.device = next(self.parameters()).device
-            print(f"Got it from parameters: {self.device}")
-        elif next(self.buffers(), None) is not None:
-            # Use buffers as a fallback
-            self.device = next(self.buffers()).device
-            print(f"Got it from buffers: {self.device}")
-        else:
-            # Default to CPU if neither exists (e.g., an empty Sequential block)
-            self.device = torch.device("cpu")
-            print(f"Couldn't find it for fallback: {self.device}")
-        print(f"Using device: {self.device} for MSNSegFormerBase")
 
         self.online_wrapper = SegFormerFeatureWrapper(
             pretrained_name=pretrained_model,
@@ -534,8 +520,6 @@ class MSNSegFormerBase(nn.Module):
             block_size=block_size,
             seed=seed,
         )
-        if device:
-            self.online_wrapper.to(device)
 
         self.mask_composer = SurgicalMaskComposer()
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer, self.tile_size, return_metadata=True)
@@ -559,7 +543,19 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         super().__init__(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio,
                          stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
         self.momentum = float(momentum)
-        self.device = device
+
+        if next(self.parameters(), None) is not None:
+            self.device = next(self.parameters()).device
+            print(f"Got it from parameters: {self.device}")
+        elif next(self.buffers(), None) is not None:
+            # Use buffers as a fallback
+            self.device = next(self.buffers()).device
+            print(f"Got it from buffers: {self.device}")
+        else:
+            # Default to CPU if neither exists (e.g., an empty Sequential block)
+            self.device = torch.device("cpu")
+            print(f"Couldn't find it for fallback: {self.device}")
+        print(f"Using device: {self.device} for MoCoSiameseNetwork")
 
         self.encoder_k = deepcopy(self.online_wrapper)
         self._set_requires_grad(self.encoder_k, False)
