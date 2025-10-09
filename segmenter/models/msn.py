@@ -522,6 +522,7 @@ class MSNSegFormerBase(nn.Module):
 
         self.mask_composer = SurgicalMaskComposer()
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer, self.tile_size, return_metadata=True)
+        self._device = self.get_device()
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
         return self.online_wrapper(x, epoch=epoch, batch_index=batch_index, return_aux=return_aux).float()
@@ -541,6 +542,9 @@ class MSNSegFormerBase(nn.Module):
         _device = self.get_device()
         if _device != self._device:
             self.online_wrapper.to(_device)
+            self.self.view_generator.to(_device)
+            self.self.mask_composer.to(_device)
+            print(f"Devices:  {_device}")
             self._device = _device
 
 
@@ -559,8 +563,6 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         super().__init__(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio,
                          stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
         self.momentum = float(momentum)
-
-        self._device = self.get_device()
 
         self.encoder_k = deepcopy(self.online_wrapper)
         self._set_requires_grad(self.encoder_k, False)
