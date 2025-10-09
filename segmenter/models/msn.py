@@ -67,9 +67,9 @@ class MaskedTiledViewGenerator:
         tiles_per_row, tiles_per_col = W // tw, H // th
         tiles = masked_tiles.reshape(B, C, tiles_per_row, tiles_per_col, th, tw)
 
-        rows = [torch.cat([tiles[:,:, r, c, ...] for r in range(tiles_per_row)], dim=2)
+        rows = [torch.cat([tiles[:, :, r, c, ...] for r in range(tiles_per_row)], dim=2)
                 for c in range(tiles_per_col)]
-                # for b in range(B)]
+        # for b in range(B)]
         stitched = torch.cat(rows, dim=-1)  # (B, C, H, W)
         return stitched
 
@@ -132,7 +132,7 @@ class SegFormerAdapter(nn.Module):
     Adjust token->spatial conversion to match the specific SegFormer variant you use.
     """
 
-    def __init__(self, pretrained_name:str=None, num_classes:int=2, k:int=3):
+    def __init__(self, pretrained_name: str = None, num_classes: int = 2, k: int = 3):
         super().__init__()
         self.num_classes = num_classes
         if pretrained_name is not None:
@@ -157,14 +157,14 @@ class SegFormerAdapter(nn.Module):
         self.base_model.decode_head.classifier = nn.Sequential(
             # First convolution layer to process the features.
             nn.Conv2d(classifier_in_channels,
-                      classifier_in_channels//4,
+                      classifier_in_channels // 4,
                       kernel_size=3, padding=1),
             # Batch normalization for training stability.
-            nn.BatchNorm2d(classifier_in_channels//4),
+            nn.BatchNorm2d(classifier_in_channels // 4),
             # ReLU activation for non-linearity.
             nn.ReLU(inplace=True),
             # Final convolution to map features to the desired number of classes.
-            nn.Conv2d(classifier_in_channels//4, num_classes, kernel_size=3, padding=1)
+            nn.Conv2d(classifier_in_channels // 4, num_classes, kernel_size=3, padding=1)
         )
         self.median = MedianPool2d(kernel_size=k, padding=k // 2)
 
@@ -181,7 +181,7 @@ class SegFormerAdapter(nn.Module):
                                mode='bilinear',
                                align_corners=False)  #.permute(0, 2, 3, 1).contiguous()
 
-        return self.median(logits)   # Smoothed logits
+        return self.median(logits)  # Smoothed logits
 
     def output_dim(self):
         return self.num_classes
@@ -199,13 +199,13 @@ class SegFormerMSNWithMomentum(nn.Module):
     """
 
     def __init__(
-        self,
-        pretrained_name: str = None,
-        proj_dim: int = 128,
-        mask_ratio: float = 0.6,
-        ema_momentum: float = 0.99,
-        use_last_encoder_stage: int = -1,  # select which encoder feature to use, -1 = last
-        device: torch.device = None
+            self,
+            pretrained_name: str = None,
+            proj_dim: int = 128,
+            mask_ratio: float = 0.6,
+            ema_momentum: float = 0.99,
+            use_last_encoder_stage: int = -1,  # select which encoder feature to use, -1 = last
+            device: torch.device = None
     ):
         super().__init__()
         config = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
@@ -218,7 +218,8 @@ class SegFormerMSNWithMomentum(nn.Module):
         self.stage_idx = use_last_encoder_stage
 
         # projector
-        last_hidden_dim = config.hidden_sizes[self.stage_idx] if hasattr(config, "hidden_sizes") else self.encoder.layernorms[-1].normalized_shape[0]
+        last_hidden_dim = config.hidden_sizes[self.stage_idx] if hasattr(config, "hidden_sizes") else \
+        self.encoder.layernorms[-1].normalized_shape[0]
         self.projector = nn.Sequential(
             nn.Linear(last_hidden_dim, last_hidden_dim // 2),
             nn.ReLU(inplace=True),
@@ -334,6 +335,7 @@ class SegFormerMSNWithMomentum(nn.Module):
     def output_dim(self):
         return self.projector[-1].out_features
 
+
 # -------------------------
 # Feature wrapper with block / spatial masking
 # -------------------------
@@ -350,14 +352,14 @@ class SegFormerFeatureWrapper(nn.Module):
     """
 
     def __init__(
-        self,
-        pretrained_name: Optional[str] = None,
-        proj_dim: int = 128,
-        stage_idx: int = -1,
-        mask_ratio: float = 0.6,
-        block_size: int = 7,
-        device: Optional[torch.device] = None,
-        seed: int = 0,
+            self,
+            pretrained_name: Optional[str] = None,
+            proj_dim: int = 128,
+            stage_idx: int = -1,
+            mask_ratio: float = 0.6,
+            block_size: int = 7,
+            device: Optional[torch.device] = None,
+            seed: int = 0,
     ):
         super().__init__()
         cfg = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
@@ -375,7 +377,7 @@ class SegFormerFeatureWrapper(nn.Module):
         self.mask_ratio = float(mask_ratio)
         self._proj_dim = int(proj_dim)
         self._proj_built = False
-        self._device = device if device is not None else torch.device("cpu")
+        self._device = device
         self.seed = int(seed)
         # block_size in number of patches along each spatial dim
         self.block_size = int(block_size)
@@ -392,7 +394,7 @@ class SegFormerFeatureWrapper(nn.Module):
     def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
         outs = encoder_module(x)
         feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
-        return feat.last_hidden_state.to(self._device)  # (B, D, H', W')
+        return feat.last_hidden_state  #  # (B, D, H', W')
 
     def _flatten_patches(self, feat: torch.Tensor):
         B, D, H, W = feat.shape
@@ -459,7 +461,6 @@ class SegFormerFeatureWrapper(nn.Module):
         features_online = self._extract_encoder_stage(self.encoder, x)
 
         B, D, H, W = features_online.shape
-        print(f"features_online: {features_online.shape}, max: {features_online.max().item():.3f}, min, {features_online.min().item():.3f}")
 
         if not self._proj_built:
             self._build_projector(D)
@@ -493,19 +494,20 @@ class SegFormerFeatureWrapper(nn.Module):
             return online_selected, target_all, mask, (H, W)
         return online_selected, target_all
 
+
 # -------------------------
 # Base class for MSN using Segformer backbone
 # -------------------------
 class MSNSegFormerBase(nn.Module):
     def __init__(
-        self,
-        pretrained_model: Optional[str] = None,
-        proj_dim: int = 128,
-        mask_ratio: float = 0.6,
-        stage_idx: int = -1,
-        block_size: int = 7,
-        seed: int = 0,
-        tile_size: Tuple[int, int] = (64, 64),
+            self,
+            pretrained_model: Optional[str] = None,
+            proj_dim: int = 128,
+            mask_ratio: float = 0.6,
+            stage_idx: int = -1,
+            block_size: int = 7,
+            seed: int = 0,
+            tile_size: Tuple[int, int] = (64, 64),
     ):
         super().__init__()
         self.tile_size = tile_size
@@ -522,21 +524,21 @@ class MSNSegFormerBase(nn.Module):
         self.mask_composer = SurgicalMaskComposer()
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer, self.tile_size, return_metadata=True)
 
-    def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0):
-        return self.online_wrapper(x, epoch=epoch, batch_index=batch_index).float()
+    def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
+        return self.online_wrapper(x, epoch=epoch, batch_index=batch_index, return_aux=return_aux).float()
 
 
 class MoCoSiameseNetwork(MSNSegFormerBase):
     def __init__(
-        self,
-        pretrained_model: Optional[str],
-        proj_dim: int = 128,
-        mask_ratio: float = 0.6,
-        block_size: int = 7,
-        momentum: float = 0.99,
-        stage_idx: int = -1,
-        seed: int = 0,
-        tile_size: Tuple[int, int] = (64, 64),
+            self,
+            pretrained_model: Optional[str],
+            proj_dim: int = 128,
+            mask_ratio: float = 0.6,
+            block_size: int = 7,
+            momentum: float = 0.99,
+            stage_idx: int = -1,
+            seed: int = 0,
+            tile_size: Tuple[int, int] = (64, 64),
     ):
         super().__init__(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio,
                          stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
@@ -558,13 +560,13 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         for q, k in zip(self.online_wrapper.projector.parameters(), self.encoder_k.projector.parameters()):
             k.data.mul_(m).add_(q.data * (1.0 - m))
 
-    def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0):
+    def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(self.augment(x))
 
-        online_selected, _ = self.online_wrapper(x_q, epoch=epoch, batch_index=batch_index)
+        online_selected, _ = self.online_wrapper(x_q, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
         with torch.no_grad():
-            _, target_all = self.encoder_k(x_k, epoch=epoch, batch_index=batch_index)
+            _, target_all = self.encoder_k(x_k, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
             target_all = target_all.detach()
 
         return online_selected, target_all
@@ -591,16 +593,16 @@ class SimSiamSegFormer(MSNSegFormerBase):
     """
 
     def __init__(
-        self,
-        pretrained_model: Optional[str] = None,
-        proj_dim: int = 128,
-        predictor_hidden: int = 512,
-        predictor_out: Optional[int] = None,
-        stage_idx: int = -1,
-        block_size: int = 7,
-        mask_ratio: float = 0.6,
-        seed: int = 0,
-        tile_size: Tuple[int, int] = (64, 64),
+            self,
+            pretrained_model: Optional[str] = None,
+            proj_dim: int = 128,
+            predictor_hidden: int = 512,
+            predictor_out: Optional[int] = None,
+            stage_idx: int = -1,
+            block_size: int = 7,
+            mask_ratio: float = 0.6,
+            seed: int = 0,
+            tile_size: Tuple[int, int] = (64, 64),
     ):
         super().__init__(
             pretrained_model=pretrained_model,
@@ -629,9 +631,9 @@ class SimSiamSegFormer(MSNSegFormerBase):
         B, N, D = patches.shape
         flat = patches.reshape(B * N, D)
         projector = self.online_wrapper.projector
-        proj_flat = projector(flat)               # (B*N, proj_dim)
-        proj = proj_flat.reshape(B, N, -1)        # (B, N, proj_dim)
-        img_repr = proj.mean(dim=1)               # (B, proj_dim)
+        proj_flat = projector(flat)  # (B*N, proj_dim)
+        proj = proj_flat.reshape(B, N, -1)  # (B, N, proj_dim)
+        img_repr = proj.mean(dim=1)  # (B, proj_dim)
         img_repr = F.normalize(img_repr, dim=1)
         return img_repr
 
@@ -639,20 +641,20 @@ class SimSiamSegFormer(MSNSegFormerBase):
         """
         Build anchor (augmented) and positive (augmented + occluded) images using base utilities.
         """
-        x_anchor = self.augment(batch)                     # (B, C, H, W)
+        x_anchor = self.augment(batch)  # (B, C, H, W)
         x_positive_masked, _ = self.view_generator(x_anchor)
         x_positive = x_positive_masked
         return x_anchor, x_positive
 
     def forward(
-        self,
-        x1: Optional[torch.Tensor] = None,
-        x2: Optional[torch.Tensor] = None,
-        *,
-        batch: Optional[torch.Tensor] = None,
-        return_patches: bool = False,
-        epoch: int = 0,
-        batch_index: int = 0,
+            self,
+            x1: Optional[torch.Tensor] = None,
+            x2: Optional[torch.Tensor] = None,
+            *,
+            batch: Optional[torch.Tensor] = None,
+            return_patches: bool = False,
+            epoch: int = 0,
+            batch_index: int = 0,
     ):
         """
         Two modes:
@@ -705,7 +707,8 @@ class SimSiamSegFormer(MSNSegFormerBase):
         z = F.normalize(z, dim=1)
         return - (p * z).sum(dim=1).mean()
 
-    def compute_loss(self, p1: torch.Tensor, z2_det: torch.Tensor, p2: torch.Tensor, z1_det: torch.Tensor) -> torch.Tensor:
+    def compute_loss(self, p1: torch.Tensor, z2_det: torch.Tensor, p2: torch.Tensor,
+                     z1_det: torch.Tensor) -> torch.Tensor:
         """
         Symmetric SimSiam loss:
           loss = 0.5 * (neg_cos(p1, z2_det) + neg_cos(p2, z1_det))
@@ -713,6 +716,7 @@ class SimSiamSegFormer(MSNSegFormerBase):
         loss1 = self.negative_cosine_similarity(p1, z2_det)
         loss2 = self.negative_cosine_similarity(p2, z1_det)
         return 0.5 * (loss1 + loss2)
+
 
 class SimCLRSegFormer(MSNSegFormerBase):
     """
@@ -727,14 +731,14 @@ class SimCLRSegFormer(MSNSegFormerBase):
     """
 
     def __init__(
-        self,
-        pretrained_model: Optional[str] = None,
-        proj_dim: int = 128,
-        mask_ratio: float = 0.6,
-        stage_idx: int = -1,
-        block_size: int = 7,
-        seed: int = 0,
-        tile_size: Tuple[int,int] = (64,64),
+            self,
+            pretrained_model: Optional[str] = None,
+            proj_dim: int = 128,
+            mask_ratio: float = 0.6,
+            stage_idx: int = -1,
+            block_size: int = 7,
+            seed: int = 0,
+            tile_size: Tuple[int, int] = (64, 64),
     ):
         super().__init__(
             pretrained_model=pretrained_model,
@@ -754,10 +758,10 @@ class SimCLRSegFormer(MSNSegFormerBase):
         B, N, D = patches.shape
         flat = patches.reshape(B * N, D)
         projector = self.online_wrapper.projector
-        proj_flat = projector(flat)                 # (B*N, proj_dim)
-        proj = proj_flat.reshape(B, N, -1)          # (B, N, proj_dim)
-        img_repr = proj.mean(dim=1)                 # (B, proj_dim)
-        img_repr = F.normalize(img_repr, dim=1)     # L2-normalize per-image
+        proj_flat = projector(flat)  # (B*N, proj_dim)
+        proj = proj_flat.reshape(B, N, -1)  # (B, N, proj_dim)
+        img_repr = proj.mean(dim=1)  # (B, proj_dim)
+        img_repr = F.normalize(img_repr, dim=1)  # L2-normalize per-image
         return img_repr
 
     def _siamese_pair(self, batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -765,7 +769,7 @@ class SimCLRSegFormer(MSNSegFormerBase):
         Build anchor and positive masked views using base augment + view_generator.
         Anchor is augmented (unmasked). Positive is augmented and occluded by view_generator.
         """
-        x_anchor = self.augment(batch)                   # (B, C, H, W)
+        x_anchor = self.augment(batch)  # (B, C, H, W)
         x_positive_masked, meta_positive = self.view_generator(x_anchor)
         # If view_generator returns masked tiled input directly, use it as positive.
         x_positive = x_positive_masked
@@ -802,7 +806,6 @@ if __name__ == "__main__":
     tile_size = (32, 32)
     instrument_prob, fluid_prob, fold_prob = 0.3, 0.3, 0.3
 
-
     composer = SurgicalMaskComposer(instrument_prob=instrument_prob,
                                     fluid_prob=fluid_prob,
                                     fold_prob=fold_prob)
@@ -811,7 +814,7 @@ if __name__ == "__main__":
                                    tile_size=tile_size,
                                    return_metadata=True)
 
-    test_images = torch.randn(b, c, h, w).clip(0,1)
+    test_images = torch.randn(b, c, h, w).clip(0, 1)
 
     tiles = gen.tile_image(test_images)
     print(f"Image shape: {test_images.shape}, Generated tile shape {tiles.shape}")
@@ -826,5 +829,5 @@ if __name__ == "__main__":
     print(f'After stitch_tiles(), masked_image.shape: {masked_image.shape}')
 
     mask = gen(test_images)
-    print(mask[0].shape)    # The generated mask
+    print(mask[0].shape)  # The generated mask
     # print(mask[1])          # The generated mask metadata as Dict{'type': ..., 'params': ....}
