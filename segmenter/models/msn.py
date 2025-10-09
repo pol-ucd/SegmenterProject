@@ -529,17 +529,12 @@ class MSNSegFormerBase(nn.Module):
     def get_device(self) -> torch.device:
         if next(self.parameters(), None) is not None:
             device = next(self.parameters()).device
-            print(f"Got device from parameters: {device}")
-            for param in self.parameters():
-                print(f"param: {type(param)}, device: {param.device}")
         elif next(self.buffers(), None) is not None:
             # Use buffers as a fallback
             device = next(self.buffers()).device
-            print(f"Got device from buffers: {device}")
         else:
             # Default to CPU if neither exists (e.g., an empty Sequential block)
             device = torch.device("cpu")
-            print(f"Couldn't find device, using fallback: {device}")
         return device
 
 
@@ -559,10 +554,17 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
                          stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
         self.momentum = float(momentum)
 
-        print(f"Using device: {self.get_device()} for MoCoSiameseNetwork.__init__()")
+        self._device = self.get_device()
 
         self.encoder_k = deepcopy(self.online_wrapper)
         self._set_requires_grad(self.encoder_k, False)
+
+    def _check_device(self):
+        _device = self.get_device()
+        if _device != self._device:
+            for param in self.parameters():
+                param.to(_device)
+            self._device = _device
 
     @staticmethod
     def _set_requires_grad(model: nn.Module, requires_grad: bool):
@@ -578,7 +580,7 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
             k.data.mul_(m).add_(q.data * (1.0 - m))
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
-        print(f"Using device: {self.get_device()} for MoCoSiameseNetwork.forward()")
+        self._check_device()
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(self.augment(x))
 
