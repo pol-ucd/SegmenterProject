@@ -375,14 +375,12 @@ class SegFormerFeatureWrapper(nn.Module):
         self._proj_built = False
         self.encoder = self.base_model.segformer.encoder
         encoder_sizes = self.base_model.config.hidden_sizes
-        print("encoder_sizes:", encoder_sizes)
         encoder_hidden_size = encoder_sizes[-1] if isinstance(encoder_sizes, (list, tuple)) else encoder_sizes
-        self._build_projector(hidden_dim=encoder_hidden_size)
         self.stage_idx = stage_idx
         self.mask_ratio = float(mask_ratio)
         self._proj_dim = int(proj_dim)
-
         self.seed = int(seed)
+        self._build_projector(hidden_dim=encoder_hidden_size)
         # block_size in number of patches along each spatial dim
         self.block_size = int(block_size)
 
