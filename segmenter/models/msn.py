@@ -537,6 +537,12 @@ class MSNSegFormerBase(nn.Module):
             device = torch.device("cpu")
         return device
 
+    def _check_device(self):
+        _device = self.get_device()
+        if _device != self._device:
+            self.online_wrapper.to(_device)
+            self._device = _device
+
 
 class MoCoSiameseNetwork(MSNSegFormerBase):
     def __init__(
@@ -559,12 +565,6 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         self.encoder_k = deepcopy(self.online_wrapper)
         self._set_requires_grad(self.encoder_k, False)
 
-    def _check_device(self):
-        _device = self.get_device()
-        if _device != self._device:
-            for param in self.parameters():
-                param.to(_device)
-            self._device = _device
 
     @staticmethod
     def _set_requires_grad(model: nn.Module, requires_grad: bool):
