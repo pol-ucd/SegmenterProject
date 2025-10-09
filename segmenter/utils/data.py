@@ -221,6 +221,7 @@ class HDF5DatasetOptimized(Dataset):
                 raise RuntimeError(f"Could not open HDF5 file: {e}")
 
         is_batch = isinstance(idx, (list, np.ndarray))
+        print(f"is_batch: {is_batch}, idx: {idx}")
         # Efficient Batch Read (by a DataLoader)
         # HDF5 supports batch indices so retrieve everything as batches for simplicity
         # items will have shape (len(idx), H, W, C)

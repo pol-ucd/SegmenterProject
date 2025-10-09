@@ -64,7 +64,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
         for batch_idx, batch_images in enumerate(tqdm(dataloader)):
             x = batch_images["images"].to(device)
             optimizer.zero_grad()
-            print(f"input images, shape {x.shape}, type: {x.type}, max: {x.max().item()}, min: {x.min().item()}")
+            print(f"input images, shape {x.shape}, type: {x.dtype}, max: {x.max().item()}, min: {x.min().item()}")
             with torch.amp.autocast(device_type=get_default_device_type(),
                                     dtype=torch.float16,
                                     enabled=(scaler is not None)):
