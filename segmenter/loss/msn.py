@@ -301,15 +301,16 @@ class ContrastiveLoss(nn.Module):
 def contrastive_loss(out_1, out_2, temperature=0.25, eps=1e-06):
     out_1 = F.normalize(out_1, dim=-1)
     out_2 = F.normalize(out_2, dim=-1)
-    bs = out_1.size(0)
+    bs1 = out_1.size(0)
+    bs2 = out_2.size(0)
 
     # [2*B, D]
     out = torch.cat([out_1, out_2], dim=0)
     # [2*B, 2*B]
     sim_matrix = torch.exp(torch.mm(out, out.t().contiguous()) / (temperature + eps))
-    mask = (torch.ones_like(sim_matrix) - torch.eye(2 * bs, device=sim_matrix.device)).bool()
+    mask = (torch.ones_like(sim_matrix) - torch.eye(bs1*bs2, device=sim_matrix.device)).bool()
     # [2B, 2B-1]
-    sim_matrix = sim_matrix.masked_select(mask).view(2 * bs, -1)
+    sim_matrix = sim_matrix.masked_select(mask).view(bs1*bs2, -1)
 
     # compute loss
     pos_sim = torch.exp(torch.sum(out_1 * out_2, dim=-1) / (temperature + eps))
