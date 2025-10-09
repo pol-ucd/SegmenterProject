@@ -529,17 +529,18 @@ class MSNSegFormerBase(nn.Module):
     def get_device(self) -> torch.device:
         if next(self.parameters(), None) is not None:
             device = next(self.parameters()).device
-            print(f"Got device from parameters: {self.device}")
+            print(f"Got device from parameters: {device}")
             for param in self.parameters():
                 print(f"param: {type(param)}, device: {param.device}")
         elif next(self.buffers(), None) is not None:
             # Use buffers as a fallback
             device = next(self.buffers()).device
-            print(f"Got device from buffers: {self.device}")
+            print(f"Got device from buffers: {device}")
         else:
             # Default to CPU if neither exists (e.g., an empty Sequential block)
             device = torch.device("cpu")
             print(f"Couldn't find device, using fallback: {device}")
+        return device
 
 
 class MoCoSiameseNetwork(MSNSegFormerBase):
