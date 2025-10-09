@@ -599,11 +599,12 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
 
     @staticmethod
     def augment(batch):
-        batch_anchor = []
-        for image in batch:
-            augmented = apply_custom_augmentations(image.clone())
-            batch_anchor.append(augmented)
-        return torch.stack(batch_anchor)
+        return batch
+        # batch_anchor = []
+        # for image in batch:
+        #     augmented = apply_custom_augmentations(image.clone())
+        #     batch_anchor.append(augmented)
+        # return torch.stack(batch_anchor)
 
 
 class SimSiamSegFormer(MSNSegFormerBase):
