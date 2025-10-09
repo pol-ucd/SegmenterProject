@@ -64,7 +64,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
         for batch_idx, batch_images in enumerate(tqdm(dataloader)):
             x = batch_images["images"].to(device)
             optimizer.zero_grad()
-            print(f"input images, shape {x.shape}, type: {x.dtype}, max: {x.max().item()}, min: {x.min().item()}")
             with torch.amp.autocast(device_type=get_default_device_type(),
                                     dtype=torch.float16,
                                     enabled=(scaler is not None)):
@@ -245,7 +244,7 @@ def main():
     siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model,
                                        momentum=0.9).to(device)
 
-    pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.95)
+    pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.1)
     # pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
     # pretrain_loss_fn = MSELoss()
 
