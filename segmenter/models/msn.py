@@ -1,7 +1,7 @@
 """
 Mixed Siamese Networks for Bring Your Own Labels (BYOL) implementation
 
-    The follwoing architectural styles are implemented:
+    The following architectural styles are implemented:
     - Momentum Contrast (MoCo): using two encoders and updating one with EMA,
     - SimCLR: Gradients flow from both views to the single shared encoder
     - SimSiam: detached gradient on one branch of a shared encoder's output

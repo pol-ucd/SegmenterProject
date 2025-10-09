@@ -30,7 +30,7 @@ finetune_percent = 0.1
 IMAGE_SIZE = (512, 512)
 
 WARMUP_EPOCHS = 5
-TOTAL_EPOCHS = 100
+TOTAL_EPOCHS = 2
 STEPS_PER_EPOCH = 33000 // BATCH_SIZE  # Example: 33,000 images / 64 batch size = ~516 steps
 WARMUP_STEPS = WARMUP_EPOCHS * STEPS_PER_EPOCH
 TOTAL_STEPS = TOTAL_EPOCHS * STEPS_PER_EPOCH
@@ -48,7 +48,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
     logger = logging.getLogger(__name__)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
-    scaler = None
+    # scaler = None
     # if torch.cuda.is_available():
     #     scaler = torch.amp.GradScaler()
 
@@ -64,7 +64,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
         for batch_idx, batch_images in enumerate(tqdm(dataloader)):
             x = batch_images["images"].to(device)
             optimizer.zero_grad()
-
+            print("input images, shape {x.shape}, type: {x.type}, max: {x.max().item()}, min: {x.min().item()}")
             with torch.amp.autocast(device_type=get_default_device_type(),
                                     dtype=torch.float16,
                                     enabled=(scaler is not None)):
