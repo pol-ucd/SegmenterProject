@@ -375,7 +375,6 @@ class SegFormerFeatureWrapper(nn.Module):
         self.mask_ratio = float(mask_ratio)
         self._proj_dim = int(proj_dim)
         self._proj_built = False
-        self._device = device
         self.seed = int(seed)
         # block_size in number of patches along each spatial dim
         self.block_size = int(block_size)
@@ -406,10 +405,10 @@ class SegFormerFeatureWrapper(nn.Module):
         flat = patches.reshape(B * N, D).float()
         proj = projector(flat)  # (B*N, P)
         proj = F.normalize(proj, dim=1)
-        return proj.reshape(B, N, -1)  #.to(self._device)
+        return proj.reshape(B, N, -1)
 
     def _spatial_block_mask(self, B: int, H: int, W: int, mask_ratio: float, block_size: int,
-                            device: torch.device, batch_index: int, epoch: int):
+                            batch_index: int, epoch: int):
         """
         Create a block/spatial mask per sample. The mask is on H x W grid of patches.
         - mask_ratio: fraction of total patches to mask
@@ -418,21 +417,21 @@ class SegFormerFeatureWrapper(nn.Module):
         Deterministic per epoch/batch/sample through a Torch Generator seeded from (seed, epoch, batch_index, sample_idx).
         """
         N = H * W
-        mask = torch.zeros((B, N), dtype=torch.bool, device=device)
+        mask = torch.zeros((B, N), dtype=torch.bool)
         n_mask_total = int(round(N * mask_ratio))
         # Calculate number of blocks required (ceil)
         block_area = block_size * block_size
         n_blocks = max(1, (n_mask_total + block_area - 1) // block_area)
 
         for i in range(B):
-            g = torch.Generator(device=device)
+            g = torch.Generator()
             seed_i = (self.seed + epoch * 1_000_000 + batch_index * 10_000 + i) & 0xFFFFFFFF
             g.manual_seed(seed_i)
             # For each block, choose a top-left coordinate on the HxW grid uniformly
-            chosen = torch.zeros((H, W), dtype=torch.bool, device=device)
+            chosen = torch.zeros((H, W), dtype=torch.bool)
             for _b in range(n_blocks):
-                top = int(torch.randint(0, max(1, H - block_size + 1), (1,), generator=g, device=device).item())
-                left = int(torch.randint(0, max(1, W - block_size + 1), (1,), generator=g, device=device).item())
+                top = int(torch.randint(0, max(1, H - block_size + 1), (1,), generator=g).item())
+                left = int(torch.randint(0, max(1, W - block_size + 1), (1,), generator=g).item())
                 bottom = min(H, top + block_size)
                 right = min(W, left + block_size)
                 chosen[top:bottom, left:right] = True
@@ -446,7 +445,7 @@ class SegFormerFeatureWrapper(nn.Module):
                 # indices of True positions
                 true_idx = torch.nonzero(flat, as_tuple=False).flatten()
                 # shuffle and keep only the first n_mask_total
-                perm = true_idx[torch.randperm(true_idx.numel(), generator=g, device=device)]
+                perm = true_idx[torch.randperm(true_idx.numel(), generator=g)]
                 keep = perm[:n_mask_total]
                 new_flat = torch.zeros_like(flat)
                 new_flat[keep] = True
@@ -455,7 +454,6 @@ class SegFormerFeatureWrapper(nn.Module):
         return mask  # (B, N)
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
-        device = x.device if self._device is None else self._device
 
         # Extract online features
         features_online = self._extract_encoder_stage(self.encoder, x)
@@ -478,13 +476,13 @@ class SegFormerFeatureWrapper(nn.Module):
 
         B, N, P = online_proj.shape
         mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size,
-                                        device=device, batch_index=batch_index, epoch=epoch)
+                                        batch_index=batch_index, epoch=epoch)
         unmask = ~mask
 
         # Gather unmasked online patches and concatenate across batch dimension
         online_selected = [online_proj[i, unmask[i], :] for i in range(B)]
         if len(online_selected) == 0:
-            online_selected = torch.empty((0, P), device=device, dtype=online_proj.dtype)
+            online_selected = torch.empty((0, P), dtype=online_proj.dtype)
         else:
             online_selected = torch.cat(online_selected, dim=0)  # (sum_unmasked, P)
 
