@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 import torch
 from PIL import Image, ImageFilter
+from matplotlib import pyplot as plt
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler
 from torchvision import transforms, transforms as T
 from torchvision.transforms import functional as F
@@ -489,3 +490,24 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
         image = image_augment(image)
         mask = mask_augment(mask)
         return image, mask.long()
+
+
+if __name__ == '__main__':
+
+    source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
+
+    image_augment = T.Compose([T.Resize((320,240),
+                                        T.InterpolationMode.BICUBIC),
+                               T.ToTensor(),
+                               T.Normalize(mean=[0.485, 0.456, 0.406],
+                                           std=[0.229, 0.224, 0.225])
+                               ])
+
+    pretrain_dataset = HDF5DatasetOptimized(hdf5_path=source,
+                                            data_keys=['images'],
+                                            # transform=None)
+                                            transform=image_augment)
+
+    print(pretrain_dataset[0]['images'].shape)
+    plt.imshow(pretrain_dataset[0]['images'].permute(1, 2, 0) / 255)
+    plt.show()
