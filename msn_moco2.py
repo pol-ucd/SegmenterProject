@@ -87,7 +87,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
             # AFTER optimizer.step: EMA then center update
             model.update_momentum_encoder()
             with torch.no_grad():
-                loss_fn.update_center(target_emb.detach().to(torch.float32))
+                if isinstance(loss_fn, MSNLoss):
+                    loss_fn.update_center(target_emb.detach().to(torch.float32))
 
             total_loss += loss.item()
 
