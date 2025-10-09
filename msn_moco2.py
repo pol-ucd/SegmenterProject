@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from segmenter.core import Config, set_default_device, get_default_device, get_default_device_type
 from segmenter.loss import DiceLoss, MSNLoss
-from segmenter.loss.msn import NTXEntLoss
+from segmenter.loss.msn import NTXEntLoss, ContrastiveLoss
 from segmenter.models.msn import MoCoSiameseNetwork, SegFormerAdapter
 from segmenter.core.torch import get_default_device_type
 from segmenter.utils.msn import load_data
@@ -243,9 +243,10 @@ def main():
     siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model,
                                        momentum=0.9).to(device)
 
-    pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.9)
+    # pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.9)
     # pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
     # pretrain_loss_fn = MSELoss()
+    pretrain_loss_fn = ContrastiveLoss(temperature=0.1, eps=1e-6)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),

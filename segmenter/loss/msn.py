@@ -165,7 +165,7 @@ class MSNLoss(nn.Module):
         dtype = online_preds.dtype
 
         N_masked, D = online_preds.shape
-        N_all = target_protos.shape[0]
+        # N_all = target_protos.shape[0]
         if target_protos.shape[1] != D:
             raise ValueError(f"Dim mismatch: online D={D}, target D={target_protos.shape[1]}")
 
@@ -289,23 +289,30 @@ class InfoNCELoss(nn.Module):
 
         return loss / (B * B)
 
+class ContrastiveLoss(nn.Module):
+    def __init__(self, temperature=0.25, eps=1e-6):
+        super().__init__()
+        self.temperature = temperature
+        self.eps = eps
 
+    def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
+        return contrastive_loss(z_anchor, z_positive, temperature=self.temperature, eps=self.eps)
 
-def contrastive_loss(out_1, out_2):
+def contrastive_loss(out_1, out_2, temperature=0.25, eps=1e-06):
     out_1 = F.normalize(out_1, dim=-1)
     out_2 = F.normalize(out_2, dim=-1)
     bs = out_1.size(0)
-    temp = 0.25
+
     # [2*B, D]
     out = torch.cat([out_1, out_2], dim=0)
     # [2*B, 2*B]
-    sim_matrix = torch.exp(torch.mm(out, out.t().contiguous()) / temp)
+    sim_matrix = torch.exp(torch.mm(out, out.t().contiguous()) / (temperature + eps))
     mask = (torch.ones_like(sim_matrix) - torch.eye(2 * bs, device=sim_matrix.device)).bool()
     # [2B, 2B-1]
     sim_matrix = sim_matrix.masked_select(mask).view(2 * bs, -1)
 
     # compute loss
-    pos_sim = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temp)
+    pos_sim = torch.exp(torch.sum(out_1 * out_2, dim=-1) / (temperature + eps))
     # [2*B]
     pos_sim = torch.cat([pos_sim, pos_sim], dim=0)
     loss = (- torch.log(pos_sim / sim_matrix.sum(dim=-1))).mean()
@@ -358,15 +365,19 @@ def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -
 
 if __name__ == '__main__':
     temperature = 0.2
-    B, C, H, W = 4, 11, 512, 512
+    N, D = 11, 256
 
-    z_anchor = torch.randint(-255, 255, (B, C, H, W)).float() / 255
-    z_positive = torch.randint(-255, 255, (B, C, H, W)).float() / 255
+    z_anchor = torch.randint(-255, 255, (N, D)).float()
+    z_positive = torch.randint(-255, 255, (N, D)).float()
 
     loss_fn = MSNLoss(temperature=0.05, center_momentum=0.1)
     loss = loss_fn(z_anchor, z_positive)
     print(loss)
 
     loss = contrastive_loss(z_anchor, z_positive)
+    print(loss)
+
+    loss_fn = NTXEntLoss()
+    loss = loss_fn(z_anchor, z_positive)
     print(loss)
 
