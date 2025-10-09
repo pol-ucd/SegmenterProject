@@ -377,7 +377,7 @@ class SegFormerFeatureWrapper(nn.Module):
         self.mask_ratio = float(mask_ratio)
         self._proj_dim = int(proj_dim)
         self._proj_built = False
-        self._device = device if device is not None else torch.device("cpu")
+        self._device = device
         self.seed = int(seed)
         # block_size in number of patches along each spatial dim
         self.block_size = int(block_size)
@@ -510,9 +510,11 @@ class MSNSegFormerBase(nn.Module):
             block_size: int = 7,
             seed: int = 0,
             tile_size: Tuple[int, int] = (64, 64),
+            device=None
     ):
         super().__init__()
         self.tile_size = tile_size
+        self.device = device
 
         self.online_wrapper = SegFormerFeatureWrapper(
             pretrained_name=pretrained_model,
@@ -522,6 +524,8 @@ class MSNSegFormerBase(nn.Module):
             block_size=block_size,
             seed=seed,
         )
+        if device:
+            self.online_wrapper.to(device)
 
         self.mask_composer = SurgicalMaskComposer()
         self.view_generator = MaskedTiledViewGenerator(self.mask_composer, self.tile_size, return_metadata=True)
@@ -541,10 +545,13 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
             stage_idx: int = -1,
             seed: int = 0,
             tile_size: Tuple[int, int] = (64, 64),
+            device: Optional[torch.device]=None
     ):
         super().__init__(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio,
-                         stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
+                         stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size,
+                         device=device)
         self.momentum = float(momentum)
+        self.device = device
 
         self.encoder_k = deepcopy(self.online_wrapper)
         self._set_requires_grad(self.encoder_k, False)
