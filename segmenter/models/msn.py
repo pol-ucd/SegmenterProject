@@ -478,7 +478,7 @@ class SegFormerFeatureWrapper(nn.Module):
             patches_target, _, _ = self._flatten_patches(features_target)
             target_proj = self._apply_projector_and_norm(patches_target, self.projector)
             target_proj = target_proj.detach()
-
+        print(f"Wrapper forward(), online_proj: {online_proj.shape}, target_proj: {target_proj.shape}")
         B, N, P = online_proj.shape
         mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size,
                                         batch_index=batch_index, epoch=epoch)
