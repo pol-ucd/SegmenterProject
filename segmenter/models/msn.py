@@ -358,10 +358,10 @@ class SegFormerFeatureWrapper(nn.Module):
             stage_idx: int = -1,
             mask_ratio: float = 0.6,
             block_size: int = 7,
-            device: Optional[torch.device] = None,
             seed: int = 0,
     ):
         super().__init__()
+        self.device = next(self.parameters()).device
         cfg = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
         self.base_model = (
             SegformerForSemanticSegmentation.from_pretrained(
