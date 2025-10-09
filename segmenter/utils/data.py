@@ -77,13 +77,13 @@ def pretrain_transform(batch: dict) -> dict:
     SegFormer backbone model input. Standardise the pixel values
     to align with the ImageNet mean and std. This means the images
     not in the range [0.0, 1.0] anymore and will have pixel
-    values in the range [-3.0, 3.0] (approximately).
+    values in the range [-2.12, 2.7] (approximately).
 
     To convert back to a 'regular' image you have to reverse
     the ImageNet normalisation step.
 
-    :param batch:
-    :return:
+    :param batch: 4D stack fo images
+    :return: 4D stack with transforms applied by image
     """
     # Standard ImageNet mean and standard deviation
     IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -221,7 +221,7 @@ class HDF5DatasetOptimized(Dataset):
                 raise RuntimeError(f"Could not open HDF5 file: {e}")
 
         is_batch = isinstance(idx, (list, np.ndarray))
-        print(f"Dataset length: {self.dataset_len}, is_batch: {is_batch}, current getitem index: {idx}")
+
         # Efficient Batch Read (by a DataLoader)
         # HDF5 supports batch indices so retrieve everything as batches for simplicity
         # items will have shape (len(idx), H, W, C)
