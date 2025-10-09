@@ -257,7 +257,9 @@ def main():
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Instantiate Siamese Model and Loss
-    siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model, momentum=0.996).to(device)
+    siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model,
+                                       mask_ratio=0.1,
+                                       momentum=0.996).to(device)
 
     pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.01)
 

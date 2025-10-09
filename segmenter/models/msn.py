@@ -358,7 +358,7 @@ class SegFormerFeatureWrapper(nn.Module):
             pretrained_name: Optional[str] = None,
             proj_dim: int = 128,
             stage_idx: int = -1,
-            mask_ratio: float = 0.6,
+            mask_ratio: float = 0.1,
             block_size: int = 7,
             seed: int = 0,
     ):
@@ -506,7 +506,7 @@ class MSNSegFormerBase(nn.Module):
             self,
             pretrained_model: Optional[str] = None,
             proj_dim: int = 128,
-            mask_ratio: float = 0.6,
+            mask_ratio: float = 0.1,
             stage_idx: int = -1,
             block_size: int = 7,
             seed: int = 0,
@@ -557,7 +557,7 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
             self,
             pretrained_model: Optional[str],
             proj_dim: int = 128,
-            mask_ratio: float = 0.6,
+            mask_ratio: float = 0.1,
             block_size: int = 7,
             momentum: float = 0.99,
             stage_idx: int = -1,
@@ -599,12 +599,12 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
 
     @staticmethod
     def augment(batch):
-        return batch
-        # batch_anchor = []
-        # for image in batch:
-        #     augmented = apply_custom_augmentations(image.clone())
-        #     batch_anchor.append(augmented)
-        # return torch.stack(batch_anchor)
+        # return batch
+        batch_anchor = []
+        for image in batch:
+            augmented = apply_custom_augmentations(image.clone())
+            batch_anchor.append(augmented)
+        return torch.stack(batch_anchor)
 
 
 class SimSiamSegFormer(MSNSegFormerBase):
