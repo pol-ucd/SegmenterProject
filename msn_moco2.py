@@ -23,7 +23,7 @@ config = Config("config/msn_common.json")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
 learning_rate = 1e-05
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
