@@ -457,9 +457,7 @@ class SegFormerFeatureWrapper(nn.Module):
         return mask  # (B, N)
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
-        device = x.device if self._device is None else self._device
-
-        # 1) extract online features
+        # Extract online features
         features_online = self._extract_encoder_stage(self.encoder, x)   # (B, D, H, W)
         B, D, H, W = features_online.shape
         if not self._proj_built:
@@ -478,12 +476,12 @@ class SegFormerFeatureWrapper(nn.Module):
         # 3) build mapping indices
         N = H * W
         # global indices for target_all: for batch i and local patch j -> idx = i*N + j
-        local_indices = torch.arange(N, device=device).unsqueeze(0).expand(B, N)  # (B, N)
-        global_indices = (torch.arange(B, device=device).unsqueeze(1) * N) + local_indices  # (B, N)
+        local_indices = torch.arange(N).unsqueeze(0).expand(B, N)  # (B, N)
+        global_indices = (torch.arange(B).unsqueeze(1) * N) + local_indices  # (B, N)
         global_indices = global_indices.reshape(-1)  # (B*N,)
 
         # 4) create spatial block mask and select unmasked online patches
-        mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size, device=device,
+        mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size,
                                        batch_index=batch_index, epoch=epoch)  # (B, N)
         unmask = ~mask
 
@@ -501,8 +499,8 @@ class SegFormerFeatureWrapper(nn.Module):
             online_to_target_idx_list.append(global_sel)
 
         if len(online_selected_list) == 0:
-            online_selected = torch.empty((0, self._proj_dim), device=device, dtype=online_proj.dtype)
-            online_to_target_idx = torch.empty((0,), dtype=torch.long, device=device)
+            online_selected = torch.empty((0, self._proj_dim), dtype=online_proj.dtype)
+            online_to_target_idx = torch.empty((0,), dtype=torch.long)
         else:
             online_selected = torch.cat(online_selected_list, dim=0)                # (N_online, P)
             online_to_target_idx = torch.cat(online_to_target_idx_list, dim=0).long()  # (N_online,)
