@@ -15,7 +15,7 @@ Mixed Siamese Networks for Bring Your Own Labels (BYOL) implementation
 """
 import random
 from copy import deepcopy
-from typing import Tuple, Optional
+from typing import Tuple, Optional, OrderedDict
 
 import torch
 from torch import nn as nn
@@ -377,16 +377,18 @@ class SegFormerFeatureWrapper(nn.Module):
         self.mask_ratio = float(mask_ratio)
         self._proj_dim = int(proj_dim)
         self._proj_built = False
-        self._device = device
+        self._device = device if device is not None else torch.device("cpu")
         self.seed = int(seed)
         # block_size in number of patches along each spatial dim
         self.block_size = int(block_size)
 
     def _build_projector(self, hidden_dim: int):
         self.projector = nn.Sequential(
-            nn.Linear(hidden_dim, max(hidden_dim // 2, self._proj_dim), dtype=torch.float),
-            nn.ReLU(inplace=True),
-            nn.Linear(max(hidden_dim // 2, self._proj_dim), self._proj_dim, dtype=torch.float),
+            OrderedDict([
+                ("fc1", nn.Linear(hidden_dim, max(hidden_dim // 2, self._proj_dim), dtype=torch.float)),
+                ("relu", nn.ReLU(inplace=True)),
+                ("fc2", nn.Linear(max(hidden_dim // 2, self._proj_dim), self._proj_dim, dtype=torch.float))
+            ])
         )
         self._proj_built = True
 
