@@ -343,16 +343,14 @@ class SegFormerMSNWithMomentum(nn.Module):
 # -------------------------
 class SegFormerFeatureWrapper(nn.Module):
     """
-    Extracts encoder features from SegFormer, projects to `proj_dim`, normalizes,
-    and provides spatial-block masking for the online branch.
-
-    Forward returns:
-      - online_selected: (N_masked_total, proj_dim)  -> unmasked patches concatenated across batch
-      - target_all:      (B * N_patches, proj_dim)  -> all patches from target encoder (detached by caller)
-      - mask:            (B, N_patches) boolean mask where True denotes masked patches
-      - (H, W):          spatial dims of extracted stage
+    Extract encoder-stage patch embeddings, project+normalize, and return:
+      - online_selected: (N_online, P)
+      - target_all:      (B * N_patch, P)
+      - mask:            (B, N_patch) boolean (True = masked)
+      - hw:              (H, W) spatial dims
+      - online_to_target_idx: (N_online,) LongTensor mapping each online row
+                             -> index in target_all (0 .. B*N_patch-1)
     """
-
     def __init__(
             self,
             pretrained_name: Optional[str] = None,
@@ -459,43 +457,62 @@ class SegFormerFeatureWrapper(nn.Module):
         return mask  # (B, N)
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
+        device = x.device if self._device is None else self._device
 
-        # Extract online features
-        features_online = self._extract_encoder_stage(self.encoder, x)
-
+        # 1) extract online features
+        features_online = self._extract_encoder_stage(self.encoder, x)   # (B, D, H, W)
         B, D, H, W = features_online.shape
-
         if not self._proj_built:
             self._build_projector(D)
 
-        patches_online, H, W = self._flatten_patches(features_online)  # (B, N, D)
-        online_proj = self._apply_projector_and_norm(patches_online,
-                                                     self.projector)  # (B, N, P)
+        patches_online, H, W = self._flatten_patches(features_online)   # (B, N, D)
+        online_proj = self._apply_projector_and_norm(patches_online, self.projector)  # (B, N, P)
 
-        # Extract target features (caller may call this wrapper on encoder_k)
+        # 2) extract target features (same encoder module used for target wrapper instance)
         with torch.no_grad():
             features_target = self._extract_encoder_stage(self.encoder, x)
             patches_target, _, _ = self._flatten_patches(features_target)
-            target_proj = self._apply_projector_and_norm(patches_target, self.projector)
+            target_proj = self._apply_projector_and_norm(patches_target, self.projector)  # (B, N, P)
             target_proj = target_proj.detach()
 
-        B, N, P = online_proj.shape
-        mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size,
-                                        batch_index=batch_index, epoch=epoch)
+        # 3) build mapping indices
+        N = H * W
+        # global indices for target_all: for batch i and local patch j -> idx = i*N + j
+        local_indices = torch.arange(N, device=device).unsqueeze(0).expand(B, N)  # (B, N)
+        global_indices = (torch.arange(B, device=device).unsqueeze(1) * N) + local_indices  # (B, N)
+        global_indices = global_indices.reshape(-1)  # (B*N,)
+
+        # 4) create spatial block mask and select unmasked online patches
+        mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size, device=device,
+                                       batch_index=batch_index, epoch=epoch)  # (B, N)
         unmask = ~mask
 
-        # Gather unmasked online patches and concatenate across batch dimension
-        online_selected = [online_proj[i, unmask[i], :] for i in range(B)]
-        if len(online_selected) == 0:
-            online_selected = torch.empty((0, P), dtype=online_proj.dtype)
-        else:
-            online_selected = torch.cat(online_selected, dim=0)  # (sum_unmasked, P)
+        # online_selected list and mapping list
+        online_selected_list = []
+        online_to_target_idx_list = []
+        for i in range(B):
+            sel_local = torch.nonzero(unmask[i], as_tuple=False).flatten()
+            if sel_local.numel() == 0:
+                continue
+            # gather online projected embeddings for this sample
+            online_selected_list.append(online_proj[i, sel_local, :])  # (n_i, P)
+            # compute global indices of selected patches
+            global_sel = (i * N) + sel_local  # shape (n_i,)
+            online_to_target_idx_list.append(global_sel)
 
-        target_all = target_proj.reshape(B * N, P)  # (B*N, P)
+        if len(online_selected_list) == 0:
+            online_selected = torch.empty((0, self._proj_dim), device=device, dtype=online_proj.dtype)
+            online_to_target_idx = torch.empty((0,), dtype=torch.long, device=device)
+        else:
+            online_selected = torch.cat(online_selected_list, dim=0)                # (N_online, P)
+            online_to_target_idx = torch.cat(online_to_target_idx_list, dim=0).long()  # (N_online,)
+
+        # 5) flatten target_all
+        target_all = target_proj.reshape(B * N, -1)  # (B*N, P)
 
         if return_aux:
-            return online_selected, target_all, mask, (H, W)
-        return online_selected, target_all
+            return online_selected, target_all, mask, (H, W), online_to_target_idx
+        return online_selected, target_all, online_to_target_idx
 
 
 # -------------------------
@@ -548,7 +565,6 @@ class MSNSegFormerBase(nn.Module):
             self.online_wrapper.to(_device)
             self.view_generator.to(_device)
             self.mask_composer.to(_device)
-            print(f"Devices:  {_device}")
             self._device = _device
 
 
@@ -590,12 +606,12 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(self.augment(x))
 
-        online_selected, _ = self.online_wrapper(x_q, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
+        online_selected, _, online_to_target_indices = self.online_wrapper(x_q, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
         with torch.no_grad():
-            _, target_all = self.encoder_k(x_k, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
+            _, target_all, _ = self.encoder_k(x_k, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
             target_all = target_all.detach()
 
-        return online_selected, target_all
+        return online_selected, target_all, online_to_target_indices
 
     @staticmethod
     def augment(batch):
