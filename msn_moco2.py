@@ -4,6 +4,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -53,7 +54,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
         scaler = torch.amp.GradScaler()
 
     model.train()
-    total_loss = 0
+    total_loss = []
 
     best_loss = float('inf')
     min_delta = 0.00001
@@ -90,7 +91,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
                 if isinstance(loss_fn, MSNLoss):
                     loss_fn.update_center(target_emb.detach().to(torch.float32))
 
-            total_loss += loss.item()
+            total_loss += [loss.item()]
 
             # print(
             #     f"Epoch {epoch} Batch {batch_idx} Loss {loss.item():.4f} | "
@@ -99,7 +100,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
         if scheduler is not None:
             scheduler.step()
 
-        avg_loss = total_loss / len(dataloader)
+        avg_loss = np.mean(total_loss)
         logger.info(f"Pretraining Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
         if avg_loss + min_delta < best_loss:
             best_loss = avg_loss
@@ -247,7 +248,7 @@ def main():
     # pretrain_loss_fn = MSNLoss(temperature=0.9, center_momentum=0.001)
     # pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
     # pretrain_loss_fn = ContrastiveLoss(temperature=0.1, eps=1e-6)
-    pretrain_loss_fn = MSELoss()
+    pretrain_loss_fn = MSELoss(reduction="mean")
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
                                            lr=learning_rate,
