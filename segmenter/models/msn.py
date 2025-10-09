@@ -545,6 +545,8 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         if next(self.parameters(), None) is not None:
             self.device = next(self.parameters()).device
             print(f"Got it from parameters: {self.device}")
+            for param in self.parameters():
+                print(f"param: {type(param)}, device: {param.device}")
         elif next(self.buffers(), None) is not None:
             # Use buffers as a fallback
             self.device = next(self.buffers()).device
