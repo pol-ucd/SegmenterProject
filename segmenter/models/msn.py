@@ -483,6 +483,7 @@ class SegFormerFeatureWrapper(nn.Module):
         mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size,
                                         batch_index=batch_index, epoch=epoch)
         unmask = ~mask
+        print(f"Wrapper forward(), Mask: {mask.shape}")
 
         # Gather unmasked online patches and concatenate across batch dimension
         online_selected = [online_proj[i, unmask[i], :] for i in range(B)]
