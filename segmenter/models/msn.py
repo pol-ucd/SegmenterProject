@@ -25,7 +25,6 @@ from transformers import SegformerForSemanticSegmentation, SegformerConfig
 from segmenter.masks import apply_custom_augmentations
 from segmenter.models.base import MedianPool2d
 
-
 class MaskedTiledViewGenerator:
     def __init__(self, mask_composer,
                  tile_size=(64, 64),
@@ -361,7 +360,6 @@ class SegFormerFeatureWrapper(nn.Module):
             seed: int = 0,
     ):
         super().__init__()
-        self.device = next(self.parameters()).device
         cfg = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
         self.base_model = (
             SegformerForSemanticSegmentation.from_pretrained(
@@ -514,7 +512,19 @@ class MSNSegFormerBase(nn.Module):
     ):
         super().__init__()
         self.tile_size = tile_size
-        self.device = device
+
+        if next(self.parameters(), None) is not None:
+            self.device = next(self.parameters()).device
+            print(f"Got it from parameters: {self.device}")
+        elif next(self.buffers(), None) is not None:
+            # Use buffers as a fallback
+            self.device = next(self.buffers()).device
+            print(f"Got it from buffers: {self.device}")
+        else:
+            # Default to CPU if neither exists (e.g., an empty Sequential block)
+            self.device = torch.device("cpu")
+            print(f"Couldn't find it for fallback: {self.device}")
+        print(f"Using device: {self.device} for MSNSegFormerBase")
 
         self.online_wrapper = SegFormerFeatureWrapper(
             pretrained_name=pretrained_model,
@@ -544,12 +554,10 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
             momentum: float = 0.99,
             stage_idx: int = -1,
             seed: int = 0,
-            tile_size: Tuple[int, int] = (64, 64),
-            device: Optional[torch.device]=None
+            tile_size: Tuple[int, int] = (64, 64)
     ):
         super().__init__(pretrained_model, proj_dim=proj_dim, mask_ratio=mask_ratio,
-                         stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size,
-                         device=device)
+                         stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
         self.momentum = float(momentum)
         self.device = device
 
