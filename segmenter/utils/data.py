@@ -11,7 +11,9 @@ from PIL import Image, ImageFilter
 from matplotlib import pyplot as plt
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler
 from torchvision import transforms, transforms as T
-from torchvision.transforms import functional as F
+from torchvision.transforms import functional as F, InterpolationMode
+from torchvision.transforms import v2 as v2
+from torchvision.tv_tensors import Image, Mask
 
 
 def sharpening_kernel(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
@@ -22,37 +24,37 @@ def sharpening_kernel(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
     sharpened_cv2_kernel = cv2.filter2D(img, -1, kernel)
     return sharpened_cv2_kernel.astype(np.uint8)
 
-
-def gray_world(img: np.ndarray) -> np.ndarray:
-    """Simple Gray World color constancy."""
-    # Compute average per channel
-    avg_b, avg_g, avg_r = np.mean(img[:, :, 0]), np.mean(img[:, :, 1]), np.mean(img[:, :, 2])
-    avg_gray = (avg_b + avg_g + avg_r) / 3
-    # Scale     each channel
-    img[:, :, 0] = np.clip(img[:, :, 0] * (avg_gray / avg_b), 0, 255)
-    img[:, :, 1] = np.clip(img[:, :, 1] * (avg_gray / avg_g), 0, 255)
-    img[:, :, 2] = np.clip(img[:, :, 2] * (avg_gray / avg_r), 0, 255)
-    return img.astype(np.uint8)
-
-
-def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8, 8)) -> np.ndarray:
-    """Apply CLAHE on the L-channel of LAB."""
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
-    cl = clahe.apply(l)
-    lab = cv2.merge([cl, a, b])
-    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-
-
-def preprocess_image_pipeline(image: np.ndarray):
-    img_sharp = sharpening_kernel(image)
-    img_gw = gray_world(img_sharp)
-
-    # final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8, 8))
-
-    return img_gw
-
+#
+# def gray_world(img: np.ndarray) -> np.ndarray:
+#     """Simple Gray World color constancy."""
+#     # Compute average per channel
+#     avg_b, avg_g, avg_r = np.mean(img[:, :, 0]), np.mean(img[:, :, 1]), np.mean(img[:, :, 2])
+#     avg_gray = (avg_b + avg_g + avg_r) / 3
+#     # Scale     each channel
+#     img[:, :, 0] = np.clip(img[:, :, 0] * (avg_gray / avg_b), 0, 255)
+#     img[:, :, 1] = np.clip(img[:, :, 1] * (avg_gray / avg_g), 0, 255)
+#     img[:, :, 2] = np.clip(img[:, :, 2] * (avg_gray / avg_r), 0, 255)
+#     return img.astype(np.uint8)
+#
+#
+# def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8, 8)) -> np.ndarray:
+#     """Apply CLAHE on the L-channel of LAB."""
+#     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+#     l, a, b = cv2.split(lab)
+#     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+#     cl = clahe.apply(l)
+#     lab = cv2.merge([cl, a, b])
+#     return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+#
+#
+# def preprocess_image_pipeline(image: np.ndarray):
+#     img_sharp = sharpening_kernel(image)
+#     img_gw = gray_world(img_sharp)
+#
+#     # final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8, 8))
+#
+#     return img_gw
+#
 
 def get_num_samples_from_hdf5(hdf5_path):
     """
@@ -67,6 +69,36 @@ def get_num_samples_from_hdf5(hdf5_path):
     """
     with h5py.File(hdf5_path, 'r', swmr=True) as hf:
         return len(hf['images'])
+
+
+def pretrain_transform(batch: dict) -> dict:
+    """
+    Base image pretraining transform intended as preprocessing for
+    SegFormer backbone model input. Standardise the pixel values
+    to align with the ImageNet mean and std. This means the images
+    not in the range [0.0, 1.0] anymore and will have pixel
+    values in the range [-3.0, 3.0] (approximately).
+
+    To convert back to a 'regular' image you have to reverse
+    the ImageNet normalisation step.
+
+    :param batch:
+    :return:
+    """
+    # Standard ImageNet mean and standard deviation
+    IMAGENET_MEAN = [0.485, 0.456, 0.406]
+    IMAGENET_STD = [0.229, 0.224, 0.225]
+    TARGET_SIZE = (512, 512)  # Size for SegFormer
+
+    pipeline = v2.Compose([v2.ToImage(),
+                           v2.ToDtype(torch.float32, scale=True),
+                           v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.BICUBIC),
+                           v2.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+                           ])
+
+    images = [pipeline(img) for img in batch['images']]
+    result = {'images': torch.stack(images)}
+    return result
 
 
 class GaussianSmoothing(object):
@@ -90,6 +122,7 @@ class GaussianSmoothing(object):
     def __call__(self, image):
         radius = np.random.uniform(self.min_radius, self.max_radius)
         return image.filter(ImageFilter.GaussianBlur(radius))
+
 
 
 class HDF5BatchSampler(Sampler[int]):
@@ -134,6 +167,9 @@ class HDF5DatasetOptimized(Dataset):
     HDF5 Dataset designed for batch reading using a custom Sampler.
     It opens the file in the worker process via the worker_init_fn
     (best practice for h5py multiprocessing).
+
+    The 'transform' function MUST support the dictionary {key, value}
+    format and return transformed values in the same format.
     """
 
     def __init__(self, hdf5_path, data_keys=None, transform=None):
@@ -184,49 +220,16 @@ class HDF5DatasetOptimized(Dataset):
             except Exception as e:
                 raise RuntimeError(f"Could not open HDF5 file: {e}")
 
-        # 1. Efficient Batch Read
-        if isinstance(idx, (list, np.ndarray)):
-            # Optimized read: idx is a list of contiguous indices
-            batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
-        else:
-            # Single item read
-            batch_data = {k: self.f[k][idx] for k in self.data_keys if k in self.f}
-
-        # 2. FIX 2: Correctly apply transform to each sample in the batch
-        results = {}
-
-        # Determine if we are processing a single sample or a batch
         is_batch = isinstance(idx, (list, np.ndarray))
+        # Efficient Batch Read (by a DataLoader)
+        # HDF5 supports batch indices so retrieve everything as batches for simplicity
+        # items will have shape (len(idx), H, W, C)
+        if not is_batch:
+            idx = [idx]
+        results = {k: self.f[k][idx] for k in self.data_keys if k in self.f} # (B, H, W, C)
 
-        for k, v in batch_data.items():
-            if self.transform:
-
-                # If we read a batch, we must loop and augment each sample individually
-                if is_batch:
-                    transformed_samples = []
-                    # v is now B, H, W, C NumPy array
-                    for sample_np in v:
-                        # Convert H, W, C NumPy to C, H, W Tensor
-                        sample_tensor = torch.as_tensor(sample_np).permute(2, 0, 1).float()
-                        transformed_samples.append(self.transform(sample_tensor))
-
-                    # Stack the augmented 3D results back into a 4D batch (B, C, H, W)
-                    results[k] = torch.stack(transformed_samples)
-
-                # If we only read a single item, apply transform directly
-                else:
-                    # Convert H, W, C NumPy to C, H, W Tensor
-                    sample_tensor = torch.as_tensor(v).permute(2, 0, 1).float()
-                    results[k] = self.transform(sample_tensor)
-
-            else:
-                # No transform: convert directly to tensor, handling shape for batch/single
-                if is_batch:
-                    # B, H, W, C -> B, C, H, W (4D)
-                    results[k] = torch.as_tensor(v).permute(0, 3, 1, 2).float()
-                else:
-                    # H, W, C -> C, H, W (3D)
-                    results[k] = torch.as_tensor(v).permute(2, 0, 1).float()
+        if self.transform:
+            results = self.transform(results)
 
         return results
 
@@ -490,24 +493,63 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
         image = image_augment(image)
         mask = mask_augment(mask)
         return image, mask.long()
+#
+# def pretrain_transform(batch: dict) -> dict:
+#     """
+#     Base image pretraining transform intended as preprocessing for
+#     SegFormer backbone model input. Standardise the pixel values
+#     to align with the ImageNet mean and std. This means the images
+#     not in the range [0.0, 1.0] anymore and will have pixel
+#     values in the range [-3.0, 3.0] (approximately).
+#
+#     To convert back to a 'regular' image you have to reverse
+#     the ImageNet normalisation step.
+#
+#     :param batch:
+#     :return:
+#     """
+#     # Standard ImageNet mean and standard deviation
+#     IMAGENET_MEAN = [0.485, 0.456, 0.406]
+#     IMAGENET_STD = [0.229, 0.224, 0.225]
+#     TARGET_SIZE = (512, 512)  # Size for SegFormer
+#
+#     pipeline = v2.Compose([v2.ToImage(),
+#                            v2.ToDtype(torch.float32, scale=True),
+#                            v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.BICUBIC),
+#                            v2.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+#                            ])
+#
+#     images = [ pipeline(img) for img in batch['images']]
+#     result = {'images': torch.stack(images)}
+#     return result
+#
 
 
 if __name__ == '__main__':
+    import PIL.Image as Image
 
     source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
 
-    image_augment = T.Compose([T.Resize((320,240),
-                                        T.InterpolationMode.BICUBIC),
-                               T.ToTensor(),
-                               T.Normalize(mean=[0.485, 0.456, 0.406],
-                                           std=[0.229, 0.224, 0.225])
-                               ])
+    # image_augment = T.Compose([v2.Resize((1024, 1024),
+    #                                     T.InterpolationMode.BICUBIC),
+    #                            # v2.Normalize(mean=[0.485, 0.456, 0.406],
+    #                            #             std=[0.229, 0.224, 0.225])
+    #                            ])
 
     pretrain_dataset = HDF5DatasetOptimized(hdf5_path=source,
                                             data_keys=['images'],
                                             # transform=None)
-                                            transform=image_augment)
+                                            transform=pretrain_transform)
+    indices = list(range(8))
+    batch = pretrain_dataset[indices]
+    print(f"Batch read of {len(indices)} items, result shape is {batch['images'].shape}, type {type(batch['images'])}")
+    print(batch['images'][0].max(), batch['images'][0].min(), batch['images'][0].dtype)
+    image = batch['images'][0]
+    plt.imshow(image.permute(1,2,0))
+    plt.show()
 
-    print(pretrain_dataset[0]['images'].shape)
-    plt.imshow(pretrain_dataset[0]['images'].permute(1, 2, 0) / 255)
+    single = pretrain_dataset[10]
+    print(f"Single read of item, result shape is {single['images'].shape}, type {type(single['images'])}")
+    image = single['images']
+    plt.imshow(image.squeeze(0).permute(1,2,0))
     plt.show()

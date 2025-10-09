@@ -5,8 +5,9 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms, transforms as T
 
+from segmenter.utils import pretrain_transform
 from segmenter.utils.data import MSNPretrainDatasetHDF5, get_num_samples_from_hdf5, MSNFinetuneDatasetHDF5, \
-    HDF5BatchSampler, hdf5_worker_init_fn, HDF5DatasetOptimized
+    HDF5BatchSampler, hdf5_worker_init_fn, HDF5DatasetOptimized, pretrain_transform
 
 # PRETRAIN_DATASETS = ['../segmenter/data/dresden_preprocessed.h5',
 #                      '../segmenter/data/all_data.h5']
@@ -56,16 +57,16 @@ class MSNDataHandler:
 def load_data(batch_size: int, finetune_percent: float,
               image_size=(512, 512),
               num_workers: int = 4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
-    image_augment = T.Compose([T.Resize(image_size,
-                                        T.InterpolationMode.BICUBIC),
-                               T.Normalize(mean=[0.485, 0.456, 0.406],
-                                           std=[0.229, 0.224, 0.225])
-                               ])
+    # image_augment = T.Compose([T.Resize(image_size,
+    #                                     T.InterpolationMode.BICUBIC),
+    #                            T.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                        std=[0.229, 0.224, 0.225])
+    #                            ])
 
     # pretrain_dataset = MSNPretrainDatasetHDF5(hdf5_path=PRETRAIN_DATASET)
     pretrain_dataset = HDF5DatasetOptimized(hdf5_path=PRETRAIN_DATASET,
                                             data_keys=['images'],
-                                            transform=image_augment)
+                                            transform=pretrain_transform)
 
     # total_len = get_num_samples_from_hdf5(hdf5_path=PRETRAIN_DATASET)
 
