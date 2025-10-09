@@ -30,7 +30,7 @@ finetune_percent = 0.1
 IMAGE_SIZE = (512, 512)
 
 WARMUP_EPOCHS = 5
-TOTAL_EPOCHS = 2
+TOTAL_EPOCHS = 3
 STEPS_PER_EPOCH = 33000 // BATCH_SIZE  # Example: 33,000 images / 64 batch size = ~516 steps
 WARMUP_STEPS = WARMUP_EPOCHS * STEPS_PER_EPOCH
 TOTAL_STEPS = TOTAL_EPOCHS * STEPS_PER_EPOCH
@@ -72,7 +72,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
                 online_emb = F.normalize(online_emb.to(torch.float32), dim=-1)
                 target_emb = F.normalize(target_emb.to(torch.float32), dim=-1).detach()
                 loss = loss_fn(online_emb, target_emb)
-                print(f"loss {loss}")
                 total_loss += loss.item()
 
             if scaler is not None:
