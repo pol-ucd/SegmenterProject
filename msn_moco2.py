@@ -49,8 +49,8 @@ def pretrain_step(model: MoCoSiameseNetwork,
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     # scaler = None
-    # if torch.cuda.is_available():
-    #     scaler = torch.amp.GradScaler()
+    if torch.cuda.is_available():
+        scaler = torch.amp.GradScaler()
 
     model.train()
     total_loss = 0
