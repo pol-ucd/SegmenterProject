@@ -262,7 +262,7 @@ def main():
                                        proj_dim=256,
                                        momentum=0.996).to(device)
 
-    pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.01)
+    pretrain_loss_fn = MSNLoss(temperature=0.1, center_momentum=0.9)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
