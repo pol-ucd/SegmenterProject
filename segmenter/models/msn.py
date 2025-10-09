@@ -26,10 +26,11 @@ from segmenter.masks import apply_custom_augmentations
 from segmenter.models.base import MedianPool2d
 
 
-class MaskedTiledViewGenerator:
+class MaskedTiledViewGenerator(nn.Module):
     def __init__(self, mask_composer,
                  tile_size=(64, 64),
                  return_metadata=False):
+        super(MaskedTiledViewGenerator, self).__init__()
         self.mask_composer = mask_composer  # e.g., SurgicalMaskComposer, kwargs passed as params
         self.tile_size = tile_size
         self.return_metadata = return_metadata
@@ -85,8 +86,9 @@ class MaskedTiledViewGenerator:
         return masked_image
 
 
-class SurgicalMaskComposer:
+class SurgicalMaskComposer(nn.Module):
     def __init__(self, instrument_prob=0.3, fluid_prob=0.3, fold_prob=0.4):
+        super(SurgicalMaskComposer, self).__init__()
         self.mask_types = ['instrument', 'fluid', 'fold']
         self.probs = [instrument_prob, fluid_prob, fold_prob]
 
@@ -542,8 +544,8 @@ class MSNSegFormerBase(nn.Module):
         _device = self.get_device()
         if _device != self._device:
             self.online_wrapper.to(_device)
-            self.self.view_generator.to(_device)
-            self.self.mask_composer.to(_device)
+            self.view_generator.to(_device)
+            self.mask_composer.to(_device)
             print(f"Devices:  {_device}")
             self._device = _device
 
