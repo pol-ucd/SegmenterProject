@@ -308,9 +308,9 @@ def contrastive_loss(out_1, out_2, temperature=0.25, eps=1e-06):
     out = torch.cat([out_1, out_2], dim=0)
     # [2*B, 2*B]
     sim_matrix = torch.exp(torch.mm(out, out.t().contiguous()) / (temperature + eps))
-    mask = (torch.ones_like(sim_matrix) - torch.eye(bs1*bs2, device=sim_matrix.device)).bool()
+    mask = (torch.ones_like(sim_matrix) - torch.eye(bs1+bs2, device=sim_matrix.device)).bool()
     # [2B, 2B-1]
-    sim_matrix = sim_matrix.masked_select(mask).view(bs1*bs2, -1)
+    sim_matrix = sim_matrix.masked_select(mask).view(bs1+bs2, -1)
 
     # compute loss
     pos_sim = torch.exp(torch.sum(out_1 * out_2, dim=-1) / (temperature + eps))
