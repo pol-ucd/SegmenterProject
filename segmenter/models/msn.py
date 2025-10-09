@@ -25,6 +25,7 @@ from transformers import SegformerForSemanticSegmentation, SegformerConfig
 from segmenter.masks import apply_custom_augmentations
 from segmenter.models.base import MedianPool2d
 
+
 class MaskedTiledViewGenerator:
     def __init__(self, mask_composer,
                  tile_size=(64, 64),
@@ -218,7 +219,7 @@ class SegFormerMSNWithMomentum(nn.Module):
 
         # projector
         last_hidden_dim = config.hidden_sizes[self.stage_idx] if hasattr(config, "hidden_sizes") else \
-        self.encoder.layernorms[-1].normalized_shape[0]
+            self.encoder.layernorms[-1].normalized_shape[0]
         self.projector = nn.Sequential(
             nn.Linear(last_hidden_dim, last_hidden_dim // 2),
             nn.ReLU(inplace=True),
@@ -525,6 +526,21 @@ class MSNSegFormerBase(nn.Module):
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
         return self.online_wrapper(x, epoch=epoch, batch_index=batch_index, return_aux=return_aux).float()
 
+    def get_device(self) -> torch.device:
+        if next(self.parameters(), None) is not None:
+            device = next(self.parameters()).device
+            print(f"Got device from parameters: {self.device}")
+            for param in self.parameters():
+                print(f"param: {type(param)}, device: {param.device}")
+        elif next(self.buffers(), None) is not None:
+            # Use buffers as a fallback
+            device = next(self.buffers()).device
+            print(f"Got device from buffers: {self.device}")
+        else:
+            # Default to CPU if neither exists (e.g., an empty Sequential block)
+            device = torch.device("cpu")
+            print(f"Couldn't find device, using fallback: {device}")
+
 
 class MoCoSiameseNetwork(MSNSegFormerBase):
     def __init__(
@@ -542,20 +558,7 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
                          stage_idx=stage_idx, block_size=block_size, seed=seed, tile_size=tile_size)
         self.momentum = float(momentum)
 
-        if next(self.parameters(), None) is not None:
-            self.device = next(self.parameters()).device
-            print(f"Got it from parameters: {self.device}")
-            for param in self.parameters():
-                print(f"param: {type(param)}, device: {param.device}")
-        elif next(self.buffers(), None) is not None:
-            # Use buffers as a fallback
-            self.device = next(self.buffers()).device
-            print(f"Got it from buffers: {self.device}")
-        else:
-            # Default to CPU if neither exists (e.g., an empty Sequential block)
-            self.device = torch.device("cpu")
-            print(f"Couldn't find it for fallback: {self.device}")
-        print(f"Using device: {self.device} for MoCoSiameseNetwork")
+        print(f"Using device: {self.get_device()} for MoCoSiameseNetwork.__init__()")
 
         self.encoder_k = deepcopy(self.online_wrapper)
         self._set_requires_grad(self.encoder_k, False)
@@ -574,6 +577,7 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
             k.data.mul_(m).add_(q.data * (1.0 - m))
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
+        print(f"Using device: {self.get_device()} for MoCoSiameseNetwork.forward()")
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(self.augment(x))
 
