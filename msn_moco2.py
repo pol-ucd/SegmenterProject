@@ -73,7 +73,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
                 online_emb = F.normalize(online_emb.to(torch.float32), dim=-1)
                 target_emb = F.normalize(target_emb.to(torch.float32), dim=-1).detach()
                 loss = loss_fn(online_emb, target_emb[masked_indices])
-                total_loss += loss.item()
+                total_loss += [loss.item()]
 
             if scaler is not None:
                 scaler.scale(loss).backward()
@@ -91,7 +91,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
                 if isinstance(loss_fn, MSNLoss):
                     loss_fn.update_center(target_emb.detach().to(torch.float32))
 
-            total_loss += [loss.item()]
 
             # print(
             #     f"Epoch {epoch} Batch {batch_idx} Loss {loss.item():.4f} | "
