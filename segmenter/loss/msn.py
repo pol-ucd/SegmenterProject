@@ -1,6 +1,7 @@
+import numpy as np
 import torch
 from torch import nn as nn
-from torch.nn import functional as F
+from torch.nn import functional as F, CrossEntropyLoss
 
 
 class MSNLoss(nn.Module):
@@ -118,11 +119,10 @@ class MSNLoss(nn.Module):
         target_distribution = target_probs.mean(dim=0, keepdim=True)  # (1, N_all)
         target_distribution = target_distribution.expand(N_masked, -1)  # (N_masked, N_all)
 
-        # cross-entropy between target_distribution (soft) and pred_probs
-        # loss per online sample: -sum(target_dist * log(pred_probs))
-        loss_matrix = - target_distribution * torch.log(pred_probs + self.eps)
+        # KL Divergence between target_distribution (soft) and pred_probs
+        # loss per online sample: -sum(target_dist * log(pred_probs/target_dist))
+        loss_matrix = - target_distribution * torch.log(pred_probs/(target_distribution + self.eps))
         loss = loss_matrix.sum(dim=1).mean()  # average over N_masked
-
         return loss
 
 
@@ -279,20 +279,25 @@ def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -
 
 
 if __name__ == '__main__':
-    temperature = 0.2
-    N, D = 11, 256
+    temperature = 0.1
+    N, D = 27, 128
 
-    z_anchor = torch.randint(-255, 255, (N, D)).float()
-    z_positive = torch.randint(-255, 255, (N, D)).float()
+    denom = np.sqrt(N - 1)
 
-    loss_fn = MSNLoss(temperature=0.05, center_momentum=0.1)
-    loss = loss_fn(z_anchor, z_positive)
-    print(f"MSNLoss : {loss}")
+    ce_fn = CrossEntropyLoss()
 
-    loss = contrastive_loss(z_anchor, z_positive)
-    print(f"contrastive_loss: {loss}")
+    torch.manual_seed(0)
+    for _ in range(100):
+        z_anchor = torch.randint(-1000, 1000, (N, D)).float()
+        z_positive = torch.randint(-1000, 1000, (N, D)).float()
 
-    loss_fn = NTXEntLoss()
-    loss = loss_fn(z_anchor, z_positive)
-    print(f"NTXLoss: {loss}")
+        loss_fn = MSNLoss(temperature=temperature, center_momentum=0.9)
+        msn_loss = loss_fn(z_anchor, z_positive)
+        perf_loss = loss_fn(z_anchor, z_anchor)
+        con_loss = contrastive_loss(z_anchor, z_positive)
+        print(f"MSNLoss : {msn_loss: 0.6f}, z_anchor self loss: [{perf_loss: 0.6f}], contrastive_loss: {con_loss: 0.6f}")
+    #
+    # loss_fn = NTXEntLoss()
+    # loss = loss_fn(z_anchor, z_positive)
+    # print(f"NTXLoss: {loss}")
 
