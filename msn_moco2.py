@@ -245,10 +245,10 @@ def main():
                                        mask_ratio=0.5,
                                        momentum=0.9).to(device)
 
-    # pretrain_loss_fn = MSNLoss(temperature=0.9, center_momentum=0.001)
+    pretrain_loss_fn = MSNLoss(temperature=0.9, center_momentum=0.001)
     # pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
     # pretrain_loss_fn = ContrastiveLoss(temperature=0.1, eps=1e-6)
-    pretrain_loss_fn = MSELoss(reduction="mean")
+    # pretrain_loss_fn = MSELoss(reduction="mean")
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
                                            lr=learning_rate,

@@ -73,6 +73,9 @@ class MSNLoss(nn.Module):
         if online_preds.ndim != 2 or target_protos.ndim != 2:
             raise ValueError("online_preds and target_protos must be 2D tensors")
 
+        online_preds = F.normalize(online_preds, dim=-1)
+        target_protos = F.normalize(target_protos, dim=-1)
+
         # defensive dtype/device handling
         device = online_preds.device
         dtype = online_preds.dtype
@@ -92,6 +95,9 @@ class MSNLoss(nn.Module):
         # compute similarities
         # logits for online -> target (N_masked, N_all)
         logits_online = torch.matmul(online_preds, centered_targets.t()) / (self.temperature + self.eps)
+        # predicted probabilities from online predictions (over columns = prototypes)
+        logits_online = logits_online - logits_online.max(dim=1, keepdim=True)[0]
+        pred_probs = F.softmax(logits_online, dim=1)  # (N_masked, N_all)
 
         # logits among targets to form soft targets (N_all, N_all)
         with torch.no_grad():
@@ -99,21 +105,16 @@ class MSNLoss(nn.Module):
             # subtract max per row for numerical stability before softmax
             logits_target = logits_target - logits_target.max(dim=1, keepdim=True)[0]
             target_probs = F.softmax(logits_target, dim=1)  # (N_all, N_all)
-            # Optionally, one could sharpen or apply constraints here.
+            # Optional: apply constraints here
 
-        # predicted probabilities from online predictions (over columns = prototypes)
-        logits_online = logits_online - logits_online.max(dim=1, keepdim=True)[0]
-        pred_probs = F.softmax(logits_online, dim=1)  # (N_masked, N_all)
+
 
         # Build aggregated target distribution that matches online rows.
         # For each online sample we don't necessarily have a one-to-one mapping to a target row.
         # Simpler approach: average target_probs across rows to get a global prototype prior,
         # then use that as soft labels for online rows.
         #
-        # More faithful MSN variants pick the corresponding target prototype row for masked indices.
-        # If masked positions correspond to some indices in target_protos, you can map them directly.
-        #
-        # Here we use the mean target distribution as soft labels to stabilize training.
+        # Use the mean target distribution as soft labels to stabilize training.
         target_distribution = target_probs.mean(dim=0, keepdim=True)  # (1, N_all)
         target_distribution = target_distribution.expand(N_masked, -1)  # (N_masked, N_all)
 
@@ -286,12 +287,12 @@ if __name__ == '__main__':
 
     loss_fn = MSNLoss(temperature=0.05, center_momentum=0.1)
     loss = loss_fn(z_anchor, z_positive)
-    print(loss)
+    print(f"MSNLoss : {loss}")
 
     loss = contrastive_loss(z_anchor, z_positive)
-    print(loss)
+    print(f"contrastive_loss: {loss}")
 
     loss_fn = NTXEntLoss()
     loss = loss_fn(z_anchor, z_positive)
-    print(loss)
+    print(f"NTXLoss: {loss}")
 
