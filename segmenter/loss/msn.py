@@ -25,7 +25,7 @@ class MSNLoss(nn.Module):
       - center_momentum: EMA momentum for center update (0..1)
     """
 
-    def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9, eps: float = 1e-8):
+    def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9, eps: float = 1e-9):
         super().__init__()
         self.temperature = float(temperature)
         self.center_momentum = float(center_momentum)
@@ -116,15 +116,17 @@ class MSNLoss(nn.Module):
         # then use that as soft labels for online rows.
         #
         # Use the mean target distribution as soft labels to stabilize training.
-        target_distribution = target_probs.mean(dim=0, keepdim=True)  # (1, N_all)
-        target_distribution = target_distribution.expand(N_masked, -1)  # (N_masked, N_all)
+        # target_distribution = target_probs.mean(dim=0, keepdim=True)  # (1, N_all)
+
+        # target_distribution = target_distribution.expand(N_masked, -1)  # (N_masked, N_all)
+        target_distribution = target_probs.expand(N_masked, -1)  # (N_masked, N_all)
 
         # KL Divergence between target_distribution (soft) and pred_probs
         # loss per online sample: -sum(target_dist * log(pred_probs/target_dist))
-        loss_matrix = - target_distribution * torch.log(pred_probs/(target_distribution + self.eps))
+        entropy_target = - target_distribution * torch.log(target_distribution)
+        loss_matrix = - target_distribution * torch.log(pred_probs) - entropy_target + self.eps
         loss = loss_matrix.sum(dim=1).mean()  # average over N_masked
         return loss
-
 
 
 class SimSiamLoss(nn.Module):
@@ -280,7 +282,7 @@ def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -
 
 if __name__ == '__main__':
     temperature = 0.1
-    N, D = 27, 128
+    N, D = 81, 1280
 
     denom = np.sqrt(N - 1)
 
