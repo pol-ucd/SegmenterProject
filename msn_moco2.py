@@ -242,6 +242,7 @@ def main():
 
     # Instantiate Siamese Model and Loss
     siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model,
+                                       mask_ratio=0.5,
                                        momentum=0.9).to(device)
 
     # pretrain_loss_fn = MSNLoss(temperature=0.9, center_momentum=0.001)
