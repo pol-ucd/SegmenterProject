@@ -214,26 +214,50 @@ class ContrastiveLoss(nn.Module):
     def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
         return contrastive_loss(z_anchor, z_positive, temperature=self.temperature, eps=self.eps)
 
-def contrastive_loss(out_1, out_2, temperature=0.25, eps=1e-06):
-    out_1 = F.normalize(out_1, dim=-1)
-    out_2 = F.normalize(out_2, dim=-1)
-    bs1 = out_1.size(0)
-    bs2 = out_2.size(0)
 
-    # [2*B, D]
-    out = torch.cat([out_1, out_2], dim=0)
-    # [2*B, 2*B]
-    sim_matrix = torch.exp(torch.mm(out, out.t().contiguous()) / (temperature + eps))
-    mask = (torch.ones_like(sim_matrix) - torch.eye(bs1+bs2, device=sim_matrix.device)).bool()
-    # [2B, 2B-1]
-    sim_matrix = sim_matrix.masked_select(mask).view(bs1+bs2, -1)
+import torch
+import torch.nn.functional as F
 
-    # compute loss
-    pos_sim = torch.exp(torch.sum(out_1 * out_2, dim=-1) / (temperature + eps))
-    # [2*B]
-    pos_sim = torch.cat([pos_sim, pos_sim], dim=0)
-    loss = (- torch.log(pos_sim / sim_matrix.sum(dim=-1))).mean()
-    return loss
+
+def contrastive_loss(z1, z2, mask=None, temperature=0.1):
+    """
+    Computes contrastive loss between two batches of embeddings with optional masking and zero self-loss.
+
+    Args:
+        z1 (Tensor): Embeddings from view 1 (batch_size x dim)
+        z2 (Tensor): Embeddings from view 2 (batch_size x dim)
+        mask (Tensor, optional): Binary mask (batch_size,) or (batch_size x 1) indicating valid samples
+        temperature (float): Temperature scaling factor
+
+    Returns:
+        Tensor: Scalar contrastive loss
+    """
+    batch_size = z1.size(0)
+    z1 = F.normalize(z1, dim=1)
+    z2 = F.normalize(z2, dim=1)
+
+    # Similarity matrix
+    sim_matrix = torch.mm(z1, z2.t()) / temperature  # shape: (batch_size, batch_size)
+
+    # Mask out self-similarity
+    self_mask = torch.eye(batch_size, device=z1.device).bool()
+    sim_matrix.masked_fill_(self_mask, float('-inf'))
+
+    # Targets: each row should match the corresponding column index
+    targets = torch.arange(batch_size, device=z1.device)
+
+    # Compute loss
+    loss_1 = F.cross_entropy(sim_matrix, targets, reduction='none')
+    loss_2 = F.cross_entropy(sim_matrix.t(), targets, reduction='none')
+    loss = 0.5 * (loss_1 + loss_2)
+
+    if mask is not None:
+        mask = mask.float().view(-1)
+        loss = loss * mask
+        return loss.sum() / (mask.sum() + 1e-8)
+    else:
+        return loss.mean()
+
 
 class NTXEntLoss(nn.Module):
     def __init__(self, temperature:float=0.5, eps:float=1e-9):
@@ -282,24 +306,24 @@ def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -
 
 if __name__ == '__main__':
     temperature = 0.1
-    N, D = 81, 1280
-
-    denom = np.sqrt(N - 1)
+    loss_fn = InfoNCELoss(temperature=temperature)
+    if isinstance(loss_fn, InfoNCELoss):
+        data_shape = (64, 3, 320, 240)
+    else:
+        data_shape = (81, 1280)
 
     ce_fn = CrossEntropyLoss()
 
     torch.manual_seed(0)
     for _ in range(100):
-        z_anchor = torch.randint(-1000, 1000, (N, D)).float()
-        z_positive = torch.randint(-1000, 1000, (N, D)).float()
+        z_anchor = torch.randint(-1000, 1000, data_shape).float()
+        z_positive = torch.randint(-1000, 1000, data_shape).float()
 
-        loss_fn = MSNLoss(temperature=temperature, center_momentum=0.9)
+
         msn_loss = loss_fn(z_anchor, z_positive)
-        perf_loss = loss_fn(z_anchor, z_anchor)
+        msn_zero = loss_fn(z_anchor, z_anchor)
         con_loss = contrastive_loss(z_anchor, z_positive)
-        print(f"MSNLoss : {msn_loss: 0.6f}, z_anchor self loss: [{perf_loss: 0.6f}], contrastive_loss: {con_loss: 0.6f}")
-    #
-    # loss_fn = NTXEntLoss()
-    # loss = loss_fn(z_anchor, z_positive)
-    # print(f"NTXLoss: {loss}")
+        con_zero = contrastive_loss(z_anchor, z_anchor)
+        print(f"MSNLoss : {msn_loss: 0.6f}, z_anchor self loss: [{msn_zero: 0.6f}], contrastive_loss: {con_loss: 0.6f}, z_anchor self loss: [{con_zero: 0.6f}]")
+
 

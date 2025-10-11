@@ -4,15 +4,16 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 from transformers import SegformerConfig
 
-from segmenter.core import Config
+from segmenter.core import Config, get_default_device_type
 from segmenter.loss import DiceLoss
-from segmenter.loss.msn import InfoNCELoss
+from segmenter.loss.msn import InfoNCELoss, MSNLoss
 from segmenter.masks import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import SimCLRSegFormer
@@ -23,10 +24,10 @@ config = Config("config/msn_common.json")
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 backbone_model = "nvidia/segformer-b4-finetuned-ade-512-512"
 
-learning_rate=config['optimizer']['params']['lr']
+learning_rate = 1e-05
 # batch_size=config['optimizer']['params']['batch_size']
 
-BATCH_SIZE = 12
+BATCH_SIZE = 64
 NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
@@ -44,9 +45,14 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
                   optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device,
                   scaler=None, num_epochs=100):
     logger = logging.getLogger(__name__)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+    if torch.cuda.is_available():
+        scaler = torch.amp.GradScaler()
+
     model.train()
-    total_loss = 0
-    mask_generator = MaskGenerator(size=IMAGE_SIZE)
+    total_loss = []
+    # mask_generator = MaskGenerator(size=IMAGE_SIZE)
 
     best_loss = float('inf')
     min_delta = 0.00001
@@ -56,15 +62,16 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
     for epoch in range(num_epochs):
         for batch_idx, batch in enumerate(dataloader):
             x = batch["images"].to(device)
-
             optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=(scaler is not None)):
+            with torch.amp.autocast(device_type=get_default_device_type(),
+                                    dtype=torch.float16,
+                                    enabled=(scaler is not None)):
                 z_anchor, z_positive = model(x, return_patches=False)
-                # ensure float32 for loss calculations
                 z_anchor = z_anchor.to(dtype=torch.float32)
                 z_positive = z_positive.to(dtype=torch.float32)
 
-                loss = simclr_loss(z_anchor, z_positive)
+                loss = loss_fn(z_anchor, z_positive)
+                total_loss += [loss.item()]
 
             if scaler is not None:
                 scaler.scale(loss).backward()
@@ -76,9 +83,14 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
-            total_loss += loss.item()
+            with torch.no_grad():
+                if isinstance(loss_fn, MSNLoss):
+                    loss_fn.update_center(z_anchor.detach().to(torch.float32))
 
-        avg_loss = total_loss / len(dataloader)
+        if scheduler is not None:
+            scheduler.step()
+
+        avg_loss = np.mean(total_loss)
         logger.info(f"Pretraining Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
         if avg_loss + min_delta < best_loss:
             best_loss = avg_loss
@@ -238,7 +250,6 @@ def main():
         pretrain_dataloader,
         pretrain_optimizer,
         pretrain_loss_fn,
-        scaler=scaler,
         device=device
     )
 
