@@ -61,7 +61,7 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
     max_boredom = 10
     best_model = None
     for epoch in range(num_epochs):
-        for batch_idx, batch in enumerate(dataloader):
+        for batch_idx, batch in enumerate(tqdm(dataloader)):
             x = batch["images"].to(device)
             optimizer.zero_grad()
             with torch.amp.autocast(device_type=get_default_device_type(),
