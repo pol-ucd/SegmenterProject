@@ -312,7 +312,7 @@ def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float =
 
     # mask self-similarities
     diag_mask = torch.eye(2 * B, device=sim.device, dtype=torch.bool)
-    sim_masked = sim.masked_fill(diag_mask, -1e9)
+    sim_masked = sim.masked_fill(diag_mask, -np.inf)
 
     # positives: i <-> i+B
     positives = torch.arange(B, device=sim.device)
