@@ -565,6 +565,15 @@ class MSNSegFormerBase(nn.Module):
             self.mask_composer.to(_device)
             self._device = _device
 
+    @staticmethod
+    def augment(batch):
+        # return batch
+        batch_anchor = []
+        for image in batch:
+            augmented = apply_custom_augmentations(image.clone())
+            batch_anchor.append(augmented)
+        return torch.stack(batch_anchor)
+
 
 class MoCoSiameseNetwork(MSNSegFormerBase):
     def __init__(

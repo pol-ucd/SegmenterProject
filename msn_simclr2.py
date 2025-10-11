@@ -127,7 +127,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     max_boredom = 10
     best_model = None
     for epoch in range(num_epochs):
-        for inputs, labels in dataloader:  # inputs=[B,C,H,W], labels=[B,H,W]
+        for inputs, labels in tqdm(dataloader):  # inputs=[B,C,H,W], labels=[B,H,W]
             inputs, labels = inputs.to(device), labels.to(device).long()
 
             optimizer.zero_grad()
@@ -220,8 +220,6 @@ def main():
     logger.info(f"Starting pretraining run for {prefix.upper()}")
 
     # Mock Configuration
-    IMAGE_SIZE = 512
-    BATCH_SIZE = 4
     NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
     finetune_percent = 0.1
 
