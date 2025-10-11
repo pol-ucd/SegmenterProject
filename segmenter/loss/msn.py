@@ -312,7 +312,7 @@ def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float =
 
     # mask self-similarities
     diag_mask = torch.eye(2 * B, device=sim.device, dtype=torch.bool)
-    sim_masked = sim.masked_fill(diag_mask, -np.inf)
+    sim_masked = sim.masked_fill(diag_mask, -float("inf"))
 
     # positives: i <-> i+B
     positives = torch.arange(B, device=sim.device)
@@ -381,8 +381,14 @@ class NTXentLoss(nn.Module):
         z1 = F.normalize(z1, dim=1)
         z2 = F.normalize(z2, dim=1)
         if positive_index is None:
-            return nt_xent_image_level(z1, z2, self.temperature)
-        return nt_xent_general(z1, z2, self.temperature, positive_index)
+            a = nt_xent_image_level(z1, z2, self.temperature)
+            b1 = nt_xent_image_level(z1, z1, self.temperature)
+            b2 = nt_xent_image_level(z2, z2, self.temperature)
+        else:
+            a = nt_xent_general(z1, z2, self.temperature, positive_index)
+            b1 = nt_xent_general(z1, z1, self.temperature, positive_index)
+            b2 = nt_xent_general(z2, z2, self.temperature, positive_index)
+        return a - 0.5*(b1 + b2)
 
 
 
