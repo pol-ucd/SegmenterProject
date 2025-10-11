@@ -1,10 +1,38 @@
+from typing import Optional
+
 import numpy as np
 import torch
 from torch import nn as nn
 from torch.nn import functional as F, CrossEntropyLoss
 
+class MSNBaseLoss(nn.Module):
+    def __init__(self, reduction:str='mean', symmetric:bool=False, eps:float=1e-09):
+        super().__init__()
+        if reduction == 'mean':
+            self.reduction = torch.mean
+        elif reduction == 'sum':
+            self.reduction = torch.sum
+        else:
+            self.reduction = None
 
-class MSNLoss(nn.Module):
+        self.symmetric = symmetric
+        self.eps = max(0, eps)
+        self.device = None
+
+
+    def forward(self, online_preds: torch.Tensor, target_protos: torch.Tensor) -> torch.Tensor:
+        pass
+
+    def _check_inputs(self, online_preds: torch.Tensor, target_protos: torch.Tensor):
+        if online_preds.ndim != 2 or target_protos.ndim != 2:
+            raise ValueError("online_preds and target_protos must be 2D tensors")
+
+        if target_protos.shape[1] != online_preds.shape[1]:
+            raise ValueError(f"Dim mismatch: online D={online_preds.shape[1]}, target D={target_protos.shape[1]}")
+
+
+
+class MSNLoss(MSNBaseLoss):
     """
     MSN-style loss suitable for use with MoCoSiameseNetwork using
     patch-level embeddings from the SegFormer wrapper.
@@ -25,11 +53,11 @@ class MSNLoss(nn.Module):
       - center_momentum: EMA momentum for center update (0..1)
     """
 
-    def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9, eps: float = 1e-9):
-        super().__init__()
+    def __init__(self, temperature: float = 0.1, center_momentum: float = 0.9,
+                 eps: float = 1e-9, reduction='mean', symmetric=False):
+        super().__init__(reduction, symmetric, eps)
         self.temperature = float(temperature)
         self.center_momentum = float(center_momentum)
-        self.eps = float(eps)
 
         # center accumulates over target prototypes; will be created lazily on first update
         self.register_buffer("target_center", None, persistent=True)
@@ -71,8 +99,7 @@ class MSNLoss(nn.Module):
           5. Build predicted distribution from logits_online (row-wise softmax).
           6. Compute cross-entropy loss: -sum(target_dist * log(pred_dist)) averaged over online rows.
         """
-        if online_preds.ndim != 2 or target_protos.ndim != 2:
-            raise ValueError("online_preds and target_protos must be 2D tensors")
+        self._check_inputs(online_preds, target_protos)
 
         online_preds = F.normalize(online_preds, dim=-1)
         target_protos = F.normalize(target_protos, dim=-1)
@@ -169,42 +196,45 @@ class SimSiamLoss(nn.Module):
 
         return total_loss / B
 
-
-class InfoNCELoss(nn.Module):
-    """
-    SimCLR-style InfoNCE Loss for contrastive learning.
-    Calculates the loss over the full 2B embeddings (Anchor and Positive views).
-    """
-
-    def __init__(self, temperature=0.07):
-        super().__init__()
-        self.temperature = temperature
-
-    def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
-        """
-        :param z_anchor: Anchor embeddings [B, C(lasses), H, W].
-        :param z_positive: Positive embeddings [B, C(lasses), H, W].
-        :return: Scalar InfoNCE loss.
-        """
-        B, C, H, W = z_anchor.shape
-
-        # Normalize embeddings (Crucial for cosine similarity)
-        z_anchor = F.normalize(z_anchor, dim=1)
-        z_positive = F.normalize(z_positive, dim=1)
-
-        similarity_matrix = torch.einsum('i c h w, j c h w -> i j c h w',
-                                         z_anchor, z_positive) / self.temperature
-
-        logits = similarity_matrix.reshape(B * B, -1)
-
-        # The label for the positive pair is always 0 (it is in the 0th column)
-        labels = torch.eye(B, dtype=torch.long, device=logits.device).reshape(B * B)
-
-        # Apply Cross Entropy Loss (equivalent to InfoNCE)
-        loss = F.cross_entropy(logits, labels)
-
-        return loss / (B * B)
-
+#
+# class InfoNCELoss(MSNBaseLoss):
+#     """
+#     SimCLR-style InfoNCE Loss for contrastive learning.
+#     Calculates the loss over the full 2B embeddings (Anchor and Positive views).
+#     """
+#
+#     def __init__(self, temperature=0.1, reduction='mean', symmetric=False):
+#         super().__init__(reduction, symmetric)
+#         self.temperature = temperature
+#
+#
+#     def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
+#         """
+#         :param z_anchor: Anchor embeddings [N, B].
+#         :param z_positive: Positive embeddings [N, B].
+#         :return: Scalar InfoNCE loss.
+#         """
+#         self._check_inputs(z_anchor, z_positive)
+#
+#         N, B = z_anchor.shape
+#
+#         # Normalize embeddings (Crucial for cosine similarity)
+#         z_anchor = F.normalize(z_anchor, dim=1)
+#         z_positive = F.normalize(z_positive, dim=1)
+#
+#         similarity_matrix = torch.einsum('i c h w, j c h w -> i j c h w',
+#                                          z_anchor, z_positive) / self.temperature
+#
+#         logits = similarity_matrix.reshape(B * B, -1)
+#
+#         # The label for the positive pair is always 0 (it is in the 0th column)
+#         labels = torch.eye(B, dtype=torch.long, device=logits.device).reshape(B * B)
+#
+#         # Apply Cross Entropy Loss (equivalent to InfoNCE)
+#         loss = F.cross_entropy(logits, labels)
+#
+#         return loss / (B * B)
+#
 class ContrastiveLoss(nn.Module):
     def __init__(self, temperature=0.25, eps=1e-6):
         super().__init__()
@@ -213,10 +243,6 @@ class ContrastiveLoss(nn.Module):
 
     def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
         return contrastive_loss(z_anchor, z_positive, temperature=self.temperature, eps=self.eps)
-
-
-import torch
-import torch.nn.functional as F
 
 
 def contrastive_loss(z1, z2, mask=None, temperature=0.1):
@@ -259,58 +285,111 @@ def contrastive_loss(z1, z2, mask=None, temperature=0.1):
         return loss.mean()
 
 
-class NTXEntLoss(nn.Module):
-    def __init__(self, temperature:float=0.5, eps:float=1e-9):
-        super().__init__()
-        self.temperature = temperature
-        self.eps = eps
 
-    def forward(self, z1: torch.Tensor, z2:torch.Tensor, temperature:float=None):
-        # self.temperature = temperature if temperature is not None else self.temperature
-        # B = z1.shape[0]
-        # z = torch.cat([z1, z2], dim=0)
-        # sim = torch.matmul(z, z.T) / self.temperature
-        # sim = sim - torch.eye(2*B, device=sim.device) * self.eps
-        # positives = torch.cat([torch.arange(B,2*B), torch.arange(0,B)], dim=0).to(z.device)
-        # log_prob = sim.log_softmax(dim=1)
-        # loss = -log_prob[torch.arange(2*B), positives].mean()
-        # return loss
-        return nt_xent_loss(z1, z2, self.temperature)
+def _check_2d(z: torch.Tensor, name: str):
+    if z.ndim != 2:
+        raise ValueError(f"{name} must be 2D tensor of shape (N, D), got shape {z.shape}")
 
-def nt_xent_loss(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
+def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
     """
-    Basic NT-Xent (SimCLR) loss for a batch of size B.
-    z1, z2: (B, D) L2-normalized embeddings
-    Returns scalar loss averaged over 2B samples.
+    Standard SimCLR NT-Xent (InfoNCE) loss for image-level embeddings.
+
+    Args:
+      z1, z2: (B, D) L2-normalized embeddings for two augmented views; must have same B.
+      temperature: positive scalar.
+
+    Returns:
+      scalar loss averaged over 2B examples.
     """
+    _check_2d(z1, "z1")
+    _check_2d(z2, "z2")
+    if z1.shape[0] != z2.shape[0]:
+        raise ValueError("z1 and z2 must have same batch size")
+
     B = z1.shape[0]
-    z = torch.cat([z1, z2], dim=0)             # (2B, D)
-    sim = torch.matmul(z, z.T) / temperature   # (2B, 2B)
-    # mask out self similarities
-    labels = torch.arange(B, device=z.device)
-    labels = torch.cat([labels, labels], dim=0)
+    z = torch.cat([z1, z2], dim=0)                       # (2B, D)
+    sim = torch.matmul(z, z.T) / temperature             # (2B, 2B)
 
-    # create mask to ignore same-sample similarities
-    diag_mask = torch.eye(2 * B, device=z.device).bool()
-    sim_masked = sim.masked_fill(diag_mask, -9e15)
+    # mask self-similarities
+    diag_mask = torch.eye(2 * B, device=sim.device, dtype=torch.bool)
+    sim_masked = sim.masked_fill(diag_mask, -1e9)
 
-    # positive pairs indices: i <-> i+B
-    positives = torch.cat([torch.arange(B, 2 * B), torch.arange(0, B)], dim=0).to(z.device)
+    # positives: i <-> i+B
+    positives = torch.arange(B, device=sim.device)
+    positives = torch.cat([positives + B, positives], dim=0)  # (2B,)
 
-    numerator = torch.exp(sim[torch.arange(2 * B), positives])
-    denominator = torch.exp(sim_masked).sum(dim=1)
-    loss = -torch.log(numerator / denominator)
+    log_prob = F.log_softmax(sim_masked, dim=1)
+    loss = -log_prob[torch.arange(2 * B, device=sim.device), positives]
     return loss.mean()
+
+
+def nt_xent_general(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5,
+                     positive_index: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """
+    Generalized NT-Xent for possibly unequal counts (z1: N1 x D, z2: N2 x D).
+
+    Args:
+      z1, z2: 2D tensors of embeddings.
+      temperature: scalar.
+      positive_index: optional LongTensor of length N = N1+N2 mapping each row index i in
+        concatenated tensor [z1; z2] -> index of its positive in the concatenated tensor.
+        If None and N1==N2 the standard pairing i <-> i+N1 is used.
+
+    Returns:
+      scalar loss averaged over N rows.
+    """
+    _check_2d(z1, "z1")
+    _check_2d(z2, "z2")
+    N1, N2 = z1.shape[0], z2.shape[0]
+    z = torch.cat([z1, z2], dim=0)                       # (N, D), N = N1+N2
+    N = N1 + N2
+
+    sim = torch.matmul(z, z.T) / temperature             # (N, N)
+    diag_mask = torch.eye(N, device=sim.device, dtype=torch.bool)
+    sim_masked = sim.masked_fill(diag_mask, -1e9)
+
+    if positive_index is None:
+        if N1 != N2:
+            raise ValueError("positive_index required when z1 and z2 have different lengths")
+        pos = torch.arange(N1, device=sim.device)
+        positive_index = torch.cat([pos + N1, pos], dim=0)  # (N,)
+    else:
+        if positive_index.numel() != N:
+            raise ValueError("positive_index length must equal total concatenated rows N1+N2")
+        positive_index = positive_index.to(device=sim.device)
+
+    log_prob = F.log_softmax(sim_masked, dim=1)
+    loss = -log_prob[torch.arange(N, device=sim.device), positive_index]
+    return loss.mean()
+
+
+class NTXentLoss(nn.Module):
+    """
+    Module wrapper for NT-Xent.
+
+    Usage:
+      loss_fn = NTXentLoss(temperature=0.5)
+      loss = loss_fn(z1, z2)           # image-level case
+      loss = loss_fn(z1, z2, mapping)  # generalized case with positive_index
+    """
+    def __init__(self, temperature: float = 0.5):
+        super().__init__()
+        self.temperature = float(temperature)
+
+    def forward(self, z1: torch.Tensor, z2: torch.Tensor, positive_index: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # expect inputs to be L2-normalized; normalize defensively
+        z1 = F.normalize(z1, dim=1)
+        z2 = F.normalize(z2, dim=1)
+        if positive_index is None:
+            return nt_xent_image_level(z1, z2, self.temperature)
+        return nt_xent_general(z1, z2, self.temperature, positive_index)
 
 
 
 if __name__ == '__main__':
     temperature = 0.1
-    loss_fn = InfoNCELoss(temperature=temperature)
-    if isinstance(loss_fn, InfoNCELoss):
-        data_shape = (64, 3, 320, 240)
-    else:
-        data_shape = (81, 1280)
+    loss_fn = NTXentLoss(temperature=temperature)
+    data_shape = (81, 1280)
 
     ce_fn = CrossEntropyLoss()
 

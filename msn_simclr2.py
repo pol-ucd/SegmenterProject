@@ -13,7 +13,7 @@ from transformers import SegformerConfig
 
 from segmenter.core import Config, get_default_device_type
 from segmenter.loss import DiceLoss
-from segmenter.loss.msn import InfoNCELoss, MSNLoss
+from segmenter.loss.msn import NTXentLoss, MSNLoss
 from segmenter.masks import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import SimCLRSegFormer
@@ -42,7 +42,7 @@ prefix='msn_simclr'
 # - dataloader yields dict with "images": tensor (B, C, H, W)
 # - device set
 def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, loss_fn: InfoNCELoss, device: torch.device,
+                  optimizer: torch.optim.Optimizer, loss_fn: NTXentLoss, device: torch.device,
                   scaler=None, num_epochs=100):
     logger = logging.getLogger(__name__)
 
@@ -235,7 +235,7 @@ def main():
 
     # Instantiate Siamese Model and Loss
     siamese_model = SimCLRSegFormer(pretrained_model=backbone_model).to(device)
-    pretrain_loss_fn = InfoNCELoss(temperature=0.1)
+    pretrain_loss_fn = NTXentLoss(temperature=0.5)
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),

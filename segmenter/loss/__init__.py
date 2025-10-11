@@ -13,7 +13,7 @@ from .boundary_sdf import BoundarySDFLoss
 from .dice import DiceLoss
 from .focal import FocalLoss
 from .iou import IoULoss
-from .msn import MSNLoss
+from .msn import MSNLoss, NTXentLoss
 from .tversky import TverskyLoss
 
 from .factory import LossFactory
@@ -35,6 +35,7 @@ __all__ = [
     "DiceLoss",
     "IoULoss",
     "MSNLoss",
+    "NTXentLoss",
     "LossFactory",
     "HybridLoss",
 ]
