@@ -13,7 +13,6 @@ from tqdm import tqdm
 
 from segmenter.core import Config, set_default_device, get_default_device, get_default_device_type
 from segmenter.loss import DiceLoss, MSNLoss
-from segmenter.loss.msn import NTXEntLoss, ContrastiveLoss
 from segmenter.models.msn import MoCoSiameseNetwork, SegFormerAdapter
 from segmenter.core.torch import get_default_device_type
 from segmenter.utils.msn import load_data
@@ -29,9 +28,10 @@ NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE = (512, 512)
+N_EPOCHS = 200
 
 WARMUP_EPOCHS = 5
-TOTAL_EPOCHS = 100
+TOTAL_EPOCHS = 200
 STEPS_PER_EPOCH = 33000 // BATCH_SIZE  # Example: 33,000 images / 64 batch size = ~516 steps
 WARMUP_STEPS = WARMUP_EPOCHS * STEPS_PER_EPOCH
 TOTAL_STEPS = TOTAL_EPOCHS * STEPS_PER_EPOCH
@@ -45,7 +45,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
                   loss_fn: nn.Module,
                   scaler=None,
                   device: torch.device = None,
-                  num_epochs=100):
+                  num_epochs=200):
     logger = logging.getLogger(__name__)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
@@ -260,7 +260,8 @@ def main():
         pretrain_dataloader,
         pretrain_optimizer,
         pretrain_loss_fn,
-        device=device
+        device=device,
+        num_epochs=N_EPOCHS
     )
 
     logger.info("Completed Pre-training Phase (Siamese Network) ---")

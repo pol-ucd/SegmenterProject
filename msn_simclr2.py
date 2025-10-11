@@ -32,6 +32,7 @@ NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE=(512, 512)
+N_EPOCHS = 200
 
 prefix='msn_simclr'
 
@@ -97,7 +98,7 @@ def pretrain_step(model: SimCLRSegFormer, dataloader: torch.utils.data.DataLoade
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
             try:
-                best_model = model.online_encoder.state_dict()
+                best_model = model.online_wrapper.state_dict()
                 torch.save(best_model,
                            f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth')
             except Exception as e:
@@ -127,7 +128,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
     max_boredom = 10
     best_model = None
     for epoch in range(num_epochs):
-        for inputs, labels in tqdm(dataloader):  # inputs=[B,C,H,W], labels=[B,H,W]
+        for inputs, labels in tqdm(dataloader):
             inputs, labels = inputs.to(device), labels.to(device).long()
 
             optimizer.zero_grad()
@@ -248,7 +249,8 @@ def main():
         pretrain_dataloader,
         pretrain_optimizer,
         pretrain_loss_fn,
-        device=device
+        device=device,
+        num_epochs=N_EPOCHS
     )
 
     logger.info("Completed Pre-training Phase (Siamese Network) ---")
