@@ -3,6 +3,7 @@ from typing import Optional
 import numpy as np
 import torch
 from torch import nn as nn
+from torch.ao.nn.quantized import Softmax
 from torch.nn import functional as F, CrossEntropyLoss
 
 from segmenter.models.msn import MSNSegFormerBase
@@ -408,8 +409,13 @@ class NegCosineSimilarityLoss(MSNBaseLoss):
         z: (B, D) target vectors (should be normalized prior to use)
         Returns mean negative cosine similarity per batch.
         """
+        z = F.softmax(z, dim=1)
+        p = F.softmax(p, dim=1)
+
         z = F.normalize(z, dim=1)
-        return - (p * z).sum(dim=1).mean()
+        p = F.normalize(p, dim=1)
+
+        return (1.0 - (p * z).sum(dim=1)).mean()
 
 
 class SimSiamLoss(nn.Module):
@@ -436,11 +442,11 @@ class SimSiamLoss(nn.Module):
 
 if __name__ == '__main__':
     temperature = 0.1
-    loss_fn = NTXentLoss(temperature=temperature)
+    # loss_fn = NTXentLoss(temperature=temperature)
+    loss_fn = NegCosineSimilarityLoss(temperature=temperature)
     data_shape = (81, 1280)
 
-    ce_fn = CrossEntropyLoss()
-
+    # ce_fn = CrossEntropyLoss()
     torch.manual_seed(0)
     for _ in range(100):
         z_anchor = torch.randint(-1000, 1000, data_shape).float()
