@@ -13,7 +13,7 @@ from transformers import SegformerConfig
 
 from segmenter.core import Config, get_default_device_type
 from segmenter.loss import DiceLoss
-from segmenter.loss.msn import SimSiamLoss
+from segmenter.loss.msn import SimSiamLoss, NegCosineSimilarityLoss
 from segmenter.masks import MaskGenerator
 from segmenter.models.base import SupervisedSegFormer
 from segmenter.models.msn import SimSiamSegFormer
@@ -35,11 +35,14 @@ prefix='msn_simsiam'
 
 
 def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, loss_fn: SimSiamLoss,
+                  optimizer: torch.optim.Optimizer,
+                  loss_fn: NegCosineSimilarityLoss,
                   scaler=None,
                   device: torch.device = None,
                   num_epochs=200):
     logger = logging.getLogger(__name__)
+
+    loss_fn1, loss_fn2 = loss_fn.clone(), loss_fn.clone()
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     if torch.cuda.is_available():
@@ -71,6 +74,7 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
                 z2_det = z2_det.to(dtype=torch.float32)
 
                 loss = model.compute_loss(p1, z2_det, p2, z1_det)
+                loss = 0.5*(loss_fn1(p1, z2_det) + loss_fn2(p2, z1_det))
                 total_loss += [loss.item()]
 
             if scaler is not None:
@@ -241,7 +245,7 @@ def main():
     except Exception as e:
         logger.info(f"No checkpoint loaded `{prefix}_segformer_pretrained.pth`: {e}")
 
-    pretrain_loss_fn = SimSiamLoss()
+    pretrain_loss_fn = NegCosineSimilarityLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),

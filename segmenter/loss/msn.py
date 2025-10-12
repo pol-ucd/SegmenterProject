@@ -5,8 +5,11 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F, CrossEntropyLoss
 
+from segmenter.models.msn import MSNSegFormerBase
+
+
 class MSNBaseLoss(nn.Module):
-    def __init__(self, reduction:str='mean', symmetric:bool=False, eps:float=1e-09):
+    def __init__(self, reduction: str = 'mean', symmetric: bool = False, eps: float = 1e-09):
         super().__init__()
         if reduction == 'mean':
             self.reduction = torch.mean
@@ -19,7 +22,6 @@ class MSNBaseLoss(nn.Module):
         self.eps = max(0, eps)
         self.device = None
 
-
     def forward(self, online_preds: torch.Tensor, target_protos: torch.Tensor) -> torch.Tensor:
         pass
 
@@ -29,7 +31,6 @@ class MSNBaseLoss(nn.Module):
 
         if target_protos.shape[1] != online_preds.shape[1]:
             raise ValueError(f"Dim mismatch: online D={online_preds.shape[1]}, target D={target_protos.shape[1]}")
-
 
 
 class MSNLoss(MSNBaseLoss):
@@ -135,8 +136,6 @@ class MSNLoss(MSNBaseLoss):
             target_probs = F.softmax(logits_target, dim=1)  # (N_all, N_all)
             # Optional: apply constraints here
 
-
-
         # Build aggregated target distribution that matches online rows.
         # For each online sample we don't necessarily have a one-to-one mapping to a target row.
         # Simpler approach: average target_probs across rows to get a global prototype prior,
@@ -195,6 +194,7 @@ class SimSiamLoss(nn.Module):
         total_loss = 0.5 * (loss1 + loss2)
 
         return total_loss / B
+
 
 #
 # class InfoNCELoss(MSNBaseLoss):
@@ -285,10 +285,10 @@ def contrastive_loss(z1, z2, mask=None, temperature=0.1):
         return loss.mean()
 
 
-
 def _check_2d(z: torch.Tensor, name: str):
     if z.ndim != 2:
         raise ValueError(f"{name} must be 2D tensor of shape (N, D), got shape {z.shape}")
+
 
 def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
     """
@@ -307,8 +307,8 @@ def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float =
         raise ValueError("z1 and z2 must have same batch size")
 
     B = z1.shape[0]
-    z = torch.cat([z1, z2], dim=0)                       # (2B, D)
-    sim = torch.matmul(z, z.T) / temperature             # (2B, 2B)
+    z = torch.cat([z1, z2], dim=0)  # (2B, D)
+    sim = torch.matmul(z, z.T) / temperature  # (2B, 2B)
 
     # mask self-similarities
     diag_mask = torch.eye(2 * B, device=sim.device, dtype=torch.bool)
@@ -324,7 +324,7 @@ def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float =
 
 
 def nt_xent_general(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5,
-                     positive_index: Optional[torch.Tensor] = None) -> torch.Tensor:
+                    positive_index: Optional[torch.Tensor] = None) -> torch.Tensor:
     """
     Generalized NT-Xent for possibly unequal counts (z1: N1 x D, z2: N2 x D).
 
@@ -341,10 +341,10 @@ def nt_xent_general(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5
     _check_2d(z1, "z1")
     _check_2d(z2, "z2")
     N1, N2 = z1.shape[0], z2.shape[0]
-    z = torch.cat([z1, z2], dim=0)                       # (N, D), N = N1+N2
+    z = torch.cat([z1, z2], dim=0)  # (N, D), N = N1+N2
     N = N1 + N2
 
-    sim = torch.matmul(z, z.T) / temperature             # (N, N)
+    sim = torch.matmul(z, z.T) / temperature  # (N, N)
     diag_mask = torch.eye(N, device=sim.device, dtype=torch.bool)
     sim_masked = sim.masked_fill(diag_mask, -1e9)
 
@@ -372,11 +372,13 @@ class NTXentLoss(nn.Module):
       loss = loss_fn(z1, z2)           # image-level case
       loss = loss_fn(z1, z2, mapping)  # generalized case with positive_index
     """
+
     def __init__(self, temperature: float = 0.5):
         super().__init__()
         self.temperature = float(temperature)
 
-    def forward(self, z1: torch.Tensor, z2: torch.Tensor, positive_index: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, z1: torch.Tensor, z2: torch.Tensor,
+                positive_index: Optional[torch.Tensor] = None) -> torch.Tensor:
         # expect inputs to be L2-normalized; normalize defensively
         z1 = F.normalize(z1, dim=1)
         z2 = F.normalize(z2, dim=1)
@@ -388,8 +390,37 @@ class NTXentLoss(nn.Module):
             a = nt_xent_general(z1, z2, self.temperature, positive_index)
             b1 = nt_xent_general(z1, z1, self.temperature, positive_index)
             b2 = nt_xent_general(z2, z2, self.temperature, positive_index)
-        return a - 0.5*(b1 + b2)
+        return a - 0.5 * (b1 + b2)
 
+
+class NegCosineSimilarityLoss(MSNBaseLoss):
+    def __init__(self, temperature: float = 0.5):
+        super().__init__()
+        self.temperature = float(temperature)
+
+    def forward(self, z1: torch.Tensor, z2: torch.Tensor) -> torch.Tensor:
+        return self.cosine_similarity(z1, z2)
+
+    @staticmethod
+    def negative_cosine_similarity(p: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+        """
+        p: (B, D') predicted vectors (already normalized)
+        z: (B, D) target vectors (should be normalized prior to use)
+        Returns mean negative cosine similarity per batch.
+        """
+        z = F.normalize(z, dim=1)
+        return - (p * z).sum(dim=1).mean()
+
+
+def compute_loss_sim(self, p1: torch.Tensor, z2_det: torch.Tensor, p2: torch.Tensor,
+                 z1_det: torch.Tensor) -> torch.Tensor:
+    """
+        Symmetric SimSiam loss:
+          loss = 0.5 * (neg_cos(p1, z2_det) + neg_cos(p2, z1_det))
+        """
+    loss1 = NegCosineSimilarityLoss.negative_cosine_similarity(p1, z2_det)
+    loss2 = NegCosineSimilarityLoss.negative_cosine_similarity(p2, z1_det)
+    return 0.5 * (loss1 + loss2)
 
 
 if __name__ == '__main__':
@@ -404,11 +435,9 @@ if __name__ == '__main__':
         z_anchor = torch.randint(-1000, 1000, data_shape).float()
         z_positive = torch.randint(-1000, 1000, data_shape).float()
 
-
         msn_loss = loss_fn(z_anchor, z_positive)
         msn_zero = loss_fn(z_anchor, z_anchor)
         con_loss = contrastive_loss(z_anchor, z_positive)
         con_zero = contrastive_loss(z_anchor, z_anchor)
-        print(f"MSNLoss : {msn_loss: 0.6f}, z_anchor self loss: [{msn_zero: 0.6f}], contrastive_loss: {con_loss: 0.6f}, z_anchor self loss: [{con_zero: 0.6f}]")
-
-
+        print(
+            f"MSNLoss : {msn_loss: 0.6f}, z_anchor self loss: [{msn_zero: 0.6f}], contrastive_loss: {con_loss: 0.6f}, z_anchor self loss: [{con_zero: 0.6f}]")
