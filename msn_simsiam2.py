@@ -95,7 +95,7 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
             boredom = 0
             logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
             try:
-                best_model = model.online_encoder.state_dict()
+                best_model = model.online_wrapper.state_dict()
                 torch.save(best_model,
                            f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth')
             except Exception as e:
