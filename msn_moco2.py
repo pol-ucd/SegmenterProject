@@ -245,6 +245,19 @@ def main():
                                        mask_ratio=0.5,
                                        momentum=0.9).to(device)
 
+    logger.info("Loading snapshot `msn_mo previous del.online_encoder` state dict for fine-tuning.")
+    try:
+        last_model = siamese_model.online_wrapper
+        checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
+        last_model.load_state_dict(torch.load(checkpoint,
+                                         # map_location=device,
+                                         map_location=next(last_model.parameters()).device,
+                                         weights_only=False))
+
+        logger.info(f"Checkpoint loaded successfully from: {checkpoint}")
+    except Exception as e:
+        logger.info(f"No checkpoint loaded `{prefix}_segformer_pretrained.pth`: {e}")
+
     pretrain_loss_fn = MSNLoss(temperature=0.9, center_momentum=0.001)
     # pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
     # pretrain_loss_fn = ContrastiveLoss(temperature=0.1, eps=1e-6)
