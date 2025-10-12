@@ -43,8 +43,6 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
                   num_epochs=200):
     logger = logging.getLogger(__name__)
 
-    loss_fn1, loss_fn2 = loss_fn.clone(), loss_fn.clone()
-
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     if torch.cuda.is_available():
         scaler = torch.amp.GradScaler()
@@ -74,8 +72,7 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
                 z1_det = z1_det.to(dtype=torch.float32)
                 z2_det = z2_det.to(dtype=torch.float32)
 
-                loss = model.compute_loss(p1, z2_det, p2, z1_det)
-                loss = 0.5*(loss_fn1(p1, z2_det) + loss_fn2(p2, z1_det))
+                loss = loss_fn(p1, z2_det, p2, z1_det)
                 total_loss += [loss.item()]
 
             if scaler is not None:
