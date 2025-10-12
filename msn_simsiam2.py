@@ -30,6 +30,7 @@ NUM_WORKERS = 4
 NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE=(512, 512)
+N_EPOCHS = 200
 
 prefix='msn_simsiam'
 
@@ -245,7 +246,7 @@ def main():
     except Exception as e:
         logger.info(f"No checkpoint loaded `{prefix}_segformer_pretrained.pth`: {e}")
 
-    pretrain_loss_fn = NegCosineSimilarityLoss()
+    pretrain_loss_fn = SimSiamLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)
     pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
@@ -258,7 +259,8 @@ def main():
         pretrain_dataloader,
         pretrain_optimizer,
         pretrain_loss_fn,
-        device
+        device=device,
+        num_epochs=N_EPOCHS
     )
 
     logger.info("Completed Pre-training Phase (Siamese Network) ---")

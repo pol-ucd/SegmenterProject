@@ -154,47 +154,47 @@ class MSNLoss(MSNBaseLoss):
         loss = loss_matrix.sum(dim=1).mean()  # average over N_masked
         return loss
 
-
-class SimSiamLoss(nn.Module):
-    """
-    Calculates the full symmetric SimSiam loss using MSE between predictions and targets.
-    L_sym = 0.5 * [ L(p1, z2_det) + L(p2, z1_det) ]
-    """
-
-    def __init__(self):
-        super().__init__()
-        # MSE is used for the loss calculation
-        self.mse_loss = nn.MSELoss()
-
-    def forward(self, p1: torch.Tensor, z2_detached: torch.Tensor,
-                p2: torch.Tensor, z1_detached: torch.Tensor) -> torch.Tensor:
-        """
-        Calculates the full symmetric loss.
-        :param p1: Prediction from view 1 (Anchor) [B, D].
-        :param z2_detached: Target embedding from detached view 2 (Positive) [B, D].
-        :param p2: Prediction from view 2 (Positive) [B, D].
-        :param z1_detached: Target embedding from detached view 1 (Anchor) [B, D].
-        :return: Scalar total symmetric loss tensor.
-        """
-        B = p1.shape[0]
-        # Normalize embeddings before calculating loss (as per SimSiam implementation)
-        p1 = F.normalize(p1, dim=1)
-        z2_detached = F.normalize(z2_detached, dim=1)
-        p2 = F.normalize(p2, dim=1)
-        z1_detached = F.normalize(z1_detached, dim=1)
-
-        # Calculate the two symmetric loss terms (MSE)
-        # Term 1: Prediction from view 1 vs Target from detached view 2
-        loss1 = self.mse_loss(p1, z2_detached)
-
-        # Prediction from view 2 vs Target from detached view 1
-        loss2 = self.mse_loss(p2, z1_detached)
-
-        # 3. Total Symmetric Loss (Averaged)
-        total_loss = 0.5 * (loss1 + loss2)
-
-        return total_loss / B
-
+#
+# class SimSiamLoss(nn.Module):
+#     """
+#     Calculates the full symmetric SimSiam loss using MSE between predictions and targets.
+#     L_sym = 0.5 * [ L(p1, z2_det) + L(p2, z1_det) ]
+#     """
+#
+#     def __init__(self):
+#         super().__init__()
+#         # MSE is used for the loss calculation
+#         self.mse_loss = nn.MSELoss()
+#
+#     def forward(self, p1: torch.Tensor, z2_detached: torch.Tensor,
+#                 p2: torch.Tensor, z1_detached: torch.Tensor) -> torch.Tensor:
+#         """
+#         Calculates the full symmetric loss.
+#         :param p1: Prediction from view 1 (Anchor) [B, D].
+#         :param z2_detached: Target embedding from detached view 2 (Positive) [B, D].
+#         :param p2: Prediction from view 2 (Positive) [B, D].
+#         :param z1_detached: Target embedding from detached view 1 (Anchor) [B, D].
+#         :return: Scalar total symmetric loss tensor.
+#         """
+#         B = p1.shape[0]
+#         # Normalize embeddings before calculating loss (as per SimSiam implementation)
+#         p1 = F.normalize(p1, dim=1)
+#         z2_detached = F.normalize(z2_detached, dim=1)
+#         p2 = F.normalize(p2, dim=1)
+#         z1_detached = F.normalize(z1_detached, dim=1)
+#
+#         # Calculate the two symmetric loss terms (MSE)
+#         # Term 1: Prediction from view 1 vs Target from detached view 2
+#         loss1 = self.mse_loss(p1, z2_detached)
+#
+#         # Prediction from view 2 vs Target from detached view 1
+#         loss2 = self.mse_loss(p2, z1_detached)
+#
+#         # 3. Total Symmetric Loss (Averaged)
+#         total_loss = 0.5 * (loss1 + loss2)
+#
+#         return total_loss / B
+#
 
 #
 # class InfoNCELoss(MSNBaseLoss):
@@ -412,15 +412,26 @@ class NegCosineSimilarityLoss(MSNBaseLoss):
         return - (p * z).sum(dim=1).mean()
 
 
-def compute_loss_sim(self, p1: torch.Tensor, z2_det: torch.Tensor, p2: torch.Tensor,
-                 z1_det: torch.Tensor) -> torch.Tensor:
-    """
-        Symmetric SimSiam loss:
-          loss = 0.5 * (neg_cos(p1, z2_det) + neg_cos(p2, z1_det))
+class SimSiamLoss(nn.Module):
+    def __init__(self, temperature: float = 0.5):
+        super().__init__()
+        self.temperature = float(temperature)
+        self.loss_1 = NegCosineSimilarityLoss(temperature=temperature)
+        self.loss_2 = NegCosineSimilarityLoss(temperature=temperature)
+
+    def forward(self, p1: torch.Tensor, z2_det: torch.Tensor, p2: torch.Tensor,
+                 z1_det: torch.Tensor)-> torch.Tensor:
+        return self._compute_loss_sim(p1, z2_det, p2, z1_det)
+
+    def _compute_loss_sim(self, p1: torch.Tensor, z2_det: torch.Tensor, p2: torch.Tensor,
+                     z1_det: torch.Tensor) -> torch.Tensor:
         """
-    loss1 = NegCosineSimilarityLoss.negative_cosine_similarity(p1, z2_det)
-    loss2 = NegCosineSimilarityLoss.negative_cosine_similarity(p2, z1_det)
-    return 0.5 * (loss1 + loss2)
+            Symmetric SimSiam loss:
+              loss = 0.5 * (neg_cos(p1, z2_det) + neg_cos(p2, z1_det))
+            """
+        loss1 = self.loss_1(p1, z2_det)
+        loss2 = self.loss_2(p2, z1_det)
+        return 0.5 * (loss1 + loss2)
 
 
 if __name__ == '__main__':
