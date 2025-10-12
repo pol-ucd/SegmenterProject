@@ -399,7 +399,7 @@ class NegCosineSimilarityLoss(MSNBaseLoss):
         self.temperature = float(temperature)
 
     def forward(self, z1: torch.Tensor, z2: torch.Tensor) -> torch.Tensor:
-        return self.cosine_similarity(z1, z2)
+        return self.negative_cosine_similarity(z1, z2)
 
     @staticmethod
     def negative_cosine_similarity(p: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
