@@ -236,6 +236,20 @@ def main():
 
     # Instantiate Siamese Model and Loss
     siamese_model = SimCLRSegFormer(pretrained_model=backbone_model).to(device)
+
+    logger.info("Loading snapshot `siamese_model.online_wrapper` state dict for fine-tuning.")
+    try:
+        last_model = siamese_model.online_wrapper
+        checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
+        last_model.load_state_dict(torch.load(checkpoint,
+                                              # map_location=device,
+                                              map_location=next(last_model.parameters()).device,
+                                              weights_only=False))
+
+        logger.info(f"Checkpoint loaded successfully from: {checkpoint}")
+    except Exception as e:
+        logger.info(f"No checkpoint loaded `{prefix}_segformer_pretrained.pth`: {e}")
+
     pretrain_loss_fn = NTXentLoss(temperature=0.5)
 
     # Use a large LR for pre-training (standard for self-supervised learning)

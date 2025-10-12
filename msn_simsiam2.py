@@ -4,13 +4,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 from transformers import SegformerConfig
 
-from segmenter.core import Config
+from segmenter.core import Config, get_default_device_type
 from segmenter.loss import DiceLoss
 from segmenter.loss.msn import SimSiamLoss
 from segmenter.masks import MaskGenerator
@@ -34,12 +35,19 @@ prefix='msn_simsiam'
 
 
 def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, loss_fn: SimSiamLoss, device: torch.device,
-                  num_epochs=100):
+                  optimizer: torch.optim.Optimizer, loss_fn: SimSiamLoss,
+                  scaler=None,
+                  device: torch.device = None,
+                  num_epochs=200):
     logger = logging.getLogger(__name__)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+    if torch.cuda.is_available():
+        scaler = torch.amp.GradScaler()
+
     model.train()
-    total_loss = 0
-    mask_generator = MaskGenerator(size=IMAGE_SIZE)
+    total_loss = []
+    # mask_generator = MaskGenerator(size=IMAGE_SIZE)
 
     best_loss = float('inf')
     min_delta = 0.00001
@@ -49,10 +57,11 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
     for epoch in range(num_epochs):
         for batch_idx, batch in enumerate(dataloader):
             x = batch["images"].to(device)
-
-            # Build the Siamese pair inside forward by passing `batch`
             optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=(scaler is not None)):
+            with torch.amp.autocast(device_type=get_default_device_type(),
+                                    dtype=torch.float16,
+                                    enabled=(scaler is not None)):
+
                 outputs = model(batch=x, return_patches=False, epoch=epoch, batch_index=batch_idx)
                 p1, z2_det, p2, z1_det = outputs
                 # ensure float32 for loss computation stability
@@ -62,6 +71,7 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
                 z2_det = z2_det.to(dtype=torch.float32)
 
                 loss = model.compute_loss(p1, z2_det, p2, z1_det)
+                total_loss += [loss.item()]
 
             if scaler is not None:
                 scaler.scale(loss).backward()
@@ -73,9 +83,10 @@ def pretrain_step(model: SimSiamSegFormer, dataloader: torch.utils.data.DataLoad
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
-            total_loss += loss.item()
+        if scheduler is not None:
+            scheduler.step()
 
-        avg_loss = total_loss / len(dataloader)
+        avg_loss = np.mean(total_loss)
         logger.info(f"Pretraining Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
         if avg_loss + min_delta < best_loss:
             best_loss = avg_loss
@@ -216,6 +227,20 @@ def main():
 
     # Instantiate Siamese Model and Loss
     siamese_model = SimSiamSegFormer(pretrained_model=backbone_model).to(device)
+
+    logger.info("Loading snapshot `siamese_model.online_wrapper` state dict for fine-tuning.")
+    try:
+        last_model = siamese_model.online_wrapper
+        checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
+        last_model.load_state_dict(torch.load(checkpoint,
+                                              # map_location=device,
+                                              map_location=next(last_model.parameters()).device,
+                                              weights_only=False))
+
+        logger.info(f"Checkpoint loaded successfully from: {checkpoint}")
+    except Exception as e:
+        logger.info(f"No checkpoint loaded `{prefix}_segformer_pretrained.pth`: {e}")
+
     pretrain_loss_fn = SimSiamLoss()
 
     # Use a large LR for pre-training (standard for self-supervised learning)

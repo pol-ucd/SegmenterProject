@@ -245,7 +245,7 @@ def main():
                                        mask_ratio=0.5,
                                        momentum=0.9).to(device)
 
-    logger.info("Loading snapshot `msn_mo previous del.online_encoder` state dict for fine-tuning.")
+    logger.info("Loading snapshot `siamese_model.online_wrapper` state dict for fine-tuning.")
     try:
         last_model = siamese_model.online_wrapper
         checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
