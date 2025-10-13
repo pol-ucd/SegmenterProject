@@ -118,6 +118,7 @@ def load_finetune(data_path: Optional[str] = None,
     subset_sampler_finetune = HDF5BatchSubsetSampler(dataset_size=n_finetune,
                                                      batch_size=batch_size,
                                                      indices=finetune_indices)
+
     subset_sampler_validation = HDF5BatchSubsetSampler(dataset_size=n_finetune,
                                                        batch_size=batch_size,
                                                        indices=validation_indices)

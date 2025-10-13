@@ -128,10 +128,11 @@ def finetune_transform(batch: dict) -> dict:
                                v2.Normalize(IMAGENET_MEAN, IMAGENET_STD),
                                ])
 
-    pipeline_mask = v2.Compose([Mask(),
-                                v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.NEAREST),
+    pipeline_mask = v2.Compose([v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.NEAREST),
                                 v2.ToDtype(torch.long, scale=False),
                                 ])
+
+    print(batch.keys(), batch['masks'].shape, batch['masks'].dtype)
 
     images = torch.stack([pipeline_img(img) for img in batch['images']])
     masks = torch.stack([pipeline_mask(mask) for mask in batch['masks']])
