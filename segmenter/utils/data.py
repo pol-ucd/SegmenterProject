@@ -370,12 +370,13 @@ class HDF5DatasetOptimized(Dataset):
     format and return transformed values in the same format.
     """
 
-    def __init__(self, hdf5_path, data_keys: Optional[List[str]] = None, transform=None):
+    def __init__(self, hdf5_path, data_keys: Optional[List[str]] = None, transform=None, batch_len: int = None):
         super().__init__()
         self.hdf5_path = hdf5_path
         self.transform = transform
         self.data_keys = data_keys if data_keys is not None else ['images']
         self.data_key = self.data_keys[0]
+        self.batch_len = batch_len
 
         # File handle is initialized to None and will be opened by worker_init_fn
         self.f = None
@@ -419,18 +420,25 @@ class HDF5DatasetOptimized(Dataset):
                 raise RuntimeError(f"Could not open HDF5 file: {e}")
 
         is_batch = isinstance(idx, (list, np.ndarray))
+        if is_batch and self.batch_len is None:
+            self.batch_len = len(idx)
 
         # Efficient Batch Read (by a DataLoader)
         # HDF5 supports batch indices so retrieve everything as batches for simplicity
         # items will have shape (len(idx), H, W, C)
         if not is_batch:
             idx = [idx]
+
+        while len(idx) < self.batch_len:
+            idx = idx + idx[:self.batch_len - len(idx)]
+
         results = {k: self.f[k][idx] for k in self.data_keys if k in self.f}  # (B, H, W, C)
 
         if self.transform:
             results = self.transform(results)
         for k, v in results.items():
             print(f"{k}: {v.shape}")
+
         return results
 
 
