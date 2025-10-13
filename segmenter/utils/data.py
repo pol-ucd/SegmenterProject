@@ -429,7 +429,8 @@ class HDF5DatasetOptimized(Dataset):
 
         if self.transform:
             results = self.transform(results)
-
+        for k, v in results.items():
+            print(f"{k}: {v.shape}")
         return results
 
 
