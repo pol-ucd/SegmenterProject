@@ -121,7 +121,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
     return best_model  # Return the pre-trained encoder weights
 
 
-def finetune_step(model: SegFormerAdapter, dataloader: torch.utils.data.DataLoader,
+def finetune_step(model: nn.Module, dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer, device: torch.device, num_epochs=100):
     logger = logging.getLogger(__name__)
     CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
@@ -185,7 +185,7 @@ def finetune_step(model: SegFormerAdapter, dataloader: torch.utils.data.DataLoad
     return best_model  # Return the pre-trained encoder weights
 
 
-def validate_step(model: SegFormerAdapter, dataloader: torch.utils.data.DataLoader, device: torch.device):
+def validate_step(model: nn.Module, dataloader: torch.utils.data.DataLoader, device: torch.device):
     logger = logging.getLogger(__name__)
     model.eval()
     total_dice = 0.0
