@@ -142,7 +142,9 @@ def finetune_step(model: SupervisedSegformerSegmentation,
     device = next(model.parameters()).device
 
     for epoch in range(num_epochs):
-        for inputs, labels in tqdm(dataloader):  # inputs=[B,C,H,W], labels=[B,H,W]
+        for inputs, labels in tqdm(dataloader):
+            # inputs=[B,C,H,W], labels=[B,H,W]
+            print("inputs: ", inputs.shape, "labels: ", labels.shape, labels.dtype)
             inputs, labels = inputs.to(device), labels.to(device).long()
             print("inputs", inputs.shape, "labels", labels.shape)
             optimizer.zero_grad()
