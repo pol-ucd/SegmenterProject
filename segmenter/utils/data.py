@@ -11,7 +11,7 @@ from PIL import Image, ImageFilter
 from matplotlib import pyplot as plt
 from torch.nn.functional import one_hot
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler
-from torchvision import transforms, transforms as T
+import torchvision.transforms.v2 as v2
 from torchvision.transforms import functional as F, InterpolationMode
 from torchvision.transforms import v2 as v2
 from torchvision.tv_tensors import Image, Mask
@@ -24,6 +24,7 @@ def sharpening_kernel(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
                            [-1, -1, -1]])
     sharpened_cv2_kernel = cv2.filter2D(img, -1, kernel)
     return sharpened_cv2_kernel.astype(np.uint8)
+
 
 #
 # def gray_world(img: np.ndarray) -> np.ndarray:
@@ -123,7 +124,6 @@ class GaussianSmoothing(object):
     def __call__(self, image):
         radius = np.random.uniform(self.min_radius, self.max_radius)
         return image.filter(ImageFilter.GaussianBlur(radius))
-
 
 
 class HDF5BatchSampler(Sampler[int]):
@@ -228,7 +228,7 @@ class HDF5DatasetOptimized(Dataset):
         # items will have shape (len(idx), H, W, C)
         if not is_batch:
             idx = [idx]
-        results = {k: self.f[k][idx] for k in self.data_keys if k in self.f} # (B, H, W, C)
+        results = {k: self.f[k][idx] for k in self.data_keys if k in self.f}  # (B, H, W, C)
 
         if self.transform:
             results = self.transform(results)
@@ -342,18 +342,18 @@ class HDF5ImageDataset(HDF5Dataset):
             mask_tensor = F.hflip(mask_tensor)
 
         # Random Rotation
-        angle = transforms.RandomRotation.get_params(degrees=[-45, 45])
+        angle = v2.RandomRotation.get_params(degrees=[-45, 45])
         image_pil = F.rotate(image_pil, angle, interpolation=Image.BILINEAR)
         mask_tensor = F.rotate(mask_tensor, angle, interpolation=Image.NEAREST)
 
         # Random Crop and Resize
-        i, j, h, w = transforms.RandomResizedCrop.get_params(image_pil, scale=(0.08, 1.0), ratio=(0.75, 1.33))
+        i, j, h, w = v2.RandomResizedCrop.get_params(image_pil, scale=(0.08, 1.0), ratio=(0.75, 1.33))
         image_pil = F.resized_crop(image_pil, i, j, h, w, self.image_size, interpolation=Image.BILINEAR)
         mask_tensor = F.resized_crop(mask_tensor, i, j, h, w, self.image_size, interpolation=Image.NEAREST)
 
         # Color Augmentations (applied only to image)
         if torch.rand(1) < 0.5:
-            color_jitter = transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
+            color_jitter = v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
             image_pil = color_jitter(image_pil)
 
         return image_pil, mask_tensor
@@ -443,12 +443,14 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
             image = image.numpy()
         print(image.shape)
 
-        image_augment = T.Compose([T.ToTensor(),
-                                   T.Resize(self.image_size,
-                                            T.InterpolationMode.BICUBIC),
-                                   T.Normalize(mean=[0.485, 0.456, 0.406],
-                                               std=[0.229, 0.224, 0.225])
-                                   ])
+        image_augment = v2.Compose([
+            v2.Resize(self.image_size,
+                      v2.InterpolationMode.BICUBIC),
+            v2.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225]),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+        ])
 
         image = image_augment(image)
 
@@ -480,23 +482,29 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
         image = self.f['images'][self.indices[idx]]
         mask = self.f['masks'][self.indices[idx]]
 
-        image_augment = T.Compose([T.ToTensor(),
-                                   T.Resize(self.image_size,
-                                            T.InterpolationMode.BICUBIC),
-                                   T.Normalize(mean=[0.485, 0.456, 0.406],
-                                               std=[0.229, 0.224, 0.225])
-                                   ])
+        image_augment = v2.Compose([
+            v2.Resize(self.image_size,
+                      v2.InterpolationMode.BICUBIC),
+            v2.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225]),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+        ])
 
         print("MSNFinetuneDataset mask 1 : ", mask.shape)
-        mask_augment = T.Compose([T.ToTensor(),
-                                  T.Resize(self.image_size,
-                                            T.InterpolationMode.NEAREST)
-                                  ])
+        mask_augment = v2.Compose([
+            v2.Resize(self.image_size,
+                      v2.InterpolationMode.NEAREST),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+        ])
         # Apply augmentations
-        mask = one_hot(mask_augment(np.argmax(mask, axis=1)), num_classes=image.shape[1])
-        print("MSNFinetuneDataset mask 2 : ",  mask.shape)
+        mask = mask_augment(mask)
+        print("MSNFinetuneDataset mask 2 : ", mask.shape)
         image = image_augment(image)
         return image, mask.long()
+
+
 #
 # def pretrain_transform(batch: dict) -> dict:
 #     """
@@ -549,11 +557,11 @@ if __name__ == '__main__':
     print(f"Batch read of {len(indices)} items, result shape is {batch['images'].shape}, type {type(batch['images'])}")
     print(batch['images'][0].max(), batch['images'][0].min(), batch['images'][0].dtype)
     image = batch['images'][0]
-    plt.imshow(image.permute(1,2,0))
+    plt.imshow(image.permute(1, 2, 0))
     plt.show()
 
     single = pretrain_dataset[10]
     print(f"Single read of item, result shape is {single['images'].shape}, type {type(single['images'])}")
     image = single['images']
-    plt.imshow(image.squeeze(0).permute(1,2,0))
+    plt.imshow(image.squeeze(0).permute(1, 2, 0))
     plt.show()
