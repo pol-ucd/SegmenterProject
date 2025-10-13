@@ -493,7 +493,7 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
                                             T.InterpolationMode.NEAREST)
                                   ])
         # Apply augmentations
-        mask = one_hot(mask_augment(torch.argmax(mask, dim=1)), num_classes=image.shape[1])
+        mask = one_hot(mask_augment(np.argmax(mask, axis=1)), num_classes=image.shape[1])
         print("MSNFinetuneDataset mask 2 : ",  mask.shape)
         image = image_augment(image)
         return image, mask.long()
