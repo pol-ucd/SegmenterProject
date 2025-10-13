@@ -238,12 +238,14 @@ def main():
     # 1. FINETUNING PHASE
     # ----------------------------------------------------
     checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
-    logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
+    logger.info(f"Loading models for Finetuning Phase ({prefix})")
 
     # Load the base model
     base_model = SupervisedSegformerSegmentation(pretrained_model=backbone_model,
                                                  num_classes=2,
                                                  checkpoint=checkpoint).to(device)
+
+    logger.info(f"Successfully loaded models for Finetuning Phase ({prefix})")
 
     # ----------------------------------------------------
     # 2. FINE-TUNING PHASE
