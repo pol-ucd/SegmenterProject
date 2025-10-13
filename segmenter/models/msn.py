@@ -926,6 +926,7 @@ class SupervisedSegformerSegmentation(nn.Module):
         Returns:
             torch.Tensor: The output logits from the model, upsampled to the original input size.
         """
+        print("Before encoder (pixel_values): ", pixel_values.shape)
         output = self._extract_encoder_stage(self.encoder,
                                              pixel_values.float())  # (B, D, H, W)
         print("After encoder: ", output.shape)

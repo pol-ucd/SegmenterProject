@@ -149,10 +149,10 @@ def finetune_step(model: SupervisedSegformerSegmentation,
 
             optimizer.zero_grad()
 
-
             # Forward pass
             outputs = model(inputs)
             # logits = outputs.logits  # Logits [B, num_labels, H/4, W/4]
+            print(outputs.shape)
 
             # Resize logits to match labels size (SegFormer outputs downsampled logits)
             resized_logits = F.interpolate(outputs,
