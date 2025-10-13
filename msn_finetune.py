@@ -146,6 +146,7 @@ def finetune_step(model: SupervisedSegformerSegmentation,
             # inputs=[B,C,H,W], labels=[B,H,W]
             inputs = data_item["images"].to(device)
             labels = data_item['masks'].to(device).long()
+            print("inputs: ", inputs.shape)
 
             optimizer.zero_grad()
 
