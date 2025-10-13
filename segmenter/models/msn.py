@@ -127,216 +127,216 @@ class SurgicalMaskComposer(nn.Module):
         masked = tile * fold
         return masked, {'cx': cx, 'cy': cy, 'radius': radius}
 
-
-class SegFormerAdapter(nn.Module):
-    """
-    Calls a pretrained SegFormer encoder and returns a (B, C, H, W) feature map.
-    Adjust token->spatial conversion to match the specific SegFormer variant you use.
-    """
-
-    def __init__(self, pretrained_name: str = None, num_classes: int = 2, k: int = 3):
-        super().__init__()
-        self.num_classes = num_classes
-        if pretrained_name is not None:
-            config = SegformerConfig.from_pretrained(pretrained_name)
-        else:
-            config = SegformerConfig()
-
-        if pretrained_name is not None:
-            self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-                pretrained_name,
-                config=config,
-                ignore_mismatched_sizes=True
-            )
-        else:
-            self.base_model = SegformerForSemanticSegmentation(config=config)
-
-        # Get the number of channels from the previous layer to properly
-        # define the input to our new classifier.
-        classifier_in_channels = self.base_model.decode_head.linear_fuse.out_channels
-
-        # Replace the original classifier with a custom Sequential module.
-        self.base_model.decode_head.classifier = nn.Sequential(
-            # First convolution layer to process the features.
-            nn.Conv2d(classifier_in_channels,
-                      classifier_in_channels // 4,
-                      kernel_size=3, padding=1),
-            # Batch normalization for training stability.
-            nn.BatchNorm2d(classifier_in_channels // 4),
-            # ReLU activation for non-linearity.
-            nn.ReLU(inplace=True),
-            # Final convolution to map features to the desired number of classes.
-            nn.Conv2d(classifier_in_channels // 4, num_classes, kernel_size=3, padding=1)
-        )
-        self.median = MedianPool2d(kernel_size=k, padding=k // 2)
-
-    def forward(self, x):
-
-        # The base model's forward pass handles the entire encoder and decoder.
-        # We only need the logits.
-        output = self.base_model(pixel_values=x.float()).logits
-
-        # The Segformer model's output logits are at a reduced resolution (e.g., 1/4th).
-        # We upsample them back to the original input size.
-        logits = F.interpolate(output,
-                               size=x.shape[2:],
-                               mode='bilinear',
-                               align_corners=False)  #.permute(0, 2, 3, 1).contiguous()
-
-        return self.median(logits)  # Smoothed logits
-
-    def output_dim(self):
-        return self.num_classes
-
-
-class SegFormerMSNWithMomentum(nn.Module):
-    """
-    SegFormer feature adapter for MSN-style pretraining.
-
-    - Extracts highest-level encoder features as patch embeddings.
-    - Optional projection head to lower dimensionality.
-    - Random patch masking for the online branch.
-    - Maintains a momentum (EMA) copy of the encoder (target encoder).
-    - Exposes update_momentum_encoder(step) to update EMA weights.
-    """
-
-    def __init__(
-            self,
-            pretrained_name: str = None,
-            proj_dim: int = 128,
-            mask_ratio: float = 0.6,
-            ema_momentum: float = 0.99,
-            use_last_encoder_stage: int = -1,  # select which encoder feature to use, -1 = last
-            device: torch.device = None
-    ):
-        super().__init__()
-        config = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
-        self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-            pretrained_name, config=config, ignore_mismatched_sizes=True
-        ) if pretrained_name else SegformerForSemanticSegmentation(config=config)
-
-        # encoder returns list of feature maps; choose one stage to use
-        self.encoder = self.base_model.segformer.encoder
-        self.stage_idx = use_last_encoder_stage
-
-        # projector
-        last_hidden_dim = config.hidden_sizes[self.stage_idx] if hasattr(config, "hidden_sizes") else \
-            self.encoder.layernorms[-1].normalized_shape[0]
-        self.projector = nn.Sequential(
-            nn.Linear(last_hidden_dim, last_hidden_dim // 2),
-            nn.ReLU(inplace=True),
-            nn.Linear(last_hidden_dim // 2, proj_dim)
-        )
-
-        # masking params
-        self.mask_ratio = float(mask_ratio)
-
-        # momentum target encoder and projector
-        self.ema_momentum = float(ema_momentum)
-        self.target_encoder = deepcopy(self.encoder)
-        self.target_projector = deepcopy(self.projector)
-
-        # ensure target params are not trainable
-        for p in self.target_encoder.parameters():
-            p.requires_grad = False
-        for p in self.target_projector.parameters():
-            p.requires_grad = False
-
-        # device for EMA ops if specified
-        self._device = device
-
-    @torch.no_grad()
-    def update_momentum_encoder(self):
-        """
-        EMA update of target encoder + projector from online weights.
-        Use inside training loop AFTER optimizer.step().
-        """
-        m = self.ema_momentum
-        # encoder modules might be nested; iterate named_parameters for robustness
-        for tgt_param, src_param in zip(self.target_encoder.parameters(), self.encoder.parameters()):
-            tgt_param.data.mul_(m).add_(src_param.data.to(tgt_param.data.dtype) * (1.0 - m))
-
-        for tgt_param, src_param in zip(self.target_projector.parameters(), self.projector.parameters()):
-            tgt_param.data.mul_(m).add_(src_param.data.to(tgt_param.data.dtype) * (1.0 - m))
-
-    def _extract_features(self, encoder_module, x):
-        """
-        Returns features from chosen encoder stage as (B, D, H', W').
-        encoder_module is either the online encoder or the target encoder.
-        """
-        # HuggingFace segformer encoder may expect inputs directly
-        # It returns a list of feature maps; keep the chosen stage
-        outputs = encoder_module(x.float())
-        feat = outputs[self.stage_idx] if isinstance(outputs, (list, tuple)) else outputs
-        return feat  # (B, D, H', W')
-
-    def _flatten_patches(self, features):
-        B, D, H, W = features.shape
-        patches = features.permute(0, 2, 3, 1).reshape(B, H * W, D)  # (B, N_patches, D)
-        return patches, H, W
-
-    def _apply_projector_and_norm(self, patches, projector):
-        # patches: (B, N, D_in)
-        B, N, D = patches.shape
-        flat = patches.reshape(B * N, D)
-        projected = projector(flat)  # (B*N, proj_dim)
-        normalized = F.normalize(projected, dim=1)
-        return normalized.reshape(B, N, -1)  # (B, N, proj_dim)
-
-    def _random_mask(self, B, N, mask_ratio, device):
-        """
-        Returns boolean mask of shape (B, N) where True indicates masked (i.e., removed from online input).
-        We'll select unmasked indices for online; target uses all patches.
-        """
-        n_mask = int(round(N * mask_ratio))
-        mask = torch.zeros((B, N), dtype=torch.bool, device=device)
-        for i in range(B):
-            perm = torch.randperm(N, device=device)
-            mask[i, perm[:n_mask]] = True
-        return mask
-
-    def forward(self, x, return_aux=False):
-        """
-        Forward returns:
-        - online_embeddings_masked: (N_masked_total, proj_dim) with masked positions excluded
-        - target_embeddings_all: (N_total, proj_dim) detached (no grad)
-        - mask (optional): boolean mask (B, N_patches) where True denotes masked patches
-        """
-        device = x.device if self._device is None else self._device
-
-        # online extractor
-        features_online = self._extract_features(self.encoder, x)  # (B, D, H', W')
-        patches_online, H, W = self._flatten_patches(features_online)  # (B, N, D)
-        online_proj = self._apply_projector_and_norm(patches_online, self.projector)  # (B, N, P)
-
-        # target extractor (no grad)
-        with torch.no_grad():
-            features_target = self._extract_features(self.target_encoder, x)
-            patches_target, _, _ = self._flatten_patches(features_target)
-            target_proj = self._apply_projector_and_norm(patches_target, self.target_projector)  # (B, N, P)
-            target_proj = target_proj.detach()
-
-        B, N, P = online_proj.shape
-
-        # build mask and select unmasked online patches
-        mask = self._random_mask(B, N, self.mask_ratio, device=device)  # True = masked
-        unmask = ~mask
-        # flatten selected online patches: (sum_unmasked, P)
-        online_selected = []
-        for i in range(B):
-            online_selected.append(online_proj[i, unmask[i, :], :])
-        online_selected = torch.cat(online_selected, dim=0)
-
-        # flatten all target patches: (B*N, P)
-        target_all = target_proj.reshape(B * N, P)
-
-        if return_aux:
-            return online_selected, target_all, mask, (H, W)
-        return online_selected, target_all
-
-    def output_dim(self):
-        return self.projector[-1].out_features
-
+#
+# class SegFormerAdapter(nn.Module):
+#     """
+#     Calls a pretrained SegFormer encoder and returns a (B, C, H, W) feature map.
+#     Adjust token->spatial conversion to match the specific SegFormer variant you use.
+#     """
+#
+#     def __init__(self, pretrained_name: str = None, num_classes: int = 2, k: int = 3):
+#         super().__init__()
+#         self.num_classes = num_classes
+#         if pretrained_name is not None:
+#             config = SegformerConfig.from_pretrained(pretrained_name)
+#         else:
+#             config = SegformerConfig()
+#
+#         if pretrained_name is not None:
+#             self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+#                 pretrained_name,
+#                 config=config,
+#                 ignore_mismatched_sizes=True
+#             )
+#         else:
+#             self.base_model = SegformerForSemanticSegmentation(config=config)
+#
+#         # Get the number of channels from the previous layer to properly
+#         # define the input to our new classifier.
+#         classifier_in_channels = self.base_model.decode_head.linear_fuse.out_channels
+#
+#         # Replace the original classifier with a custom Sequential module.
+#         self.base_model.decode_head.classifier = nn.Sequential(
+#             # First convolution layer to process the features.
+#             nn.Conv2d(classifier_in_channels,
+#                       classifier_in_channels // 4,
+#                       kernel_size=3, padding=1),
+#             # Batch normalization for training stability.
+#             nn.BatchNorm2d(classifier_in_channels // 4),
+#             # ReLU activation for non-linearity.
+#             nn.ReLU(inplace=True),
+#             # Final convolution to map features to the desired number of classes.
+#             nn.Conv2d(classifier_in_channels // 4, num_classes, kernel_size=3, padding=1)
+#         )
+#         self.median = MedianPool2d(kernel_size=k, padding=k // 2)
+#
+#     def forward(self, x):
+#
+#         # The base model's forward pass handles the entire encoder and decoder.
+#         # We only need the logits.
+#         output = self.base_model(pixel_values=x.float()).logits
+#
+#         # The Segformer model's output logits are at a reduced resolution (e.g., 1/4th).
+#         # We upsample them back to the original input size.
+#         logits = F.interpolate(output,
+#                                size=x.shape[2:],
+#                                mode='bilinear',
+#                                align_corners=False)  #.permute(0, 2, 3, 1).contiguous()
+#
+#         return self.median(logits)  # Smoothed logits
+#
+#     def output_dim(self):
+#         return self.num_classes
+#
+#
+# class SegFormerMSNWithMomentum(nn.Module):
+#     """
+#     SegFormer feature adapter for MSN-style pretraining.
+#
+#     - Extracts highest-level encoder features as patch embeddings.
+#     - Optional projection head to lower dimensionality.
+#     - Random patch masking for the online branch.
+#     - Maintains a momentum (EMA) copy of the encoder (target encoder).
+#     - Exposes update_momentum_encoder(step) to update EMA weights.
+#     """
+#
+#     def __init__(
+#             self,
+#             pretrained_name: str = None,
+#             proj_dim: int = 128,
+#             mask_ratio: float = 0.6,
+#             ema_momentum: float = 0.99,
+#             use_last_encoder_stage: int = -1,  # select which encoder feature to use, -1 = last
+#             device: torch.device = None
+#     ):
+#         super().__init__()
+#         config = SegformerConfig.from_pretrained(pretrained_name) if pretrained_name else SegformerConfig()
+#         self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+#             pretrained_name, config=config, ignore_mismatched_sizes=True
+#         ) if pretrained_name else SegformerForSemanticSegmentation(config=config)
+#
+#         # encoder returns list of feature maps; choose one stage to use
+#         self.encoder = self.base_model.segformer.encoder
+#         self.stage_idx = use_last_encoder_stage
+#
+#         # projector
+#         last_hidden_dim = config.hidden_sizes[self.stage_idx] if hasattr(config, "hidden_sizes") else \
+#             self.encoder.layernorms[-1].normalized_shape[0]
+#         self.projector = nn.Sequential(
+#             nn.Linear(last_hidden_dim, last_hidden_dim // 2),
+#             nn.ReLU(inplace=True),
+#             nn.Linear(last_hidden_dim // 2, proj_dim)
+#         )
+#
+#         # masking params
+#         self.mask_ratio = float(mask_ratio)
+#
+#         # momentum target encoder and projector
+#         self.ema_momentum = float(ema_momentum)
+#         self.target_encoder = deepcopy(self.encoder)
+#         self.target_projector = deepcopy(self.projector)
+#
+#         # ensure target params are not trainable
+#         for p in self.target_encoder.parameters():
+#             p.requires_grad = False
+#         for p in self.target_projector.parameters():
+#             p.requires_grad = False
+#
+#         # device for EMA ops if specified
+#         self._device = device
+#
+#     @torch.no_grad()
+#     def update_momentum_encoder(self):
+#         """
+#         EMA update of target encoder + projector from online weights.
+#         Use inside training loop AFTER optimizer.step().
+#         """
+#         m = self.ema_momentum
+#         # encoder modules might be nested; iterate named_parameters for robustness
+#         for tgt_param, src_param in zip(self.target_encoder.parameters(), self.encoder.parameters()):
+#             tgt_param.data.mul_(m).add_(src_param.data.to(tgt_param.data.dtype) * (1.0 - m))
+#
+#         for tgt_param, src_param in zip(self.target_projector.parameters(), self.projector.parameters()):
+#             tgt_param.data.mul_(m).add_(src_param.data.to(tgt_param.data.dtype) * (1.0 - m))
+#
+#     def _extract_features(self, encoder_module, x):
+#         """
+#         Returns features from chosen encoder stage as (B, D, H', W').
+#         encoder_module is either the online encoder or the target encoder.
+#         """
+#         # HuggingFace segformer encoder may expect inputs directly
+#         # It returns a list of feature maps; keep the chosen stage
+#         outputs = encoder_module(x.float())
+#         feat = outputs[self.stage_idx] if isinstance(outputs, (list, tuple)) else outputs
+#         return feat  # (B, D, H', W')
+#
+#     def _flatten_patches(self, features):
+#         B, D, H, W = features.shape
+#         patches = features.permute(0, 2, 3, 1).reshape(B, H * W, D)  # (B, N_patches, D)
+#         return patches, H, W
+#
+#     def _apply_projector_and_norm(self, patches, projector):
+#         # patches: (B, N, D_in)
+#         B, N, D = patches.shape
+#         flat = patches.reshape(B * N, D)
+#         projected = projector(flat)  # (B*N, proj_dim)
+#         normalized = F.normalize(projected, dim=1)
+#         return normalized.reshape(B, N, -1)  # (B, N, proj_dim)
+#
+#     def _random_mask(self, B, N, mask_ratio, device):
+#         """
+#         Returns boolean mask of shape (B, N) where True indicates masked (i.e., removed from online input).
+#         We'll select unmasked indices for online; target uses all patches.
+#         """
+#         n_mask = int(round(N * mask_ratio))
+#         mask = torch.zeros((B, N), dtype=torch.bool, device=device)
+#         for i in range(B):
+#             perm = torch.randperm(N, device=device)
+#             mask[i, perm[:n_mask]] = True
+#         return mask
+#
+#     def forward(self, x, return_aux=False):
+#         """
+#         Forward returns:
+#         - online_embeddings_masked: (N_masked_total, proj_dim) with masked positions excluded
+#         - target_embeddings_all: (N_total, proj_dim) detached (no grad)
+#         - mask (optional): boolean mask (B, N_patches) where True denotes masked patches
+#         """
+#         device = x.device if self._device is None else self._device
+#
+#         # online extractor
+#         features_online = self._extract_features(self.encoder, x)  # (B, D, H', W')
+#         patches_online, H, W = self._flatten_patches(features_online)  # (B, N, D)
+#         online_proj = self._apply_projector_and_norm(patches_online, self.projector)  # (B, N, P)
+#
+#         # target extractor (no grad)
+#         with torch.no_grad():
+#             features_target = self._extract_features(self.target_encoder, x)
+#             patches_target, _, _ = self._flatten_patches(features_target)
+#             target_proj = self._apply_projector_and_norm(patches_target, self.target_projector)  # (B, N, P)
+#             target_proj = target_proj.detach()
+#
+#         B, N, P = online_proj.shape
+#
+#         # build mask and select unmasked online patches
+#         mask = self._random_mask(B, N, self.mask_ratio, device=device)  # True = masked
+#         unmask = ~mask
+#         # flatten selected online patches: (sum_unmasked, P)
+#         online_selected = []
+#         for i in range(B):
+#             online_selected.append(online_proj[i, unmask[i, :], :])
+#         online_selected = torch.cat(online_selected, dim=0)
+#
+#         # flatten all target patches: (B*N, P)
+#         target_all = target_proj.reshape(B * N, P)
+#
+#         if return_aux:
+#             return online_selected, target_all, mask, (H, W)
+#         return online_selected, target_all
+#
+#     def output_dim(self):
+#         return self.projector[-1].out_features
+#
 
 # -------------------------
 # Feature wrapper with block / spatial masking
@@ -512,10 +512,6 @@ class SegFormerFeatureWrapper(nn.Module):
             return online_selected, target_all, mask, (H, W), online_to_target_idx
         return online_selected, target_all, online_to_target_idx
 
-
-# -------------------------
-# Base class for MSN using Segformer backbone
-# -------------------------
 class MSNSegFormerBase(nn.Module):
     def __init__(
             self,

@@ -114,7 +114,7 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
                   optimizer: torch.optim.Optimizer, device: torch.device, num_epochs=100):
     logger = logging.getLogger(__name__)
     model.train()
-    total_loss = 0
+    total_loss = []
     CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
     ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Standard Cross Entropy
     dice_loss_fn = DiceLoss(num_classes=model.config.num_labels, ignore_index=255)  # Custom Dice Loss
@@ -148,9 +148,9 @@ def finetune_step(model: SupervisedSegFormer, dataloader: torch.utils.data.DataL
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
+            total_loss += [loss.item()]
 
-        avg_loss = total_loss / len(dataloader)
+        avg_loss = np.mean(loss)
 
         logger.info(f"PFine-tuning Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
         if avg_loss + min_delta < best_loss:

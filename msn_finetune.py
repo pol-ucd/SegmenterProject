@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from segmenter.core import Config, set_default_device, get_default_device, get_default_device_type
 from segmenter.loss import DiceLoss, MSNLoss
-from segmenter.models.msn import MoCoSiameseNetwork
+from segmenter.models.msn import MoCoSiameseNetwork, SegFormerFeatureWrapper
 from segmenter.core.torch import get_default_device_type
 from segmenter.utils.msn import load_data
 
@@ -228,7 +228,7 @@ def main():
     logger = logging.getLogger()
     device = get_default_device()
     set_default_device(device)
-    logger.info(f"Starting pretraining run {prefix.upper()}")
+    logger.info(f"Starting finetuning run {prefix.upper()}")
 
     logger.info(f"Using device: {device}")
 
@@ -240,44 +240,20 @@ def main():
 
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
-    # Instantiate Siamese Model and Loss
-    siamese_model = MoCoSiameseNetwork(pretrained_model=backbone_model,
-                                       mask_ratio=0.5,
-                                       momentum=0.9).to(device)
+    # Load the base model
+    base_model = SegFormerFeatureWrapper(pretrained_name=backbone_model).to(device)
 
-    logger.info("Loading snapshot `siamese_model.online_wrapper` state dict for fine-tuning.")
+    logger.info("Loading snapshot MSN state dict for fine-tuning.")
     try:
-        last_model = siamese_model.online_wrapper
         checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
-        last_model.load_state_dict(torch.load(checkpoint,
-                                         # map_location=device,
-                                         map_location=next(last_model.parameters()).device,
+        base_model.load_state_dict(torch.load(checkpoint,
+                                         map_location=device,
                                          weights_only=False))
 
         logger.info(f"Checkpoint loaded successfully from: {checkpoint}")
     except Exception as e:
         logger.info(f"No checkpoint loaded `{prefix}_segformer_pretrained.pth`: {e}")
 
-    pretrain_loss_fn = MSNLoss(temperature=0.9, center_momentum=0.001)
-    # pretrain_loss_fn = NTXEntLoss(temperature=0.9, eps=1e-9)
-    # pretrain_loss_fn = ContrastiveLoss(temperature=0.1, eps=1e-6)
-    # pretrain_loss_fn = MSELoss(reduction="mean")
-    # Use a large LR for pre-training (standard for self-supervised learning)
-    pretrain_optimizer = torch.optim.AdamW(siamese_model.parameters(),
-                                           lr=learning_rate,
-                                           weight_decay=1e-2)
-    logger.info("Starting Pre-training Phase (Siamese Network) ---")
-
-    pretrain_weights = pretrain_step(
-        siamese_model,
-        pretrain_dataloader,
-        pretrain_optimizer,
-        pretrain_loss_fn,
-        device=device,
-        num_epochs=N_EPOCHS
-    )
-
-    logger.info("Completed Pre-training Phase (Siamese Network) ---")
 
     # ----------------------------------------------------
     # 2. FINE-TUNING PHASE
