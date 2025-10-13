@@ -128,7 +128,8 @@ def finetune_transform(batch: dict) -> dict:
                                v2.Normalize(IMAGENET_MEAN, IMAGENET_STD),
                                ])
 
-    pipeline_mask = v2.Compose([v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.NEAREST),
+    pipeline_mask = v2.Compose([v2.ToImage(),
+                                v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.NEAREST),
                                 v2.ToDtype(torch.long, scale=False),
                                 ])
 
