@@ -136,11 +136,10 @@ def finetune_transform(batch: dict) -> dict:
     images = batch['images']
     print(images.shape, masks.shape)
     b = images.shape[0]
-    c = masks.shape[1]
-    images = [pipeline_img(np.transpose(images[idx], (1,2,0))) for idx in range(b)]
+    images = [pipeline_img(images[idx]) for idx in range(b)]
     masks = [pipeline_mask(masks[idx]) for idx in range(b)]
     images = torch.stack(images)
-    masks = one_hot(torch.stack(masks).unsqueeze(1), num_classes=c)
+    masks = torch.stack(masks)
 
     return {'images': images, 'masks': masks}
 
