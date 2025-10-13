@@ -491,9 +491,10 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
                                            T.InterpolationMode.NEAREST)
                                   ])
         # Apply augmentations
+        print("MSNFinetuneDataset mask 1 : ", mask.shape)
         image = image_augment(image)
         mask = mask_augment(mask)
-        print("MSNFinetuneDataset mask : ",  mask.shape)
+        print("MSNFinetuneDataset mask 2 : ",  mask.shape)
         return image, mask.long()
 #
 # def pretrain_transform(batch: dict) -> dict:
