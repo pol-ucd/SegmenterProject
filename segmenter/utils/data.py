@@ -132,10 +132,12 @@ def finetune_transform(batch: dict) -> dict:
                                 v2.ToDtype(torch.long, scale=False),
                                 ])
 
-    print(batch.keys(), batch['masks'].shape, batch['masks'].dtype)
+    masks = np.argmax(batch['masks'], axis=1).squeeze(axis=1)
+    images = batch['images']
+    b = images.shape[0]
+    images = [pipeline_img(np.transpose(images[idx], (1,2,0))) for idx in range(b)]
+    masks = [pipeline_mask(masks[idx]) for idx in range(b)]
 
-    images = torch.stack([pipeline_img(img) for img in batch['images']])
-    masks = torch.stack([pipeline_mask(mask) for mask in batch['masks']])
     result = {'images': torch.stack(images), 'masks': torch.stack(masks)}
     return result
 
