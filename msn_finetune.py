@@ -159,11 +159,11 @@ def finetune_step(model: SupervisedSegformerSegmentation,
                                            align_corners=False)
 
             # Calculate Losses
-            ce_loss = ce_loss_fn(resized_logits, labels)
-            dice_loss = dice_loss_fn(resized_logits, labels)
+            # ce_loss = ce_loss_fn(resized_logits, labels)
+            loss = dice_loss_fn(resized_logits, labels)
 
             # Combined Loss
-            loss = CE_WEIGHT * ce_loss + DICE_WEIGHT * dice_loss
+            # loss = CE_WEIGHT * ce_loss + DICE_WEIGHT * dice_loss
 
             # Backpropagation
             loss.backward()
