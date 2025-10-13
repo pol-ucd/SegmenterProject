@@ -127,6 +127,7 @@ class SurgicalMaskComposer(nn.Module):
         masked = tile * fold
         return masked, {'cx': cx, 'cy': cy, 'radius': radius}
 
+
 #
 # class SegFormerAdapter(nn.Module):
 #     """
@@ -351,6 +352,7 @@ class SegFormerFeatureWrapper(nn.Module):
       - online_to_target_idx: (N_online,) LongTensor mapping each online row
                              -> index in target_all (0 .. B*N_patch-1)
     """
+
     def __init__(
             self,
             pretrained_name: Optional[str] = None,
@@ -458,12 +460,12 @@ class SegFormerFeatureWrapper(nn.Module):
 
     def forward(self, x: torch.Tensor, epoch: int = 0, batch_index: int = 0, return_aux: bool = False):
         # Extract online features
-        features_online = self._extract_encoder_stage(self.encoder, x)   # (B, D, H, W)
+        features_online = self._extract_encoder_stage(self.encoder, x)  # (B, D, H, W)
         B, D, H, W = features_online.shape
         if not self._proj_built:
             self._build_projector(D)
 
-        patches_online, H, W = self._flatten_patches(features_online)   # (B, N, D)
+        patches_online, H, W = self._flatten_patches(features_online)  # (B, N, D)
         online_proj = self._apply_projector_and_norm(patches_online, self.projector)  # (B, N, P)
 
         # 2) extract target features (same encoder module used for target wrapper instance)
@@ -482,7 +484,7 @@ class SegFormerFeatureWrapper(nn.Module):
 
         # 4) create spatial block mask and select unmasked online patches
         mask = self._spatial_block_mask(B, H, W, self.mask_ratio, self.block_size,
-                                       batch_index=batch_index, epoch=epoch)  # (B, N)
+                                        batch_index=batch_index, epoch=epoch)  # (B, N)
         unmask = ~mask
 
         # online_selected list and mapping list
@@ -502,7 +504,7 @@ class SegFormerFeatureWrapper(nn.Module):
             online_selected = torch.empty((0, self._proj_dim), dtype=online_proj.dtype)
             online_to_target_idx = torch.empty((0,), dtype=torch.long)
         else:
-            online_selected = torch.cat(online_selected_list, dim=0)                # (N_online, P)
+            online_selected = torch.cat(online_selected_list, dim=0)  # (N_online, P)
             online_to_target_idx = torch.cat(online_to_target_idx_list, dim=0).long()  # (N_online,)
 
         # 5) flatten target_all
@@ -511,6 +513,7 @@ class SegFormerFeatureWrapper(nn.Module):
         if return_aux:
             return online_selected, target_all, mask, (H, W), online_to_target_idx
         return online_selected, target_all, online_to_target_idx
+
 
 class MSNSegFormerBase(nn.Module):
     def __init__(
@@ -590,7 +593,6 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         self.encoder_k = deepcopy(self.online_wrapper)
         self._set_requires_grad(self.encoder_k, False)
 
-
     @staticmethod
     def _set_requires_grad(model: nn.Module, requires_grad: bool):
         for p in model.parameters():
@@ -609,7 +611,8 @@ class MoCoSiameseNetwork(MSNSegFormerBase):
         x_q, meta_q = self.view_generator(x)
         x_k, meta_k = self.view_generator(self.augment(x))
 
-        online_selected, _, online_to_target_indices = self.online_wrapper(x_q, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
+        online_selected, _, online_to_target_indices = self.online_wrapper(x_q, epoch=epoch, batch_index=batch_index,
+                                                                           return_aux=return_aux)
         with torch.no_grad():
             _, target_all, _ = self.encoder_k(x_k, epoch=epoch, batch_index=batch_index, return_aux=return_aux)
             target_all = target_all.detach()
@@ -847,13 +850,13 @@ class SimCLRSegFormer(MSNSegFormerBase):
         return z_anchor, z_positive
 
 
-
 class SupervisedSegformerSegmentation(nn.Module):
     def __init__(self,
                  pretrained_model: str = None,
                  num_classes: int = None,
-                 checkpoint:str=None,
-                 k:int=3):
+                 hidden_dim: int = 256,
+                 checkpoint: str = None,
+                 k: int = 3):
         super().__init__()
 
         # Load the full SegformerForSemanticSegmentation model.
@@ -866,30 +869,31 @@ class SupervisedSegformerSegmentation(nn.Module):
 
         try:
             msn_model.load_state_dict(torch.load(checkpoint,
-                                             map_location=next(msn_model.parameters()).device,
-                                             weights_only=False))
+                                                 map_location=next(msn_model.parameters()).device,
+                                                 weights_only=False))
 
 
         except Exception as e:
             raise SegformerModelError(f"Could not load MSN pretrained weights from {checkpoint}")
 
         self.base_model = msn_model.base_model
+        self.encoder = self.base_model.segformer.encoder
+        encoder_sizes = self.base_model.config.hidden_sizes
+        encoder_hidden_size = encoder_sizes[-1] if isinstance(encoder_sizes, (list, tuple)) else encoder_sizes
 
-        # Get the number of channels from the previous layer to properly
-        # define the input to our new classifier.
-        classifier_in_channels = self.base_model.decode_head.linear_fuse.out_channels
-
-        # Replace the original classifier with a custom Sequential module.
-        self.base_model.decode_head.classifier = nn.Sequential(
-            # First convolution layer to process the features.
-            nn.Conv2d(classifier_in_channels, 256, kernel_size=3, padding=1),
-            # Batch normalization for training stability.
-            nn.BatchNorm2d(256),
-            # ReLU activation for non-linearity.
-            nn.ReLU(inplace=True),
-            # Final convolution to map features to the desired number of classes.
-            nn.Conv2d(256, self.num_classes, kernel_size=1)
+        self.projector = nn.Sequential(
+            OrderedDict([
+                # First convolution layer to process the features.
+                ("conv1", nn.Conv2d(encoder_hidden_size, hidden_dim, kernel_size=3, padding=1, dtype=torch.float)),
+                # Batch normalization for training stability.
+                ("bn1", nn.BatchNorm2d(hidden_dim)),
+                # ReLU activation for non-linearity.
+                ("relu1", nn.ReLU(inplace=True)),
+                # First convolution layer to[project to classes.
+                ("conv2", nn.Conv2d(hidden_dim, self.num_classes, kernel_size=3, padding=1, dtype=torch.float)),
+            ])
         )
+
         self.median = MedianPool2d(kernel_size=k, padding=k // 2)
 
     def forward(self, pixel_values: torch.FloatTensor, labels: torch.LongTensor = None):
@@ -905,7 +909,13 @@ class SupervisedSegformerSegmentation(nn.Module):
         """
         # The base model's forward pass handles the entire encoder and decoder.
         # We only need the logits.
-        output = self.base_model(pixel_values=pixel_values.float()).logits
+        # output = self.base_model(pixel_values=pixel_values.float()).logits
+        output = self._extract_encoder_stage(self.encoder,
+                                             pixel_values.float())  # (B, D, H, W)
+        print("After encoder: ", output.shape)
+
+        output = self.projector(output)
+        print("After projector: ", output.shape)
 
         # The Segformer model's output logits are at a reduced resolution (e.g., 1/4th).
         # We upsample them back to the original input size.
@@ -915,7 +925,13 @@ class SupervisedSegformerSegmentation(nn.Module):
                                align_corners=False)
 
         # return logits
-        return self.median(logits)   # Smoothed logits
+        return self.median(logits)  # Smoothed logits
+
+    @torch.no_grad()
+    def _extract_encoder_stage(self, encoder_module, x: torch.Tensor):
+        outs = encoder_module(x)
+        feat = outs[self.stage_idx] if isinstance(outs, (list, tuple)) else outs
+        return feat.last_hidden_state  # # (B, D, H', W')
 
 
 if __name__ == "__main__":
