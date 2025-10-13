@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageFilter
 from matplotlib import pyplot as plt
+from torch.nn.functional import one_hot
 from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler
 from torchvision import transforms, transforms as T
 from torchvision.transforms import functional as F, InterpolationMode
@@ -486,15 +487,15 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
                                                std=[0.229, 0.224, 0.225])
                                    ])
 
+        print("MSNFinetuneDataset mask 1 : ", mask.shape)
         mask_augment = T.Compose([T.ToTensor(),
                                   T.Resize(self.image_size,
-                                           T.InterpolationMode.NEAREST)
+                                            T.InterpolationMode.NEAREST)
                                   ])
         # Apply augmentations
-        print("MSNFinetuneDataset mask 1 : ", mask.shape)
-        image = image_augment(image)
-        mask = mask_augment(mask)
+        mask = one_hot(mask_augment(mask.argmax(dim=1)), num_classes=image.shape[1])
         print("MSNFinetuneDataset mask 2 : ",  mask.shape)
+        image = image_augment(image)
         return image, mask.long()
 #
 # def pretrain_transform(batch: dict) -> dict:
