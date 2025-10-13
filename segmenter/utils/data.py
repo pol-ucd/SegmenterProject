@@ -1,7 +1,7 @@
 import numbers
 import os
 import platform
-from typing import Tuple, Iterator, Optional, List, Union
+from typing import Tuple, Iterator, Optional, List, Union, Any
 
 import cv2
 import h5py
@@ -578,7 +578,7 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
     """
 
     def __init__(self, hdf5_path,
-                 indices: Union[List[int], np.array[int]]  = None,
+                 indices: Union[List[Any], np.array[Any]]  = None,
                  size: Tuple[int, int] = (512, 512)):
         super().__init__(hdf5_path)
         self.indices = indices
