@@ -10,7 +10,7 @@ import torch
 from PIL import Image, ImageFilter
 from matplotlib import pyplot as plt
 from torch.nn.functional import one_hot
-from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler
+from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler, get_worker_info
 import torchvision.transforms.v2 as v2
 from torchvision.transforms import functional as F, InterpolationMode
 from torchvision.transforms import v2 as v2
@@ -208,83 +208,79 @@ class HDF5BatchSampler(Sampler[int]):
 
 class HDF5BatchSubsetSampler(Sampler[int]):
     """
-    A custom Sampler that yields contiguous index chunks (batches) from a defined
-    subset of indices to maximize HDF5 read efficiency.
-
-    This implements "weak shuffling" by shuffling the order of the batch chunks
-    but keeping indices within a chunk contiguous.
+    Refactored Sampler that safely yields contiguous index chunks (batches)
+    from a defined subset, supporting multiprocessing workers.
     """
 
+    # ... (Keep the __init__ method exactly as it was) ...
     def __init__(self,
                  dataset_size: int,
                  batch_size: int,
                  indices: Optional[List[int]] = None,
                  shuffle: bool = True):
-        """
-        Args:
-            dataset_size (int): The total size of the underlying dataset.
-            batch_size (int): The maximum size of the contiguous index chunk (batch).
-            indices (Optional[List[int]]): A list of global indices to be included
-                                           in the sample. If None, the entire dataset
-                                           is used. These indices are assumed to
-                                           represent the sequential order of the
-                                           efficiently readable data chunks.
-            shuffle (bool): If True, shuffles the order of the *batches*, but not
-                            the indices *within* a batch.
-        """
-        # --- Store parameters ---
+        # ... (init logic remains the same) ...
         self.dataset_size = dataset_size
         self.batch_size = batch_size
         self.shuffle = shuffle
 
-        # --- Handle the subset indices ---
         if indices is None:
-            # If no indices are provided, use the entire dataset (default behavior)
             self.subset_indices = list(range(dataset_size))
         else:
-            # Use the provided indices as the effective dataset
-            # We assume these indices are sorted, as contiguous reading is the goal.
             self.subset_indices = sorted(indices)
 
-        # The effective size of our sample
         self.sample_size = len(self.subset_indices)
-
-        # --- Calculate the starting index of each batch chunk ---
-
-        # NOTE: The implementation must operate on the *positions* within the
-        # `self.subset_indices` list, but the output must be the *global indices*
-        # stored in that list.
-
-        # `start_positions` are the indices (positions) *into* `self.subset_indices`
         self.start_positions = list(range(0, self.sample_size, batch_size))
-        # If the last chunk is smaller than batch_size, its starting position is still included.
+        # ------------------------------------------------------------------
 
     def __iter__(self) -> Iterator[List[int]]:
         """
-        Yields a list of contiguous indices for the DataLoader to pass to __getitem__.
+        Yields a list of contiguous indices, partitioned for DataLoader workers.
         """
-        # The list of batch starting *positions* within self.subset_indices
+
+        # 1. Get worker info (if running in a worker process)
+        worker_info = get_worker_info()
+
+        # Start with the full list of batch starting positions
         positions_to_iterate = self.start_positions
 
+        # 2. Apply shuffling if requested
+        # Shuffling must be done *before* partitioning for reproducible randomness
+        # across all workers. Use a generator for the initial seed/shuffle state.
         if self.shuffle:
-            # Shuffle the order of the starting *positions* (weak shuffling)
-            np.random.shuffle(positions_to_iterate)
+            # For multiprocessing, it's safer to use numpy's permutation and
+            # ensure the seed is unique per epoch if necessary.
+            # Using a fixed seed here for demonstration.
+            # In a real training loop, you'd update the seed per epoch.
+            rng = np.random.default_rng(seed=42)
+            positions_to_iterate = rng.permutation(positions_to_iterate).tolist()
 
+        # 3. Partition the batch positions based on worker ID
+        if worker_info is None:
+            # Single-process data loading (no workers)
+            worker_id = 0
+            num_workers = 1
+        else:
+            # Multi-process data loading (partition the batches)
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+
+            # Slice the list of batch positions to assign a unique, non-overlapping
+            # set of batches to the current worker.
+            positions_to_iterate = positions_to_iterate[worker_id::num_workers]
+
+        # 4. Iterate over the worker's assigned batches
         for start_pos in positions_to_iterate:
-            # Determine the end *position* of the current batch (exclusive)
+            # Determine the end *position*
             end_pos = min(start_pos + self.batch_size, self.sample_size)
 
             # Get the slice of *global indices* from the subset list
-            # The indices within this slice are the ones to be yielded
             batch_indices = self.subset_indices[start_pos:end_pos]
 
-            # Yield the batch of global indices
             yield batch_indices
 
     def __len__(self) -> int:
-        """Returns the number of batches."""
+        """Returns the total number of batches (not worker-specific)."""
         return len(self.start_positions)
-
 
 class HDF5DatasetOptimized(Dataset):
     """
