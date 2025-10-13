@@ -134,6 +134,7 @@ def finetune_transform(batch: dict) -> dict:
 
     masks = np.argmax(batch['masks'], axis=1)
     images = batch['images']
+    print(images.shape, masks.shape)
     b = images.shape[0]
     c = masks.shape[1]
     images = [pipeline_img(np.transpose(images[idx], (1,2,0))) for idx in range(b)]
