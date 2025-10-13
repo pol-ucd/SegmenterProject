@@ -26,6 +26,21 @@ from segmenter.masks import apply_custom_augmentations
 from segmenter.models.base import MedianPool2d, SegformerModelError
 
 
+class PrintLayer(nn.Module):
+    """
+    for debugging, add as a layer to inspect stages of a Sequential pipeline
+    """
+    def __init__(self, id: Optional[str] = None):
+        super(PrintLayer, self).__init__()
+        self.id = id
+
+    def forward(self, x):
+        if id:
+            print(f"[{self.id}]: shape: {x.shape} dtype: {x.dtype}")
+        else:
+            print(f"PrintLayer: shape: {x.shape} dtype: {x.dtype}")
+        return x
+
 class MaskedTiledViewGenerator(nn.Module):
     def __init__(self, mask_composer,
                  tile_size=(64, 64),
@@ -885,12 +900,16 @@ class SupervisedSegformerSegmentation(nn.Module):
             OrderedDict([
                 # First convolution layer to process the features.
                 ("conv1", nn.Conv2d(encoder_hidden_size, hidden_dim, kernel_size=3, padding=1)),
+                ("pl1", PrintLayer(id= "PrintLayer 1 (after Conv2d #1)")),
                 # Batch normalization for training stability.
                 ("bn1", nn.BatchNorm2d(hidden_dim, dtype=torch.float32)),
+                ("pl2", PrintLayer(id= "PrintLayer 2 (after BatchNorm2D)")),
                 # ReLU activation for non-linearity.
                 ("relu1", nn.ReLU(inplace=True)),
+                ("pl3", PrintLayer(id="PrintLayer 3 (after ReLU)")),
                 # First convolution layer to[project to classes.
                 ("conv2", nn.Conv2d(hidden_dim, self.num_classes, kernel_size=3, padding=1)),
+                ("pl4", PrintLayer(id="PrintLayer 4 (after Conv2d #2)")),
             ])
         )
 
