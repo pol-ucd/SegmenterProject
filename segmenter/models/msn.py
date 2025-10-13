@@ -890,7 +890,7 @@ class SupervisedSegformerSegmentation(nn.Module):
                 # ReLU activation for non-linearity.
                 ("relu1", nn.ReLU(inplace=True)),
                 # First convolution layer to[project to classes.
-                ("conv2", nn.Conv2d(hidden_dim, self.num_classes, kernel_size=3, padding=1, dtype=torch.float)),
+                ("conv2", nn.Conv2d(hidden_dim, self.num_classes, kernel_size=3, padding=1)),
             ])
         )
 
