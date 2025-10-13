@@ -884,7 +884,7 @@ class SupervisedSegformerSegmentation(nn.Module):
         self.projector = nn.Sequential(
             OrderedDict([
                 # First convolution layer to process the features.
-                ("conv1", nn.Conv2d(encoder_hidden_size, hidden_dim, kernel_size=3, padding=1, dtype=torch.float)),
+                ("conv1", nn.Conv2d(encoder_hidden_size, hidden_dim, kernel_size=3, padding=1)),
                 # Batch normalization for training stability.
                 ("bn1", nn.BatchNorm2d(hidden_dim)),
                 # ReLU activation for non-linearity.
@@ -907,9 +907,6 @@ class SupervisedSegformerSegmentation(nn.Module):
         Returns:
             torch.Tensor: The output logits from the model, upsampled to the original input size.
         """
-        # The base model's forward pass handles the entire encoder and decoder.
-        # We only need the logits.
-        # output = self.base_model(pixel_values=pixel_values.float()).logits
         output = self._extract_encoder_stage(self.encoder,
                                              pixel_values.float())  # (B, D, H, W)
         print("After encoder: ", output.shape)
