@@ -849,7 +849,9 @@ class SimCLRSegFormer(MSNSegFormerBase):
 
 
 class SupervisedSegformerSegmentation(nn.Module):
-    def __init__(self, pretrained_model: str = None, num_classes: int = None,
+    def __init__(self,
+                 pretrained_model: str = None,
+                 num_classes: int = None,
                  checkpoint:str=None,
                  k:int=3):
         super().__init__()
@@ -857,7 +859,8 @@ class SupervisedSegformerSegmentation(nn.Module):
         # Load the full SegformerForSemanticSegmentation model.
         # Set `ignore_mismatched_sizes=True` because we will replace the
         # final classification layer, which will have a different output size.
-
+        self.num_classes = num_classes
+        self.k = k
 
         msn_model = SegFormerFeatureWrapper(pretrained_name=pretrained_model)
 
