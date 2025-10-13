@@ -130,7 +130,8 @@ def finetune_step(model: SupervisedSegformerSegmentation,
     model.train()
     total_loss = []
     ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Standard Cross Entropy
-    dice_loss_fn = DiceLoss(num_classes=model.config.num_labels, ignore_index=255)  # Custom Dice Loss
+    dice_loss_fn = DiceLoss(num_classes=model.num_classes,
+                            ignore_index=255)  # Custom Dice Loss
 
     best_loss = float('inf')
     min_delta = 0.00001
@@ -138,6 +139,7 @@ def finetune_step(model: SupervisedSegformerSegmentation,
     max_boredom = 10
     best_model = None
     device = next(model.parameters()).device
+
     for epoch in range(num_epochs):
         for inputs, labels in tqdm(dataloader):  # inputs=[B,C,H,W], labels=[B,H,W]
             inputs, labels = inputs.to(device), labels.to(device).long()
@@ -192,7 +194,7 @@ def validate_step(model: nn.Module, dataloader: torch.utils.data.DataLoader, dev
     model.eval()
     total_dice = []
 
-    num_classes = model.config.num_labels
+    num_classes = model.num_classes
 
     with torch.no_grad():
         for inputs, labels in dataloader:
