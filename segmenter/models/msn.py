@@ -886,7 +886,7 @@ class SupervisedSegformerSegmentation(nn.Module):
                 # First convolution layer to process the features.
                 ("conv1", nn.Conv2d(encoder_hidden_size, hidden_dim, kernel_size=3, padding=1)),
                 # Batch normalization for training stability.
-                ("bn1", nn.BatchNorm2d(hidden_dim)),
+                ("bn1", nn.BatchNorm2d(hidden_dim, dtype=torch.float32)),
                 # ReLU activation for non-linearity.
                 ("relu1", nn.ReLU(inplace=True)),
                 # First convolution layer to[project to classes.

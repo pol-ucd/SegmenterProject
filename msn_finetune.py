@@ -147,12 +147,17 @@ def finetune_step(model: SupervisedSegformerSegmentation,
 
             optimizer.zero_grad()
 
+            with torch.amp.autocast(device_type=get_default_device_type(),
+                                    dtype=torch.float16,
+                                    enabled=(scaler is not None)):
             # Forward pass
-            outputs = model(inputs.half())
-            logits = outputs.logits  # Logits [B, num_labels, H/4, W/4]
+                outputs = model(inputs.half())
+                logits = outputs.logits  # Logits [B, num_labels, H/4, W/4]
 
             # Resize logits to match labels size (SegFormer outputs downsampled logits)
-            resized_logits = F.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+                resized_logits = F.interpolate(logits, size=labels.shape[-2:],
+                                               mode="bilinear",
+                                               align_corners=False)
 
             # Calculate Losses
             ce_loss = ce_loss_fn(resized_logits, labels)
