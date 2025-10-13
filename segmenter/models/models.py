@@ -51,7 +51,6 @@ class BaseSegmenter(AugurSegmenterBase):
         return logits  # Smoothed logits
 
 
-
 class CustomSegformerDecodeHead(nn.Module):
     def __init__(self, in_channels, out_channels, num_classes):
         super().__init__()

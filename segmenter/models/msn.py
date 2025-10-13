@@ -23,7 +23,7 @@ from torch.nn import functional as F
 from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
 from segmenter.masks import apply_custom_augmentations
-from segmenter.models.base import MedianPool2d
+from segmenter.models.base import MedianPool2d, AugurSegmenterBase, SegformerModelError
 
 
 class MaskedTiledViewGenerator(nn.Module):
@@ -845,6 +845,87 @@ class SimCLRSegFormer(MSNSegFormerBase):
         if return_patches:
             return z_anchor, z_positive, patches_anchor, patches_positive
         return z_anchor, z_positive
+
+
+
+class SupervisedSegformerSegmentation(nn.Module):
+    def __init__(self, /, pretrained_model: str = None, num_classes: int = None,
+                 checkpoint:str=None,
+                 k:int=3):
+        super().__init__(pretrained_model, num_classes)
+
+        # Load the full SegformerForSemanticSegmentation model.
+        # Set `ignore_mismatched_sizes=True` because we will replace the
+        # final classification layer, which will have a different output size.
+
+
+        msn_model = SegFormerFeatureWrapper(pretrained_name=pretrained_model)
+
+        try:
+            msn_model.load_state_dict(torch.load(checkpoint,
+                                             map_location=next(msn_model.parameters()).device,
+                                             weights_only=False))
+
+
+        except Exception as e:
+            raise ValueError(f"Could not load MSN pretrained weights from {checkpoint}")
+
+        self.base_model = msn_model.segformer
+
+        # Get the number of channels from the previous layer to properly
+        # define the input to our new classifier.
+        classifier_in_channels = self.base_model.decode_head.linear_fuse.out_channels
+
+        # Replace the original classifier with a custom Sequential module.
+        self.base_model.decode_head.classifier = nn.Sequential(
+            # First convolution layer to process the features.
+            nn.Conv2d(classifier_in_channels, 256, kernel_size=3, padding=1),
+            # Batch normalization for training stability.
+            nn.BatchNorm2d(256),
+            # ReLU activation for non-linearity.
+            nn.ReLU(inplace=True),
+            # Final convolution to map features to the desired number of classes.
+            nn.Conv2d(256, self.num_classes, kernel_size=1)
+        )
+        self.median = MedianPool2d(kernel_size=k, padding=k // 2)
+
+        # --- Checkpoint Loading Logic ---
+        if self.checkpoint_path:
+            try:
+                # Load the state dictionary from the .pt file
+                state_dict = torch.load(self.checkpoint_path, map_location=torch.device('cpu'))
+                self.base_model.load_state_dict(state_dict)
+            except FileNotFoundError:
+                # Raise exception for consistent error handling
+                raise SegformerModelError(f"Checkpoint file not found at: {self.checkpoint_path}")
+            except Exception as e:
+                # Catch any other loading errors
+                raise SegformerModelError(f"Failed to load checkpoint: {e}")
+
+    def forward(self, pixel_values: torch.FloatTensor, labels: torch.LongTensor = None):
+        """
+        Forward pass for the custom Segformer model.
+
+        Args:
+            pixel_values (torch.Tensor): Input tensor of pixel values.
+            labels (torch.Tensor, optional): Optional ground truth labels.
+
+        Returns:
+            torch.Tensor: The output logits from the model, upsampled to the original input size.
+        """
+        # The base model's forward pass handles the entire encoder and decoder.
+        # We only need the logits.
+        output = self.base_model(pixel_values=pixel_values.float()).logits
+
+        # The Segformer model's output logits are at a reduced resolution (e.g., 1/4th).
+        # We upsample them back to the original input size.
+        logits = F.interpolate(output,
+                               size=pixel_values.shape[2:],
+                               mode='bilinear',
+                               align_corners=False)
+
+        # return logits
+        return self.median(logits)   # Smoothed logits
 
 
 if __name__ == "__main__":

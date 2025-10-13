@@ -15,6 +15,7 @@ from segmenter.core import Config, set_default_device, get_default_device, get_d
 from segmenter.loss import DiceLoss, MSNLoss
 from segmenter.models import MoCoSiameseNetwork, SegFormerFeatureWrapper
 from segmenter.core.torch import get_default_device_type
+from segmenter.models.msn import SupervisedSegformerSegmentation
 from segmenter.utils.msn import load_data
 
 # Configuration
@@ -90,7 +91,6 @@ def pretrain_step(model: MoCoSiameseNetwork,
             with torch.no_grad():
                 if isinstance(loss_fn, MSNLoss):
                     loss_fn.update_center(target_emb.detach().to(torch.float32))
-
 
             # print(
             #     f"Epoch {epoch} Batch {batch_idx} Loss {loss.item():.4f} | "
@@ -235,25 +235,15 @@ def main():
     finetune_dataloader, pretrain_dataloader, validation_dataloader = load_data(BATCH_SIZE, finetune_percent)
 
     # ----------------------------------------------------
-    # 1. PRE-TRAINING PHASE
+    # 1. FINETUNING PHASE
     # ----------------------------------------------------
-
+    checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
     logger.info("Loading models for Pre-training Phase (Siamese Network) ---")
 
     # Load the base model
-    base_model = SegFormerFeatureWrapper(pretrained_name=backbone_model).to(device)
-
-    logger.info("Loading snapshot MSN state dict for fine-tuning.")
-    try:
-        checkpoint = f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pth'
-        base_model.load_state_dict(torch.load(checkpoint,
-                                         map_location=device,
-                                         weights_only=False))
-
-        logger.info(f"Checkpoint loaded successfully from: {checkpoint}")
-    except Exception as e:
-        logger.info(f"No checkpoint loaded `{prefix}_segformer_pretrained.pth`: {e}")
-
+    base_model = SupervisedSegformerSegmentation(pretrained_model=backbone_model,
+                                                 num_classes=2,
+                                                 checkpoint=checkpoint).to(device)
 
     # ----------------------------------------------------
     # 2. FINE-TUNING PHASE
