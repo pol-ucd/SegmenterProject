@@ -432,12 +432,12 @@ class HDF5DatasetOptimized(Dataset):
 
 
         results = {k: self.f[k][idx] for k in self.data_keys if k in self.f}  # (B, H, W, C)
-
-        if len(idx) < self.batch_len:
-            rep = self.batch_len - len(idx)
-            for k, v in results.items():
-                last = np.repeat([v[-1]], repeats=rep, axis=0)
-                np.vstack([v, last])
+        #
+        # if len(idx) < self.batch_len:
+        #     rep = self.batch_len - len(idx)
+        #     for k, v in results.items():
+        #         last = np.repeat([v[-1]], repeats=rep, axis=0)
+        #         np.vstack([v, last])
 
         if self.transform:
             results = self.transform(results)

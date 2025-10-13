@@ -115,6 +115,14 @@ def load_finetune(data_path: Optional[str] = None,
     finetune_indices = shuffled_indices[:n_finetune]
     validation_indices = shuffled_indices[n_finetune:]
 
+
+    while (len(finetune_indices)) % batch_size != 0:
+        finetune_indices = np.append(finetune_indices, validation_indices[-1])
+
+
+    while (len(validation_indices)) % batch_size != 0:
+        validation_indices = np.append(validation_indices, validation_indices[-1])
+
     subset_sampler_finetune = HDF5BatchSubsetSampler(dataset_size=n_finetune,
                                                      batch_size=batch_size,
                                                      indices=finetune_indices)
