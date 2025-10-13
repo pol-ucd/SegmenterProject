@@ -121,21 +121,23 @@ def pretrain_step(model: MoCoSiameseNetwork,
     return best_model  # Return the pre-trained encoder weights
 
 
-def finetune_step(model: nn.Module, dataloader: torch.utils.data.DataLoader,
-                  optimizer: torch.optim.Optimizer, device: torch.device, num_epochs=100):
+def finetune_step(model: SupervisedSegformerSegmentation,
+                  dataloader: torch.utils.data.DataLoader,
+                  optimizer: torch.optim.Optimizer,
+                  num_epochs=100):
     logger = logging.getLogger(__name__)
     CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
     model.train()
-    total_loss = 0
+    total_loss = []
     ce_loss_fn = nn.CrossEntropyLoss(ignore_index=255)  # Standard Cross Entropy
     dice_loss_fn = DiceLoss(num_classes=model.config.num_labels, ignore_index=255)  # Custom Dice Loss
 
-    model_name = f'../segmenter/checkpoint/{prefix}_segformer_finetuned.pth'
     best_loss = float('inf')
     min_delta = 0.00001
     boredom = 0
     max_boredom = 10
     best_model = None
+    device = next(model.parameters()).device
     for epoch in range(num_epochs):
         for inputs, labels in tqdm(dataloader):  # inputs=[B,C,H,W], labels=[B,H,W]
             inputs, labels = inputs.to(device), labels.to(device).long()
@@ -160,21 +162,21 @@ def finetune_step(model: nn.Module, dataloader: torch.utils.data.DataLoader,
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
+            total_loss += [loss.item()]
 
-        avg_loss = total_loss / len(dataloader)
+        avg_loss = np.mean(total_loss)
 
         logger.info(f"PFine-tuning Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}")
         if avg_loss + min_delta < best_loss:
             best_loss = avg_loss
             boredom = 0
-            logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
+            logger.info("Saving best snapshot state dict for fine-tuning.")
             try:
                 best_model = model.state_dict()
                 torch.save(best_model,
-                           model_name)
+                           f"../segmenter/checkpoint/{prefix}_segformer_fine_tuned.pth")
             except Exception as e:
-                logger.error(f"Finetuning failed to save `{prefix}_segformer_pretrained.pth`: {e}")
+                logger.error(f"Finetuning failed to save `{prefix}_segformer_fine_tuned.pth`: {e}")
 
         else:
             boredom += 1
@@ -188,7 +190,7 @@ def finetune_step(model: nn.Module, dataloader: torch.utils.data.DataLoader,
 def validate_step(model: nn.Module, dataloader: torch.utils.data.DataLoader, device: torch.device):
     logger = logging.getLogger(__name__)
     model.eval()
-    total_dice = 0.0
+    total_dice = []
 
     num_classes = model.config.num_labels
 
@@ -217,10 +219,10 @@ def validate_step(model: nn.Module, dataloader: torch.utils.data.DataLoader, dev
                     intersection = torch.sum((pred == target_class) & (label == target_class)).item()
                     union = torch.sum(pred == target_class).item() + torch.sum(label == target_class).item()
                     dice = (2. * intersection) / (union + 1e-6)
-                    total_dice += dice
+                    total_dice += [dice]
                 # Multi-class implementation would require iterating over classes
 
-    avg_dice = total_dice / len(dataloader.dataset)
+    avg_dice = np.mean(total_dice)
     logger.info(f"Validation Dice Score (Foreground): {avg_dice:.4f}")
 
 
@@ -241,45 +243,29 @@ def main():
     logger.info(f"Loading models for Finetuning Phase ({prefix})")
 
     # Load the base model
-    base_model = SupervisedSegformerSegmentation(pretrained_model=backbone_model,
-                                                 num_classes=2,
-                                                 checkpoint=checkpoint).to(device)
+    supervised_model = SupervisedSegformerSegmentation(pretrained_model=backbone_model,
+                                                       num_classes=2,
+                                                       checkpoint=checkpoint).to(device)
 
     logger.info(f"Successfully loaded models for Finetuning Phase ({prefix})")
 
-    # ----------------------------------------------------
-    # 2. FINE-TUNING PHASE
-    # ----------------------------------------------------
-
-    # logger.info("Starting Fine-tuning Phase (Supervised Segmentation) ---")
-
-    # Configure the standard SegFormer for the segmentation task
-    # segformer_config = SegformerConfig.from_pretrained("nvidia/segformer-b4-finetuned-ade-512-512", num_labels=NUM_CLASSES)
-
-    # Instantiate the supervised model
-    # supervised_model = SupervisedSegFormer(segformer_config).to(device)
-    # supervised_model = SegFormerAdapter("nvidia/segformer-b4-finetuned-ade-512-512")
-    # # Load the pre-trained weights into the encoder
-    # supervised_model.load_pretrain_weights(pretrain_weights)
-    #
     # # Use a small LR for fine-tuning to preserve pre-trained knowledge
-    # finetune_optimizer = torch.optim.AdamW(supervised_model.parameters(), lr=5e-5)
+    finetune_optimizer = torch.optim.AdamW(supervised_model.parameters(), lr=5e-5)
     #
     # # Perform a single epoch of fine-tuning for demonstration
-    # finetune_step(
-    #     supervised_model,
-    #     finetune_dataloader,
-    #     finetune_optimizer,
-    #     device
-    # )
+    finetune_step(
+        supervised_model,
+        finetune_dataloader,
+        finetune_optimizer
+    )
 
     # ----------------------------------------------------
     # 3. VALIDATION PHASE
     # ----------------------------------------------------
 
-    # logger.info("Starting Validation Phase ---")
+    logger.info("Starting Validation Phase ---")
 
-    # validate_step(supervised_model, validation_dataloader, device)
+    validate_step(supervised_model, validation_dataloader, device)
 
 
 if __name__ == "__main__":
