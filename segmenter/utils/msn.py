@@ -99,6 +99,8 @@ def load_pretrain(data_path: Optional[str] = None,
 
     return pretrain_dataloader
 
+def round_to_multiple(number, multiple):
+    return multiple * round (number / multiple)
 
 def load_finetune(data_path: Optional[str] = None,
                   batch_size: int = 8,
@@ -108,20 +110,16 @@ def load_finetune(data_path: Optional[str] = None,
     # Small Annotated set for Fine-tuning
 
     finetune_data = data_path if data_path is not None else FINETUNE_DATASET
+    finetune_percent = float(finetune_percent)
 
     n_finetune = get_num_samples_from_hdf5(finetune_data)
     shuffled_indices = np.random.permutation(n_finetune)
-    n_finetune = int(n_finetune * finetune_percent)
+
+    n_finetune = round_to_multiple(n_finetune * finetune_percent, batch_size)
+
     finetune_indices = shuffled_indices[:n_finetune]
     validation_indices = shuffled_indices[n_finetune:]
 
-
-    while (len(finetune_indices)) % batch_size != 0:
-        finetune_indices = np.append(finetune_indices, validation_indices[-1])
-
-
-    while (len(validation_indices)) % batch_size != 0:
-        validation_indices = np.append(validation_indices, validation_indices[-1])
 
     subset_sampler_finetune = HDF5BatchSubsetSampler(dataset_size=n_finetune,
                                                      batch_size=batch_size,
