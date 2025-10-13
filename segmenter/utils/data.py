@@ -1,7 +1,7 @@
 import numbers
 import os
 import platform
-from typing import Tuple, Iterator
+from typing import Tuple, Iterator, Optional, List
 
 import cv2
 import h5py
@@ -103,6 +103,41 @@ def pretrain_transform(batch: dict) -> dict:
     return result
 
 
+def finetune_transform(batch: dict) -> dict:
+    """
+    Finetuning transform intended as preprocessing for
+    SegFormer backbone model input. Standardise the pixel values
+    to align with the ImageNet mean and std. This means the images
+    not in the range [0.0, 1.0] anymore and will have pixel
+    values in the range [-2.12, 2.7] (approximately).
+
+    To convert back to a 'regular' image you have to reverse
+    the ImageNet normalisation step.
+
+    :param batch: 4D stack fo images
+    :return: 4D stack with transforms applied by image
+    """
+    # Standard ImageNet mean and standard deviation
+    IMAGENET_MEAN = [0.485, 0.456, 0.406]
+    IMAGENET_STD = [0.229, 0.224, 0.225]
+    TARGET_SIZE = (512, 512)  # Size for SegFormer
+
+    pipeline_img = v2.Compose([v2.ToImage(),
+                               v2.ToDtype(torch.float32, scale=True),
+                               v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.BICUBIC),
+                               v2.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+                               ])
+
+    pipeline_mask = v2.Compose([v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.NEAREST),
+                                v2.ToDtype(torch.long, scale=False),
+                                ])
+
+    images = [pipeline_img(img) for img in batch['images']]
+    masks = [pipeline_mask(mask) for mask in batch['masks']]
+    result = {'images': torch.stack(images), 'masks': torch.stack(masks)}
+    return result
+
+
 class GaussianSmoothing(object):
     def __init__(self, radius):
         if isinstance(radius, numbers.Number):
@@ -163,6 +198,86 @@ class HDF5BatchSampler(Sampler[int]):
         return len(self.start_indices)
 
 
+class HDF5BatchSubsetSampler(Sampler[int]):
+    """
+    A custom Sampler that yields contiguous index chunks (batches) from a defined
+    subset of indices to maximize HDF5 read efficiency.
+
+    This implements "weak shuffling" by shuffling the order of the batch chunks
+    but keeping indices within a chunk contiguous.
+    """
+
+    def __init__(self,
+                 dataset_size: int,
+                 batch_size: int,
+                 indices: Optional[List[int]] = None,
+                 shuffle: bool = True):
+        """
+        Args:
+            dataset_size (int): The total size of the underlying dataset.
+            batch_size (int): The maximum size of the contiguous index chunk (batch).
+            indices (Optional[List[int]]): A list of global indices to be included
+                                           in the sample. If None, the entire dataset
+                                           is used. These indices are assumed to
+                                           represent the sequential order of the
+                                           efficiently readable data chunks.
+            shuffle (bool): If True, shuffles the order of the *batches*, but not
+                            the indices *within* a batch.
+        """
+        # --- Store parameters ---
+        self.dataset_size = dataset_size
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+        # --- Handle the subset indices ---
+        if indices is None:
+            # If no indices are provided, use the entire dataset (default behavior)
+            self.subset_indices = list(range(dataset_size))
+        else:
+            # Use the provided indices as the effective dataset
+            # We assume these indices are sorted, as contiguous reading is the goal.
+            self.subset_indices = sorted(indices)
+
+        # The effective size of our sample
+        self.sample_size = len(self.subset_indices)
+
+        # --- Calculate the starting index of each batch chunk ---
+
+        # NOTE: The implementation must operate on the *positions* within the
+        # `self.subset_indices` list, but the output must be the *global indices*
+        # stored in that list.
+
+        # `start_positions` are the indices (positions) *into* `self.subset_indices`
+        self.start_positions = list(range(0, self.sample_size, batch_size))
+        # If the last chunk is smaller than batch_size, its starting position is still included.
+
+    def __iter__(self) -> Iterator[List[int]]:
+        """
+        Yields a list of contiguous indices for the DataLoader to pass to __getitem__.
+        """
+        # The list of batch starting *positions* within self.subset_indices
+        positions_to_iterate = self.start_positions
+
+        if self.shuffle:
+            # Shuffle the order of the starting *positions* (weak shuffling)
+            np.random.shuffle(positions_to_iterate)
+
+        for start_pos in positions_to_iterate:
+            # Determine the end *position* of the current batch (exclusive)
+            end_pos = min(start_pos + self.batch_size, self.sample_size)
+
+            # Get the slice of *global indices* from the subset list
+            # The indices within this slice are the ones to be yielded
+            batch_indices = self.subset_indices[start_pos:end_pos]
+
+            # Yield the batch of global indices
+            yield batch_indices
+
+    def __len__(self) -> int:
+        """Returns the number of batches."""
+        return len(self.start_positions)
+
+
 class HDF5DatasetOptimized(Dataset):
     """
     HDF5 Dataset designed for batch reading using a custom Sampler.
@@ -173,7 +288,7 @@ class HDF5DatasetOptimized(Dataset):
     format and return transformed values in the same format.
     """
 
-    def __init__(self, hdf5_path, data_keys=None, transform=None):
+    def __init__(self, hdf5_path, data_keys: Optional[List[str]] = None, transform=None):
         super().__init__()
         self.hdf5_path = hdf5_path
         self.transform = transform

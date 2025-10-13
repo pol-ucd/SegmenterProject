@@ -16,7 +16,7 @@ from segmenter.loss import DiceLoss, MSNLoss
 from segmenter.models import MoCoSiameseNetwork, SegFormerFeatureWrapper
 from segmenter.core.torch import get_default_device_type
 from segmenter.models.msn import SupervisedSegformerSegmentation
-from segmenter.utils.msn import load_data
+from segmenter.utils.msn import load_data, load_finetune
 
 # Configuration
 config = Config("config/msn_common.json")
@@ -241,7 +241,8 @@ def main():
 
     logger.info(f"Using device: {device}")
 
-    finetune_dataloader, pretrain_dataloader, validation_dataloader = load_data(BATCH_SIZE, finetune_percent)
+    finetune_dataloader, validation_dataloader = load_finetune(batch_size=BATCH_SIZE_FINETUNE,
+                                                               finetune_percent=finetune_percent)
 
     # ----------------------------------------------------
     # 1. FINETUNING PHASE
