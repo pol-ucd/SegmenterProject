@@ -132,7 +132,7 @@ def finetune_transform(batch: dict) -> dict:
                                 v2.ToDtype(torch.long, scale=False),
                                 ])
 
-    masks = np.argmax(batch['masks'], axis=1).squeeze(axis=1)
+    masks = np.argmax(batch['masks'], axis=1)
     images = batch['images']
     b = images.shape[0]
     c = masks.shape[1]
