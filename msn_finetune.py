@@ -30,6 +30,7 @@ NUM_CLASSES = 2  # Polyp/Lesion (1) and Background (0)
 finetune_percent = 0.1
 IMAGE_SIZE = (512, 512)
 N_EPOCHS = 200
+BATCH_SIZE_FINETUNE = 8
 
 WARMUP_EPOCHS = 5
 TOTAL_EPOCHS = 200

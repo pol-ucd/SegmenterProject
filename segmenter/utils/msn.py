@@ -55,6 +55,7 @@ class MSNDataHandler:
 
 
 def load_data(batch_size: int, finetune_percent: float,
+              batch_size_finetune: int = 8,
               image_size=(512, 512),
               num_workers: int = 4) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
     # image_augment = T.Compose([T.Resize(image_size,
@@ -93,14 +94,14 @@ def load_data(batch_size: int, finetune_percent: float,
     finetune_dataset = MSNFinetuneDatasetHDF5(hdf5_path=finetune_data,
                                               indices=finetune_indices)
     finetune_dataloader = torch.utils.data.DataLoader(
-        finetune_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
-        prefetch_factor=batch_size
+        finetune_dataset, batch_size=batch_size_finetune, shuffle=True, num_workers=4, pin_memory=True,
+        prefetch_factor=batch_size_finetune
     )
 
     # Annotated set for Validation
     validation_dataset = MSNFinetuneDatasetHDF5(hdf5_path=finetune_data,
                                                 indices=validation_indices)
     validation_dataloader = torch.utils.data.DataLoader(
-        validation_dataset, batch_size=batch_size, shuffle=False, num_workers=4
+        validation_dataset, batch_size=batch_size_finetune, shuffle=False, num_workers=4
     )
     return finetune_dataloader, pretrain_dataloader, validation_dataloader
