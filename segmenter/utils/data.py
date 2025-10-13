@@ -431,6 +431,8 @@ class HDF5DatasetOptimized(Dataset):
 
         while len(idx) < self.batch_len:
             idx = idx + idx[:self.batch_len - len(idx)]
+        else:
+            idx = sorted(idx)
 
         results = {k: self.f[k][idx] for k in self.data_keys if k in self.f}  # (B, H, W, C)
 
