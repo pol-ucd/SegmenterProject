@@ -849,7 +849,7 @@ class SimCLRSegFormer(MSNSegFormerBase):
 
 
 class SupervisedSegformerSegmentation(nn.Module):
-    def __init__(self, /, pretrained_model: str = None, num_classes: int = None,
+    def __init__(self, pretrained_model: str = None, num_classes: int = None,
                  checkpoint:str=None,
                  k:int=3):
         super().__init__(pretrained_model, num_classes)
