@@ -125,7 +125,7 @@ def pretrain_step(model: MoCoSiameseNetwork,
 def finetune_step(model: SupervisedSegformerSegmentation,
                   dataloader: torch.utils.data.DataLoader,
                   optimizer: torch.optim.Optimizer,
-                  num_epochs=100):
+                  num_epochs=1):
     logger = logging.getLogger(__name__)
     CE_WEIGHT, DICE_WEIGHT = 0.5, 0.5
     model.train()
