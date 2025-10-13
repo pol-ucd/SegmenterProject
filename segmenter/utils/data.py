@@ -499,7 +499,7 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
             v2.ToDtype(torch.float32, scale=True),
         ])
         # Apply augmentations
-        mask = torch.stack([mask_augment(mask[i]) for i in range(mask.shape[0])])
+        mask = torch.stack([mask_augment(mask[i]) for i in range(mask.shape[0])]).squeeze(1)
         print("MSNFinetuneDataset mask 2 : ", mask.shape)
         image = image_augment(image)
         return image, mask.long()
