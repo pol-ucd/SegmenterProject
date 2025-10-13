@@ -577,8 +577,8 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
        and annotated images/masks (for fine-tuning).
     """
 
-    def __init__(self, hdf5_path,
-                 indices: Union[List[Any], np.array[Any]]  = None,
+    def __init__(self, hdf5_path: str,
+                 indices: Union[List[Any], np.array[Any]],
                  size: Tuple[int, int] = (512, 512)):
         super().__init__(hdf5_path)
         self.indices = indices
