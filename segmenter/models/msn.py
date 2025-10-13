@@ -870,7 +870,7 @@ class SupervisedSegformerSegmentation(nn.Module):
         except Exception as e:
             raise ValueError(f"Could not load MSN pretrained weights from {checkpoint}")
 
-        self.base_model = msn_model.segformer
+        self.base_model = msn_model.base_model
 
         # Get the number of channels from the previous layer to properly
         # define the input to our new classifier.
