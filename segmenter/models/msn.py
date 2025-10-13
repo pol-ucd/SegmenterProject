@@ -23,7 +23,7 @@ from torch.nn import functional as F
 from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
 from segmenter.masks import apply_custom_augmentations
-from segmenter.models.base import MedianPool2d, AugurSegmenterBase, SegformerModelError
+from segmenter.models.base import MedianPool2d, SegformerModelError
 
 
 class MaskedTiledViewGenerator(nn.Module):
@@ -871,7 +871,7 @@ class SupervisedSegformerSegmentation(nn.Module):
 
 
         except Exception as e:
-            raise ValueError(f"Could not load MSN pretrained weights from {checkpoint}")
+            raise SegformerModelError(f"Could not load MSN pretrained weights from {checkpoint}")
 
         self.base_model = msn_model.base_model
 
@@ -891,19 +891,6 @@ class SupervisedSegformerSegmentation(nn.Module):
             nn.Conv2d(256, self.num_classes, kernel_size=1)
         )
         self.median = MedianPool2d(kernel_size=k, padding=k // 2)
-
-        # --- Checkpoint Loading Logic ---
-        if self.checkpoint_path:
-            try:
-                # Load the state dictionary from the .pt file
-                state_dict = torch.load(self.checkpoint_path, map_location=torch.device('cpu'))
-                self.base_model.load_state_dict(state_dict)
-            except FileNotFoundError:
-                # Raise exception for consistent error handling
-                raise SegformerModelError(f"Checkpoint file not found at: {self.checkpoint_path}")
-            except Exception as e:
-                # Catch any other loading errors
-                raise SegformerModelError(f"Failed to load checkpoint: {e}")
 
     def forward(self, pixel_values: torch.FloatTensor, labels: torch.LongTensor = None):
         """
