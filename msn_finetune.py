@@ -197,7 +197,7 @@ def validate_step(model: nn.Module, dataloader: torch.utils.data.DataLoader, dev
     num_classes = model.num_classes
 
     with torch.no_grad():
-        for inputs, labels in dataloader:
+        for inputs, labels in tqdm(dataloader):
             inputs, labels = inputs.to(device), labels.to(device).long()
 
             outputs = model(inputs)
