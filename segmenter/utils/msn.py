@@ -115,8 +115,12 @@ def load_finetune(data_path: Optional[str] = None,
     finetune_indices = shuffled_indices[:n_finetune]
     validation_indices = shuffled_indices[n_finetune:]
 
-    subset_sampler_finetune = HDF5BatchSubsetSampler(indices=finetune_indices)
-    subset_sampler_validation = HDF5BatchSubsetSampler(indices=validation_indices)
+    subset_sampler_finetune = HDF5BatchSubsetSampler(dataset_size=n_finetune,
+                                                     batch_size=batch_size,
+                                                     indices=finetune_indices)
+    subset_sampler_validation = HDF5BatchSubsetSampler(dataset_size=n_finetune,
+                                                       batch_size=batch_size,
+                                                       indices=validation_indices)
 
     finetune_dataset = HDF5DatasetOptimized(hdf5_path=finetune_data,
                                             data_keys=['images', 'masks'],
