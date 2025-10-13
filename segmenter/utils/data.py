@@ -145,7 +145,6 @@ def finetune_transform(batch: dict) -> dict:
     return {'images': images, 'masks': masks}
 
 
-
 class GaussianSmoothing(object):
     def __init__(self, radius):
         if isinstance(radius, numbers.Number):
@@ -204,6 +203,7 @@ class HDF5BatchSampler(Sampler[int]):
     def __len__(self) -> int:
         """Returns the number of batches."""
         return len(self.start_indices)
+
 
 #
 # class HDF5BatchSubsetSampler(Sampler[int]):
@@ -430,18 +430,11 @@ class HDF5DatasetOptimized(Dataset):
         if not is_batch:
             idx = [idx]
 
-
         results = {k: self.f[k][idx] for k in self.data_keys if k in self.f}  # (B, H, W, C)
-        #
-        # if len(idx) < self.batch_len:
-        #     rep = self.batch_len - len(idx)
-        #     for k, v in results.items():
-        #         last = np.repeat([v[-1]], repeats=rep, axis=0)
-        #         np.vstack([v, last])
-
+        print("Before transforms: ", results['images'].shape, results['masks'].shape)
         if self.transform:
             results = self.transform(results)
-
+        print("After transforms: ", results['images'].shape, results['masks'].shape)
         return results
 
 
