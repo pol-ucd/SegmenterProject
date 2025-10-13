@@ -10,7 +10,7 @@ import torch
 from PIL import Image, ImageFilter
 from matplotlib import pyplot as plt
 from torch.nn.functional import one_hot
-from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler, get_worker_info
+from torch.utils.data import Dataset, random_split, ConcatDataset, DataLoader, Sampler, get_worker_info, BatchSampler
 import torchvision.transforms.v2 as v2
 from torchvision.transforms import functional as F, InterpolationMode
 from torchvision.transforms import v2 as v2
@@ -205,20 +205,103 @@ class HDF5BatchSampler(Sampler[int]):
         """Returns the number of batches."""
         return len(self.start_indices)
 
+#
+# class HDF5BatchSubsetSampler(Sampler[int]):
+#     """
+#     Refactored Sampler that safely yields contiguous index chunks (batches)
+#     from a defined subset, supporting multiprocessing workers.
+#     """
+#
+#     # ... (Keep the __init__ method exactly as it was) ...
+#     def __init__(self,
+#                  dataset_size: int,
+#                  batch_size: int,
+#                  indices: Optional[List[int]] = None,
+#                  shuffle: bool = True):
+#         # ... (init logic remains the same) ...
+#         self.dataset_size = dataset_size
+#         self.batch_size = batch_size
+#         self.shuffle = shuffle
+#
+#         if indices is None:
+#             self.subset_indices = list(range(dataset_size))
+#         else:
+#             self.subset_indices = sorted(indices)
+#
+#         self.sample_size = len(self.subset_indices)
+#         self.start_positions = list(range(0, self.sample_size, batch_size))
+#         # ------------------------------------------------------------------
+#
+#     def __iter__(self) -> Iterator[List[int]]:
+#         """
+#         Yields a list of contiguous indices, partitioned for DataLoader workers.
+#         """
+#
+#         # 1. Get worker info (if running in a worker process)
+#         worker_info = get_worker_info()
+#
+#         # Start with the full list of batch starting positions
+#         positions_to_iterate = self.start_positions
+#
+#         # 2. Apply shuffling if requested
+#         # Shuffling must be done *before* partitioning for reproducible randomness
+#         # across all workers. Use a generator for the initial seed/shuffle state.
+#         if self.shuffle:
+#             # For multiprocessing, it's safer to use numpy's permutation and
+#             # ensure the seed is unique per epoch if necessary.
+#             # Using a fixed seed here for demonstration.
+#             # In a real training loop, you'd update the seed per epoch.
+#             rng = np.random.default_rng(seed=42)
+#             positions_to_iterate = rng.permutation(positions_to_iterate).tolist()
+#
+#         # 3. Partition the batch positions based on worker ID
+#         if worker_info is None:
+#             # Single-process data loading (no workers)
+#             worker_id = 0
+#             num_workers = 1
+#         else:
+#             # Multi-process data loading (partition the batches)
+#             worker_id = worker_info.id
+#             num_workers = worker_info.num_workers
+#
+#             # Slice the list of batch positions to assign a unique, non-overlapping
+#             # set of batches to the current worker.
+#             positions_to_iterate = positions_to_iterate[worker_id::num_workers]
+#
+#         # 4. Iterate over the worker's assigned batches
+#         for start_pos in positions_to_iterate:
+#             # Determine the end *position*
+#             end_pos = min(start_pos + self.batch_size, self.sample_size)
+#
+#             # Get the slice of *global indices* from the subset list
+#             batch_indices = self.subset_indices[start_pos:end_pos]
+#
+#             yield batch_indices
+#
+#     def __len__(self) -> int:
+#         """Returns the total number of batches (not worker-specific)."""
+#         return len(self.start_positions)
 
-class HDF5BatchSubsetSampler(Sampler[int]):
+
+# Change parent class from Sampler[int] to BatchSampler
+class HDF5BatchSubsetSampler(BatchSampler):
     """
-    Refactored Sampler that safely yields contiguous index chunks (batches)
-    from a defined subset, supporting multiprocessing workers.
+    Refactored Sampler that yields contiguous index chunks (batches) from a defined
+    subset, supporting multiprocessing workers. Inherits from BatchSampler
+    to correctly signal that __iter__ yields lists of indices (batches).
     """
 
-    # ... (Keep the __init__ method exactly as it was) ...
+    # Note: We must implement a custom __init__ since BatchSampler's default
+    # __init__ requires a dataset. We only need the logic.
     def __init__(self,
                  dataset_size: int,
                  batch_size: int,
                  indices: Optional[List[int]] = None,
                  shuffle: bool = True):
-        # ... (init logic remains the same) ...
+
+        # We don't call the base BatchSampler __init__ as it requires a dataset size
+        # and has its own parameter handling. We only use its __iter__ contract.
+
         self.dataset_size = dataset_size
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -230,45 +313,27 @@ class HDF5BatchSubsetSampler(Sampler[int]):
 
         self.sample_size = len(self.subset_indices)
         self.start_positions = list(range(0, self.sample_size, batch_size))
-        # ------------------------------------------------------------------
 
     def __iter__(self) -> Iterator[List[int]]:
         """
-        Yields a list of contiguous indices, partitioned for DataLoader workers.
+        Yields a list of contiguous indices (a batch), partitioned for DataLoader workers.
         """
-
-        # 1. Get worker info (if running in a worker process)
         worker_info = get_worker_info()
-
-        # Start with the full list of batch starting positions
         positions_to_iterate = self.start_positions
 
-        # 2. Apply shuffling if requested
-        # Shuffling must be done *before* partitioning for reproducible randomness
-        # across all workers. Use a generator for the initial seed/shuffle state.
+        # 1. Apply shuffling
         if self.shuffle:
-            # For multiprocessing, it's safer to use numpy's permutation and
-            # ensure the seed is unique per epoch if necessary.
-            # Using a fixed seed here for demonstration.
-            # In a real training loop, you'd update the seed per epoch.
-            rng = np.random.default_rng(seed=42)
+            # Use NumPy's permutation for shuffling stability across workers/epochs
+            rng = np.random.default_rng()
             positions_to_iterate = rng.permutation(positions_to_iterate).tolist()
 
-        # 3. Partition the batch positions based on worker ID
-        if worker_info is None:
-            # Single-process data loading (no workers)
-            worker_id = 0
-            num_workers = 1
-        else:
-            # Multi-process data loading (partition the batches)
+        # 2. Partition the batches based on worker ID
+        if worker_info is not None:
             worker_id = worker_info.id
             num_workers = worker_info.num_workers
-
-            # Slice the list of batch positions to assign a unique, non-overlapping
-            # set of batches to the current worker.
             positions_to_iterate = positions_to_iterate[worker_id::num_workers]
 
-        # 4. Iterate over the worker's assigned batches
+        # 3. Iterate over the worker's assigned batches and yield the lists of global indices
         for start_pos in positions_to_iterate:
             # Determine the end *position*
             end_pos = min(start_pos + self.batch_size, self.sample_size)
@@ -276,11 +341,24 @@ class HDF5BatchSubsetSampler(Sampler[int]):
             # Get the slice of *global indices* from the subset list
             batch_indices = self.subset_indices[start_pos:end_pos]
 
+            # Yields a list of indices (a batch)
             yield batch_indices
 
     def __len__(self) -> int:
-        """Returns the total number of batches (not worker-specific)."""
+        """Returns the total number of batches."""
         return len(self.start_positions)
+
+
+# NOTE ON DATALOADER USAGE:
+# When using a BatchSampler, you MUST NOT pass 'batch_size' to the DataLoader.
+# The BatchSampler handles the batching itself.
+
+# # Example of correct DataLoader usage:
+# dataloader = torch.utils.data.DataLoader(
+#     dataset,
+#     batch_sampler=HDF5BatchSubsetSampler(...),
+#     num_workers=4
+# )
 
 class HDF5DatasetOptimized(Dataset):
     """
