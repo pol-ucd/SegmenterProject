@@ -135,11 +135,14 @@ def finetune_transform(batch: dict) -> dict:
     masks = np.argmax(batch['masks'], axis=1).squeeze(axis=1)
     images = batch['images']
     b = images.shape[0]
+    c = masks.shape[1]
     images = [pipeline_img(np.transpose(images[idx], (1,2,0))) for idx in range(b)]
     masks = [pipeline_mask(masks[idx]) for idx in range(b)]
+    images = torch.stack(images)
+    masks = one_hot(torch.stack(masks).unsqueeze(1), num_classes=c)
 
-    result = {'images': torch.stack(images), 'masks': torch.stack(masks)}
-    return result
+    return {'images': images, 'masks': masks}
+
 
 
 class GaussianSmoothing(object):
