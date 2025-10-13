@@ -135,7 +135,7 @@ def finetune_transform(batch: dict) -> dict:
 
     masks = np.argmax(batch['masks'], axis=1)
     images = batch['images']
-    print(images.shape, masks.shape)
+
     b = images.shape[0]
     images = [pipeline_img(images[idx]) for idx in range(b)]
     masks = [pipeline_mask(masks[idx]) for idx in range(b)]
@@ -441,8 +441,6 @@ class HDF5DatasetOptimized(Dataset):
 
         if self.transform:
             results = self.transform(results)
-        for k, v in results.items():
-            print(f"{k}: {v.shape}")
 
         return results
 
@@ -652,7 +650,6 @@ class MSNPretrainDatasetHDF5(HDF5DatasetOptimized):
         image = _data['images']
         if isinstance(image, torch.Tensor):
             image = image.numpy()
-        print(image.shape)
 
         image_augment = v2.Compose([
             v2.Resize(self.image_size,
@@ -702,7 +699,6 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
             v2.ToDtype(torch.float32, scale=True),
         ])
 
-        print("MSNFinetuneDataset mask 1 : ", mask.shape)
         mask_augment = v2.Compose([
             v2.Resize(self.image_size,
                       v2.InterpolationMode.NEAREST),
@@ -711,7 +707,7 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
         ])
         # Apply augmentations
         mask = torch.stack([mask_augment(mask[i]) for i in range(mask.shape[0])]).squeeze(1)
-        print("MSNFinetuneDataset mask 2 : ", mask.shape)
+
         image = image_augment(image)
         return image, mask.long()
 
