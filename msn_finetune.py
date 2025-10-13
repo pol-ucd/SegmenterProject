@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from segmenter.core import Config, set_default_device, get_default_device, get_default_device_type
 from segmenter.loss import DiceLoss, MSNLoss
-from segmenter.models.msn import MoCoSiameseNetwork, SegFormerFeatureWrapper
+from segmenter.models import MoCoSiameseNetwork, SegFormerFeatureWrapper
 from segmenter.core.torch import get_default_device_type
 from segmenter.utils.msn import load_data
 
