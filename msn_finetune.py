@@ -145,6 +145,7 @@ def finetune_step(model: SupervisedSegformerSegmentation,
     for epoch in range(num_epochs):
         for data_item in tqdm(dataloader):
             # inputs=[B,C,H,W], labels=[B,H,W]
+            print(data_item)
             inputs = data_item["images"].to(device)
             labels = data_item['masks'].to(device).long()
             print("inputs: ", inputs.shape, "labels: ", labels.shape)
