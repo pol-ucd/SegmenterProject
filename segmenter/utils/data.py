@@ -205,85 +205,6 @@ class HDF5BatchSampler(Sampler[int]):
         return len(self.start_indices)
 
 
-#
-# class HDF5BatchSubsetSampler(Sampler[int]):
-#     """
-#     Refactored Sampler that safely yields contiguous index chunks (batches)
-#     from a defined subset, supporting multiprocessing workers.
-#     """
-#
-#     # ... (Keep the __init__ method exactly as it was) ...
-#     def __init__(self,
-#                  dataset_size: int,
-#                  batch_size: int,
-#                  indices: Optional[List[int]] = None,
-#                  shuffle: bool = True):
-#         # ... (init logic remains the same) ...
-#         self.dataset_size = dataset_size
-#         self.batch_size = batch_size
-#         self.shuffle = shuffle
-#
-#         if indices is None:
-#             self.subset_indices = list(range(dataset_size))
-#         else:
-#             self.subset_indices = sorted(indices)
-#
-#         self.sample_size = len(self.subset_indices)
-#         self.start_positions = list(range(0, self.sample_size, batch_size))
-#         # ------------------------------------------------------------------
-#
-#     def __iter__(self) -> Iterator[List[int]]:
-#         """
-#         Yields a list of contiguous indices, partitioned for DataLoader workers.
-#         """
-#
-#         # 1. Get worker info (if running in a worker process)
-#         worker_info = get_worker_info()
-#
-#         # Start with the full list of batch starting positions
-#         positions_to_iterate = self.start_positions
-#
-#         # 2. Apply shuffling if requested
-#         # Shuffling must be done *before* partitioning for reproducible randomness
-#         # across all workers. Use a generator for the initial seed/shuffle state.
-#         if self.shuffle:
-#             # For multiprocessing, it's safer to use numpy's permutation and
-#             # ensure the seed is unique per epoch if necessary.
-#             # Using a fixed seed here for demonstration.
-#             # In a real training loop, you'd update the seed per epoch.
-#             rng = np.random.default_rng(seed=42)
-#             positions_to_iterate = rng.permutation(positions_to_iterate).tolist()
-#
-#         # 3. Partition the batch positions based on worker ID
-#         if worker_info is None:
-#             # Single-process data loading (no workers)
-#             worker_id = 0
-#             num_workers = 1
-#         else:
-#             # Multi-process data loading (partition the batches)
-#             worker_id = worker_info.id
-#             num_workers = worker_info.num_workers
-#
-#             # Slice the list of batch positions to assign a unique, non-overlapping
-#             # set of batches to the current worker.
-#             positions_to_iterate = positions_to_iterate[worker_id::num_workers]
-#
-#         # 4. Iterate over the worker's assigned batches
-#         for start_pos in positions_to_iterate:
-#             # Determine the end *position*
-#             end_pos = min(start_pos + self.batch_size, self.sample_size)
-#
-#             # Get the slice of *global indices* from the subset list
-#             batch_indices = self.subset_indices[start_pos:end_pos]
-#
-#             yield batch_indices
-#
-#     def __len__(self) -> int:
-#         """Returns the total number of batches (not worker-specific)."""
-#         return len(self.start_positions)
-
-
-# Change parent class from Sampler[int] to BatchSampler
 class HDF5BatchSubsetSampler(BatchSampler):
     """
     Refactored Sampler that yields contiguous index chunks (batches) from a defined
@@ -348,17 +269,6 @@ class HDF5BatchSubsetSampler(BatchSampler):
         """Returns the total number of batches."""
         return len(self.start_positions)
 
-
-# NOTE ON DATALOADER USAGE:
-# When using a BatchSampler, you MUST NOT pass 'batch_size' to the DataLoader.
-# The BatchSampler handles the batching itself.
-
-# # Example of correct DataLoader usage:
-# dataloader = torch.utils.data.DataLoader(
-#     dataset,
-#     batch_sampler=HDF5BatchSubsetSampler(...),
-#     num_workers=4
-# )
 
 class HDF5DatasetOptimized(Dataset):
     """
@@ -705,63 +615,15 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
         return image, mask.long()
 
 
-#
-# def pretrain_transform(batch: dict) -> dict:
-#     """
-#     Base image pretraining transform intended as preprocessing for
-#     SegFormer backbone model input. Standardise the pixel values
-#     to align with the ImageNet mean and std. This means the images
-#     not in the range [0.0, 1.0] anymore and will have pixel
-#     values in the range [-3.0, 3.0] (approximately).
-#
-#     To convert back to a 'regular' image you have to reverse
-#     the ImageNet normalisation step.
-#
-#     :param batch:
-#     :return:
-#     """
-#     # Standard ImageNet mean and standard deviation
-#     IMAGENET_MEAN = [0.485, 0.456, 0.406]
-#     IMAGENET_STD = [0.229, 0.224, 0.225]
-#     TARGET_SIZE = (512, 512)  # Size for SegFormer
-#
-#     pipeline = v2.Compose([v2.ToImage(),
-#                            v2.ToDtype(torch.float32, scale=True),
-#                            v2.Resize(TARGET_SIZE, interpolation=InterpolationMode.BICUBIC),
-#                            v2.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-#                            ])
-#
-#     images = [ pipeline(img) for img in batch['images']]
-#     result = {'images': torch.stack(images)}
-#     return result
-#
-
-
 if __name__ == '__main__':
-    import PIL.Image as Image
+    test_size = 0.1
+    source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/Classica.h5"
 
-    source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
+    h5_len = get_num_samples_from_hdf5(hdf5_path=source)
 
-    # image_augment = T.Compose([v2.Resize((1024, 1024),
-    #                                     T.InterpolationMode.BICUBIC),
-    #                            # v2.Normalize(mean=[0.485, 0.456, 0.406],
-    #                            #             std=[0.229, 0.224, 0.225])
-    #                            ])
+    indices = list(range(h5_len))[:int(h5_len * test_size)]
 
-    pretrain_dataset = HDF5DatasetOptimized(hdf5_path=source,
-                                            data_keys=['images'],
-                                            # transform=None)
-                                            transform=pretrain_transform)
-    indices = list(range(8))
-    batch = pretrain_dataset[indices]
-    print(f"Batch read of {len(indices)} items, result shape is {batch['images'].shape}, type {type(batch['images'])}")
-    print(batch['images'][0].max(), batch['images'][0].min(), batch['images'][0].dtype)
-    image = batch['images'][0]
-    plt.imshow(image.permute(1, 2, 0))
-    plt.show()
+    ds = MSNFinetuneDatasetHDF5(hdf5_path=source,
+                                indices=indices)
 
-    single = pretrain_dataset[10]
-    print(f"Single read of item, result shape is {single['images'].shape}, type {type(single['images'])}")
-    image = single['images']
-    plt.imshow(image.squeeze(0).permute(1, 2, 0))
-    plt.show()
+    print(len(ds))

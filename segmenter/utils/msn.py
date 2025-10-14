@@ -99,8 +99,10 @@ def load_pretrain(data_path: Optional[str] = None,
 
     return pretrain_dataloader
 
+
 def round_to_multiple(number, multiple):
-    return multiple * round (number / multiple)
+    return multiple * round(number / multiple)
+
 
 def load_finetune(data_path: Optional[str] = None,
                   batch_size: int = 8,
@@ -120,33 +122,21 @@ def load_finetune(data_path: Optional[str] = None,
     finetune_indices = shuffled_indices[:n_finetune]
     validation_indices = shuffled_indices[n_finetune:]
 
+    finetune_dataset = MSNFinetuneDatasetHDF5(hdf5_path=data_path,
+                                              indices=finetune_indices)
 
-    subset_sampler_finetune = HDF5BatchSubsetSampler(dataset_size=n_finetune,
-                                                     batch_size=batch_size,
-                                                     indices=finetune_indices)
-
-    subset_sampler_validation = HDF5BatchSubsetSampler(dataset_size=n_finetune,
-                                                       batch_size=batch_size,
-                                                       indices=validation_indices)
-
-    finetune_dataset = HDF5DatasetOptimized(hdf5_path=finetune_data,
-                                            data_keys=['images', 'masks'],
-                                            transform=finetune_transform)
+    validation_dataset = MSNFinetuneDatasetHDF5(hdf5_path=data_path,
+                                                indices=validation_indices)
 
     finetune_dataloader = torch.utils.data.DataLoader(finetune_dataset,
                                                       batch_size=batch_size,
-                                                      sampler=subset_sampler_finetune,
-                                                      shuffle=False,
                                                       num_workers=num_workers,
-                                                      pin_memory=True,
-                                                      worker_init_fn=hdf5_worker_init_fn)
+                                                      pin_memory=True)
 
-    validation_dataloader = torch.utils.data.DataLoader(finetune_dataset,
+    validation_dataloader = torch.utils.data.DataLoader(validation_dataset,
                                                         batch_size=batch_size,
-                                                        sampler=subset_sampler_validation,
                                                         shuffle=False,
                                                         num_workers=num_workers,
-                                                        pin_memory=True,
-                                                        worker_init_fn=hdf5_worker_init_fn)
+                                                        pin_memory=True)
 
     return finetune_dataloader, validation_dataloader
