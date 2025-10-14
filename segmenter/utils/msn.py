@@ -117,8 +117,6 @@ def load_finetune(data_path: Optional[str] = None,
     n_finetune = get_num_samples_from_hdf5(finetune_data)
     shuffled_indices = np.random.permutation(n_finetune)
 
-    n_finetune = round_to_multiple(n_finetune * finetune_percent, batch_size)
-
     finetune_indices = shuffled_indices[:n_finetune]
     validation_indices = shuffled_indices[n_finetune:]
 

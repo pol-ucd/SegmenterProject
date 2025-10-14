@@ -31,6 +31,7 @@ finetune_percent = 0.1
 IMAGE_SIZE = (512, 512)
 N_EPOCHS = 200
 BATCH_SIZE_FINETUNE = 8
+DATA_PATH = "../segmenter/data/Classica.h5"
 
 WARMUP_EPOCHS = 5
 TOTAL_EPOCHS = 200
@@ -244,7 +245,8 @@ def main():
 
     logger.info(f"Using device: {device}")
 
-    finetune_dataloader, validation_dataloader = load_finetune(batch_size=BATCH_SIZE_FINETUNE,
+    finetune_dataloader, validation_dataloader = load_finetune(data_path=DATA_PATH,
+                                                               batch_size=BATCH_SIZE_FINETUNE,
                                                                finetune_percent=finetune_percent)
 
     # ----------------------------------------------------
