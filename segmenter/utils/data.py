@@ -612,7 +612,7 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
         mask = torch.stack([mask_augment(mask[i]) for i in range(mask.shape[0])]).squeeze(1)
 
         image = image_augment(image)
-        return {'image': image, 'mask': mask.long()}
+        return {'images': image, 'masks': mask.long()}
 
 
 if __name__ == '__main__':
