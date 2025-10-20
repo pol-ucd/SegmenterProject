@@ -25,7 +25,8 @@ IMAGE_H = 512
 IMAGE_W = 512
 
 # source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/Classica.h5"
-source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
+# source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
+source = "../segmenter/data/pretrain_images.h5"
 
 backbone_name = "nvidia/segformer-b4-finetuned-ade-512-512"
 
