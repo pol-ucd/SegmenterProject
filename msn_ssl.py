@@ -314,6 +314,7 @@ def main(params: Dict[str, Any]):
 
     image_size = (512, 512)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
 
@@ -330,7 +331,7 @@ def main(params: Dict[str, Any]):
                                          )
 
     # model = MSNSegFormerAdaptor(backbone=backbone_name)
-    model = MoCoMSN(backbone=backbone_name)
+    model = MoCoMSN(backbone=backbone_name).to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(),
                                   lr=params['learning_rate'],
