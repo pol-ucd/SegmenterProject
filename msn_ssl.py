@@ -367,28 +367,28 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            with autocast(device_type='cuda'):
-                x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
+            # with autocast(device_type='cuda'):
+            x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
 
-                x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
+            x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
 
-                loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
+            loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
 
             epoch_loss += [loss.cpu().item()]
+
             if not torch.isfinite(loss):
                 print("Warning: loss is not finite!", loss)
-                continue  # or handle gracefully
 
-            if scaler is not None:
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                optimizer.step()
+            # if scaler is not None:
+            #     scaler.scale(loss).backward()
+            #     scaler.unscale_(optimizer)
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            #     scaler.step(optimizer)
+            #     scaler.update()
+            # else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
 
             with torch.no_grad():
                 model.update_momentum_encoder()
