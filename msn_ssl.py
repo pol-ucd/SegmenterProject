@@ -375,7 +375,7 @@ def main(params: Dict[str, Any]):
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
 
 
-            print(f"Devices: {x_anchor_upscaled.device}, {z_target_upscaled.device}, {x_anchor_mask.device}")
+            print(f"Devices: {x_anchor_upscaled[0].device}, {z_target_upscaled[0].device}, {x_anchor_mask.device}")
 
             epoch_loss += [loss.cpu().detach().item()]
 
