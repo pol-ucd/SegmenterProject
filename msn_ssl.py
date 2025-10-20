@@ -374,16 +374,16 @@ def main(params: Dict[str, Any]):
 
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
 
+
+            print(f"Devices: {x_anchor_upscaled.device}, {z_target_upscaled.device}, {x_anchor_mask.device}")
+
             epoch_loss += [loss.cpu().detach().item()]
 
             if scaler is not None:
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                is_finite = all(torch.isfinite(p.grad).all() for p in model.parameters() if p.grad is not None)
-
-                if is_finite:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    scaler.step(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
