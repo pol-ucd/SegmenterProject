@@ -20,7 +20,7 @@ from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
 MASK_RATIO = 0.7
-PATCH_SIZE = 4 # 4x4 patches for SegFormer MiT [1]
+PATCH_SIZE = 4  # 4x4 patches for SegFormer MiT [1]
 IMAGE_H = 512
 IMAGE_W = 512
 
@@ -28,7 +28,6 @@ IMAGE_W = 512
 source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
 
 backbone_name = "nvidia/segformer-b4-finetuned-ade-512-512"
-
 
 from segmenter.masks import CompositeMask
 
@@ -89,7 +88,7 @@ class MSNSegFormerAdaptor(nn.Module):
         :return: Tuple[torch.Tensor(patch_embedding(B, HxW, N_features),
                             int(Height - e.g. 128), int(Width - e.g. 128)]
         """
-        return  self.initial_patch_layer(mask)
+        return self.initial_patch_layer(mask)
 
     # --------------------------------------------------------------------------
     # 4) Function to Upscale SegFormer Embeddings
@@ -103,7 +102,6 @@ class MSNSegFormerAdaptor(nn.Module):
 
         upscaled_outputs = []
         for features in stage_embeddings:
-
             upscaled_spatial = F.interpolate(
                 features,
                 size=(h_upscale, w_upscale),
@@ -157,9 +155,9 @@ class MoCoMSN(nn.Module):
 
     @torch.no_grad()
     def update_momentum_encoder(self):
-        for q, k in zip(self.anchor_encoder.encoder.parameters(),  self.target_encoder.encoder.parameters()):
+        for q, k in zip(self.anchor_encoder.encoder.parameters(), self.target_encoder.encoder.parameters()):
             k.data.mul_(self.momentum).add_(q.data * (1.0 - self.momentum))
-        for q, k in zip(self.anchor_encoder.decoder.parameters(),  self.target_encoder.decoder.parameters()):
+        for q, k in zip(self.anchor_encoder.decoder.parameters(), self.target_encoder.decoder.parameters()):
             k.data.mul_(self.momentum).add_(q.data * (1.0 - self.momentum))
 
 
@@ -167,6 +165,7 @@ class BasePatchMasking(nn.Module):
     """
     Base class for patch masking classes
     """
+
     def __init__(self, encoder: MSNSegFormerAdaptor = None,
                  mask_ratio: float = 0.75, patch_size: int = 4,
                  image_size: int = 224):
@@ -224,7 +223,6 @@ class ContextAwarePatchMasking(BasePatchMasking):
 
         self.mask_generator = mask_generator
 
-
     def _generate_visibility_map(self, pixel_mask: torch.Tensor) -> torch.Tensor:
         """
         Converts the high-resolution (H x W) pixel mask into a patch-level
@@ -236,7 +234,7 @@ class ContextAwarePatchMasking(BasePatchMasking):
         # B, C, H, W = pixel_mask.shape  # (B, 1, H, W)
         b, c, h, w = pixel_mask.shape
         if c > 1:
-            pixel_mask = pixel_mask[:,0,...].reshape(b, 1, h, w)
+            pixel_mask = pixel_mask[:, 0, ...].reshape(b, 1, h, w)
 
         # Use average pooling to calculate the mean mask overlap for each patch area
         # Kernel size and stride match the patch_size
@@ -245,7 +243,6 @@ class ContextAwarePatchMasking(BasePatchMasking):
             kernel_size=self.patch_size,
             stride=self.patch_size
         )  # Output shape: (B, 1, H/P, W/P)
-
 
         # Binary Mask: True (1) if overlap > threshold (patch is heavily masked/dropped)
         # We invert this logic to get the VISIBILITY map (True if patch is visible/kept)
@@ -274,7 +271,6 @@ class ContextAwarePatchMasking(BasePatchMasking):
         if isinstance(pixel_mask, np.ndarray):
             pixel_mask = torch.from_numpy(pixel_mask)
 
-
         pixel_mask = pixel_mask.float()
 
         # Patchify the PIXEL MASK to get patch-level visibility
@@ -282,12 +278,11 @@ class ContextAwarePatchMasking(BasePatchMasking):
 
         return visibility_map
 
-
     # Use __call__ alias for the forward method
     __call__ = forward
 
 
-def show_batch(loader: DataLoader, n_batches:int = 1)-> None:
+def show_batch(loader: DataLoader, n_batches: int = 1) -> None:
     """
     Plot n_batches batches of images in loader.
     :param loader: Dataloader to pull data from.
@@ -309,8 +304,13 @@ def show_batch(loader: DataLoader, n_batches:int = 1)-> None:
             break
     return
 
+
 def main(params: Dict[str, Any]):
     logger = logging.getLogger(__name__)
+
+    prefix = params.get('prefix', 'msn_moco')
+    if prefix == '':
+        prefix = 'msn_moco'
 
     image_size = (512, 512)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -358,7 +358,7 @@ def main(params: Dict[str, Any]):
     logger.info(f"Starting training for {params['num_epochs']} epochs")
     model.train()
     for epoch in range(params['num_epochs']):
-        logger.info(f"Starting Epoch {epoch+1} / {params['num_epochs']}")
+        logger.info(f"Starting Epoch {epoch + 1} / {params['num_epochs']}")
         epoch_loss = []
         for idx, batch in enumerate(tqdm(loader)):
             """ Anchor images """
@@ -398,7 +398,8 @@ def main(params: Dict[str, Any]):
             scheduler.step()
 
         avg_loss = np.mean(epoch_loss)
-        logger.info(f"Epoch {epoch+1} / {params['num_epochs']}, Mean (per pixel per encoding layer) loss : {avg_loss:.4f}")
+        logger.info(
+            f"Epoch {epoch + 1} / {params['num_epochs']}, Mean (per pixel per encoding layer) loss : {avg_loss:.4f}")
 
         if avg_loss + min_delta < best_loss:
             best_loss = avg_loss
@@ -407,9 +408,9 @@ def main(params: Dict[str, Any]):
             try:
                 best_model = model.anchor_encoder.model.state_dict()
                 torch.save(best_model,
-                           f'../segmenter/checkpoint/{params['prefix']}_segformer_pretrained.pt')
+                           f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pt')
             except Exception as e:
-                logger.error(f"Pretraining failed to save `{params['prefix']}_segformer_pretrained.pt`: {e}")
+                logger.error(f"Pretraining failed to save `{prefix}_segformer_pretrained.pt`: {e}")
 
         else:
             boredom += 1
@@ -442,7 +443,7 @@ def get_args():
               'num_workers': args.num_workers,
               'num_epochs': args.num_epochs,
               'learning_rate': args.learning_rate,
-              'prefix': args.prefix,}
+              'prefix': args.prefix, }
 
     return params
 
