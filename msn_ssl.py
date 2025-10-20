@@ -134,7 +134,7 @@ class MoCoMSN(nn.Module):
 
         self.anchor_encoder = MSNSegFormerAdaptor(backbone)
         self.target_encoder = deepcopy(self.anchor_encoder)
-        # self._set_requires_grad(self.target_encoder, False)
+        self._set_requires_grad(self.target_encoder, False)
 
     def forward(self, anchor: torch.Tensor, target: torch.Tensor):
         anchor = anchor.to(target.device)
@@ -375,6 +375,9 @@ def main(params: Dict[str, Any]):
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
 
             epoch_loss += [loss.cpu().item()]
+            if not torch.isfinite(loss):
+                print("Warning: loss is not finite!", loss)
+                continue  # or handle gracefully
 
             if scaler is not None:
                 scaler.scale(loss).backward()
