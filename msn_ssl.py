@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision
-from torch import nn
+from torch import nn, autocast
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 from tqdm import tqdm
@@ -382,6 +382,7 @@ def main(params: Dict[str, Any]):
 
             if scaler is not None:
                 scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
