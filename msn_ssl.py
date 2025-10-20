@@ -371,11 +371,12 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
+            with autocast(device_type='cuda', dtype=torch.float16):
+                x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
 
-            x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
+                x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
 
-            loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
+                loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
 
             epoch_loss += [loss.cpu().detach().item()]
 
@@ -391,9 +392,6 @@ def main(params: Dict[str, Any]):
 
             with torch.no_grad():
                 model.update_momentum_encoder()
-
-            if idx == 3:  # A few iterations to check it's working
-                break
 
         if scheduler is not None:
             scheduler.step()
