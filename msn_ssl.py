@@ -377,10 +377,9 @@ def main(params: Dict[str, Any]):
             epoch_loss += [loss.cpu().detach().item()]
 
             if scaler is not None:
-                print("I'm here because the scaler is not None!!! ")
                 scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                # scaler.unscale_(optimizer)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
             else:
