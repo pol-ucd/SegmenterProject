@@ -31,7 +31,8 @@ class MaskGenerator:
     and tissue folds for self-supervised pre-training.
     """
 
-    def __init__(self, size: Tuple[int, int] = (512, 512),
+    def __init__(self,
+                 size: Tuple[int, int] = (512, 512),
                  instrument_ratio: float = 0.5,
                  fold_ratio = 0.5,
                  lesion_ratio = 0.5):

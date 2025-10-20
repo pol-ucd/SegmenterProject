@@ -1,6 +1,8 @@
 import random
+from typing import Union
 
 import numpy as np
+import torch
 import torchvision
 
 from segmenter.masks import BaseMask
@@ -16,30 +18,28 @@ class InstrumentMask(BaseMask):
     :param thickness: Thickness of the instrument
     :return: mask as Torch Tensor of size (H, W)
     """
-    def __init__(self, shape, channels, num_shapes:int=2, thickness:int=10):
-        BaseMask.__init__(self, shape, channels)
-        self.num_shapes = num_shapes
+    def __init__(self, num_shapes:int=1, thickness:int=10):
+        BaseMask.__init__(self, num_shapes=num_shapes)
         self.thickness = thickness
         self._check_args()
 
     def _check_args(self):
-        if self.num_shapes <= 0:
-            raise ValueError("num_shapes must be positive")
         if self.thickness <= 0:
             raise ValueError("thickness must be positive")
 
-    def _mask2D(self)->np.array:
+    def _mask2D(self, x:Union[np.ndarray, torch.Tensor])->np.ndarray:
         """
             Creates a 2D mask (H, W) with a line of given thickness between two points.
         """
-        x1, y1 = random.randint(0, self.W - 1), random.randint(0, self.H - 1)
-        x2, y2 = random.randint(0, self.W - 1), random.randint(0, self.H - 1)
+        b,c,h,w = x.shape
+        x1, y1 = random.randint(0, w - 1), random.randint(0, h - 1)
+        x2, y2 = random.randint(0, w - 1), random.randint(0, h - 1)
         start_point = (x1, y1)
         end_point = (x2, y2)
 
         # Generate all (x, y) coordinates of the mask
         # We use np.mgrid to get coordinate arrays (Y, X)
-        Y, X = np.mgrid[0:self.H, 0:self.W]
+        Y, X = np.mgrid[0:h, 0:w]
 
         # Convert to floating point for calculations
         X = X.astype(float)
@@ -96,9 +96,10 @@ class InstrumentMask(BaseMask):
 if __name__ == '__main__':
     n_channels = 1
     b, c, h, w = 8, 3, 240, 320
-    random_mask = InstrumentMask(shape=(b, c, h, w), channels=n_channels)
-    mask = random_mask()
-    assert mask.shape == (b, n_channels, h, w), "Something went wrong, check dimensions."
+    x_image = torch.randint(0, 1, (b, c, h, w))
+    random_mask = InstrumentMask(thickness=20)
+    mask = random_mask(x=x_image)
+    assert mask.shape == (b, c, h, w), "Something went wrong, check dimensions."
 
     trans = torchvision.transforms.ToPILImage()
     out = trans(mask[0])

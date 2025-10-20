@@ -1,4 +1,5 @@
 # Large archives
+nvidia/
 Initial_frames_v2.7z
 *.pt
 *.pth
@@ -331,3 +332,4 @@ TSWLatexianTemp*
 /data/PolypGen2021/train_segmentation.txt
 /.venv/
 /hanija_original/
+/nvidia/

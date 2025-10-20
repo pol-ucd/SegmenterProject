@@ -64,7 +64,7 @@ class MSNLoss(MSNBaseLoss):
         # center accumulates over target prototypes; will be created lazily on first update
         self.register_buffer("target_center", None, persistent=True)
 
-    def _ensure_center(self, D: int, device: torch.device, dtype: torch.dtype):
+    def _ensure_center(self, D: int, device: torch.device, dtype: type):
         if getattr(self, "target_center", None) is None or self.target_center is None:
             # initialize center to zeros
             center = torch.zeros(D, device=device, dtype=dtype)

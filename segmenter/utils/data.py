@@ -1,7 +1,7 @@
 import numbers
 import os
 import platform
-from typing import Tuple, Iterator, Optional, List, Union, Any, Iterable
+from typing import Tuple, Iterator, Optional, List, Union, Any, Iterable, Dict
 
 import cv2
 import h5py
@@ -25,38 +25,6 @@ def sharpening_kernel(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
     sharpened_cv2_kernel = cv2.filter2D(img, -1, kernel)
     return sharpened_cv2_kernel.astype(np.uint8)
 
-
-#
-# def gray_world(img: np.ndarray) -> np.ndarray:
-#     """Simple Gray World color constancy."""
-#     # Compute average per channel
-#     avg_b, avg_g, avg_r = np.mean(img[:, :, 0]), np.mean(img[:, :, 1]), np.mean(img[:, :, 2])
-#     avg_gray = (avg_b + avg_g + avg_r) / 3
-#     # Scale     each channel
-#     img[:, :, 0] = np.clip(img[:, :, 0] * (avg_gray / avg_b), 0, 255)
-#     img[:, :, 1] = np.clip(img[:, :, 1] * (avg_gray / avg_g), 0, 255)
-#     img[:, :, 2] = np.clip(img[:, :, 2] * (avg_gray / avg_r), 0, 255)
-#     return img.astype(np.uint8)
-#
-#
-# def apply_clahe(img: np.ndarray, clip_limit=2.0, tile_grid_size=(8, 8)) -> np.ndarray:
-#     """Apply CLAHE on the L-channel of LAB."""
-#     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-#     l, a, b = cv2.split(lab)
-#     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
-#     cl = clahe.apply(l)
-#     lab = cv2.merge([cl, a, b])
-#     return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-#
-#
-# def preprocess_image_pipeline(image: np.ndarray):
-#     img_sharp = sharpening_kernel(image)
-#     img_gw = gray_world(img_sharp)
-#
-#     # final = apply_clahe(img_gw, clip_limit=5.0, tile_grid_size=(8, 8))
-#
-#     return img_gw
-#
 
 def get_num_samples_from_hdf5(hdf5_path):
     """
@@ -144,29 +112,104 @@ def finetune_transform(batch: dict) -> dict:
 
     return {'images': images, 'masks': masks}
 
+class HDF5Exception(Exception):
+    pass
 
-class GaussianSmoothing(object):
-    def __init__(self, radius):
-        if isinstance(radius, numbers.Number):
-            self.min_radius = radius
-            self.max_radius = radius
-        elif isinstance(radius, list):
-            if len(radius) != 2:
-                raise Exception(
-                    "`radius` should be a number or a list of two numbers")
-            if radius[1] < radius[0]:
-                raise Exception(
-                    "radius[0] should be <= radius[1]")
-            self.min_radius = radius[0]
-            self.max_radius = radius[1]
-        else:
-            raise Exception(
-                "`radius` should be a number or a list of two numbers")
+class SSLTransformException(Exception):
+    pass
 
-    def __call__(self, image):
-        radius = np.random.uniform(self.min_radius, self.max_radius)
-        return image.filter(ImageFilter.GaussianBlur(radius))
+class SSLTransformPipeline:
+    """
+    Creates the dual-view augmentation pipeline for the Siamese Network.
 
+    This function applies two independent sets of transformations (one for the
+    Anchor view and one for the Target view) to the same image.
+    """
+
+    def __init__(self, size: Tuple[int, int] = (512, 512)):
+        # Define Common Strong Photometric Augmentations
+        # These parameters are typical for Siamese architectures (DINO/MSN) and ensure strong feature invariance [1]
+        color_jitter = v2.ColorJitter(
+            brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1
+        )
+
+        self.Image_Transform = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
+            ])
+
+        # Anchor View Transform: Strong Augmentation + Gaussian Blur
+        self.Anchor_Transform = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
+            v2.RandomApply([v2.ColorJitter(
+                brightness=0.4,
+                contrast=0.4,
+                saturation=0.4,
+                hue=0.1)], p=0.8),
+            v2.RandomGrayscale(p=0.2),
+            v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),  # Regularization [1]
+            v2.Normalize(mean=(0.485, 0.456, 0.406),
+                         std=(0.229, 0.224, 0.225)),
+        ])
+
+        # Target View Transform: Same Strong Augmentation, but may omit some extreme noise
+        self.Target_Transform = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
+            v2.RandomApply([v2.ColorJitter(
+                brightness=0.4,
+                contrast=0.4,
+                saturation=0.4,
+                hue=0.1)], p=0.8),
+            v2.RandomGrayscale(p=0.2),
+            v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),  # Regularization [1]
+            v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ])
+
+    def __call__(self, x: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """Returns the augmented Anchor and Target views of the input image."""
+        # Note: The transformations are applied independently to the same image,
+        # ensuring the resulting views are distinct (e.g., different crop locations,
+        # different photometric noise), forcing the model to learn invariance.[1]
+        results = {'images': Any, 'anchors': Any, 'targets': Any}
+        try:
+            results['images'] = torch.stack([self.Image_Transform(image) for image in x['images']],
+                                           dim=0)
+            results['anchors'] = torch.stack([self.Anchor_Transform(image) for image in x['images']],
+                                           dim=0)
+            results['targets'] = torch.stack([self.Target_Transform(image) for image in x['images']],
+                                           dim=0)
+        except KeyError:
+            raise SSLTransformException(f"No images found in input. Include images using the 'images' key.")
+        return results
+
+#
+# class GaussianSmoothing(object):
+#     def __init__(self, radius):
+#         if isinstance(radius, numbers.Number):
+#             self.min_radius = radius
+#             self.max_radius = radius
+#         elif isinstance(radius, list):
+#             if len(radius) != 2:
+#                 raise Exception(
+#                     "`radius` should be a number or a list of two numbers")
+#             if radius[1] < radius[0]:
+#                 raise Exception(
+#                     "radius[0] should be <= radius[1]")
+#             self.min_radius = radius[0]
+#             self.max_radius = radius[1]
+#         else:
+#             raise Exception(
+#                 "`radius` should be a number or a list of two numbers")
+#
+#     def __call__(self, image):
+#         radius = np.random.uniform(self.min_radius, self.max_radius)
+#         return image.filter(ImageFilter.GaussianBlur(radius))
+#
 
 class HDF5BatchSampler(Sampler[int]):
     """
@@ -280,24 +323,32 @@ class HDF5DatasetOptimized(Dataset):
     format and return transformed values in the same format.
     """
 
-    def __init__(self, hdf5_path, data_keys: Optional[List[str]] = None, transform=None):
+    def __init__(self, hdf5_path: str,
+                 data_keys: Optional[List[str]] = None,
+                 transform=None):
         super().__init__()
         self.hdf5_path = hdf5_path
         self.transform = transform
-        self.data_keys = data_keys if data_keys is not None else ['images']
-        self.data_key = self.data_keys[0]
+        self.data_keys = data_keys
         self.batch_len = None
+        self.dataset_len = None
 
         # File handle is initialized to None and will be opened by worker_init_fn
         self.f = None
+        self.key_dtype = {}
 
         # Get dataset length once
         try:
             with h5py.File(self.hdf5_path, 'r') as f:
-                self.dataset_len = len(f[self.data_key])
+                for k in f.keys():
+                    self.key_dtype[k] = f[k].dtype
+                    if self.dataset_len is None:
+                        self.dataset_len = len(f[k])
         except Exception as e:
-            print(f"Error reading dataset length: {e}")
-            self.dataset_len = 0
+            raise HDF5Exception(f"Error reading dataset length: {e}")
+        if self.data_keys is None:
+            self.data_keys = list(self.key_dtype.keys())
+
 
     # --- FIX for TypeError: h5py objects cannot be pickled ---
     def __getstate__(self):
@@ -340,11 +391,11 @@ class HDF5DatasetOptimized(Dataset):
         if not is_batch:
             idx = [idx]
 
-        results = {k: self.f[k][idx] for k in self.data_keys if k in self.f}  # (B, H, W, C)
-        print("Before transforms: ", results['images'].shape, results['masks'].shape)
+        results = {k: self.f[k][idx] for k in self.data_keys if k in self.f.keys()}  # (B, H, W, C)
+
         if self.transform:
             results = self.transform(results)
-        print("After transforms: ", results['images'].shape, results['masks'].shape)
+
         return results
 
 
@@ -617,13 +668,15 @@ class MSNFinetuneDatasetHDF5(HDF5DatasetOptimized):
 
 if __name__ == '__main__':
     test_size = 0.1
-    source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/Classica.h5"
+    # source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/Classica.h5"
+    source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
 
     h5_len = get_num_samples_from_hdf5(hdf5_path=source)
 
     indices = list(range(h5_len))[:int(h5_len * test_size)]
 
-    ds = MSNFinetuneDatasetHDF5(hdf5_path=source,
-                                indices=indices)
+    ds = HDF5DatasetOptimized(hdf5_path=source,
+                              transform=SSLTransformPipeline())
 
     print(len(ds))
+    print([ds[0][k].shape for k in ds[0].keys()])

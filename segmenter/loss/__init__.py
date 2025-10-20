@@ -15,6 +15,7 @@ from .focal import FocalLoss
 from .iou import IoULoss
 from .msn import MSNLoss, NTXentLoss
 from .tversky import TverskyLoss
+from .maskedcosine import MaskedCosineSimilarityLoss, masked_cosine_similarity_loss
 
 from .factory import LossFactory
 from .hybrid import HybridLoss
@@ -38,4 +39,6 @@ __all__ = [
     "NTXentLoss",
     "LossFactory",
     "HybridLoss",
+    "MaskedCosineSimilarityLoss",
+    "masked_cosine_similarity_loss"
 ]
