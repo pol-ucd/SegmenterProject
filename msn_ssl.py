@@ -44,11 +44,10 @@ class MSNSegFormerAdaptor(nn.Module):
         self.cfg = SegformerConfig.from_pretrained(backbone) if backbone else SegformerConfig()
         self.model = (
             SegformerForSemanticSegmentation.from_pretrained(
-                backbone, config=self.cfg, ignore_mismatched_sizes=True,
-                dtype=torch.float
+                backbone, config=self.cfg, ignore_mismatched_sizes=True
             )
             if backbone
-            else SegformerForSemanticSegmentation(config=self.cfg, dtype=torch.float)
+            else SegformerForSemanticSegmentation(config=self.cfg)
         )
 
         """
