@@ -315,7 +315,6 @@ def main(params: Dict[str, Any]):
     image_size = (512, 512)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
-    print("scaler: ", type(scaler))
 
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
@@ -340,7 +339,6 @@ def main(params: Dict[str, Any]):
                                   weight_decay=1e-2)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
-
 
     criterion = MaskedCosineSimilarityLoss(reduce='mean')
 
@@ -379,6 +377,7 @@ def main(params: Dict[str, Any]):
             epoch_loss += [loss.cpu().detach().item()]
 
             if scaler is not None:
+                print("I'm here because the scaler is not None!!! ")
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
