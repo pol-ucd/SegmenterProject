@@ -19,7 +19,6 @@ def masked_cosine_similarity_loss(predictions: Union[Tuple, List], targets: Unio
     if total_visible_patches == 0:
         return total_loss
 
-    n_feature_embs = 0
     # Iterate over all stages
     for emb_A, emb_B in zip(predictions, targets):
         # Compute cosine similarity
