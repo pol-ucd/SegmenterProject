@@ -371,7 +371,7 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            with autocast(device_type='cuda', dtype=torch.float16):
+            with autocast(device_type='cuda'):
                 x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
 
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
