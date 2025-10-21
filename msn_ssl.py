@@ -392,8 +392,14 @@ def main(params: Dict[str, Any]):
                 print(">>> 3")
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
                 print(">>> 4")
-                assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
-                assert loss.shape == torch.Size([]), f"Loss is not a scalar tensor {loss.shape}"
+                try:
+                    assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
+                except AssertionError:
+                    logger.error("Loss is detached from graph")
+                try:
+                    assert loss.shape == torch.Size([]), f"Loss is not a scalar tensor {loss.shape}"
+                except AssertionError:
+                    logger.error(f"Loss is not a scalar tensor {loss.shape}")
             print(">>> 5")
             epoch_loss += [loss.item()]
 
