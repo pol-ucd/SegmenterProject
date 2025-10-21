@@ -425,6 +425,7 @@ def main(params: Dict[str, Any]):
                 model.update_momentum_encoder()
 
             if run_once:
+                logger.info(f"Running one time. run_once={run_once}")
                 break
 
         if scheduler is not None:
