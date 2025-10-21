@@ -20,8 +20,12 @@ from segmenter.loss import MaskedCosineSimilarityLoss
 from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
+""" DEBUG helpers - COmment out unless debugging """
 import os
+# Force synchronous CUDA errors to surface
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+# Enable autograd anomaly detection and print where NaNs appear
+torch.autograd.set_detect_anomaly(True)
 
 MASK_RATIO = 0.7
 SHAPES_PER_MASK = 12
@@ -381,14 +385,13 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
-
+                print(">>> 1")
                 x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
-
+                print(">>> 2")
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
-
-
+                print(">>> 3")
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
-
+            print(">>> 4")
             epoch_loss += [loss.item()]
 
 
