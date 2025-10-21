@@ -390,6 +390,12 @@ def main(params: Dict[str, Any]):
                 print(">>> 2")
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
                 print(">>> 3")
+                logger.info(f"x_anchor_upscaled: device {x_anchor_upscaled[0].device}, dtype:{x_anchor_upscaled[0].dtype}, "
+                            f"requires_grad: {x_anchor_upscaled[0].requires_grad}, grad_fn: {x_anchor_upscaled[0].grad_fn}")
+                logger.info(f"z_target_upscaled: device {z_target_upscaled[0].device}, dtype:{z_target_upscaled[0].dtype}, "
+                            f"requires_grad: {z_target_upscaled[0].requires_grad}, grad_fn: {z_target_upscaled[0].grad_fn}")
+                logger.info(f"x_anchor_mask: device {x_anchor_mask.device}, dtype:{x_anchor_mask.dtype}, "
+                            f"requires_grad: {x_anchor_mask.requires_grad}, grad_fn: {x_anchor_mask.grad_fn}")
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
                 print(">>> 4")
                 try:
