@@ -21,11 +21,12 @@ from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
 """ DEBUG helpers - COmment out unless debugging """
-import os
-# Force synchronous CUDA errors to surface
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-# Enable autograd anomaly detection and print where NaNs appear
-torch.autograd.set_detect_anomaly(True)
+# import os
+# # Force synchronous CUDA errors to surface
+# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+# # Enable autograd anomaly detection and print where NaNs appear
+# torch.autograd.set_detect_anomaly(True)
+""" End of debug stuff """
 
 MASK_RATIO = 0.7
 SHAPES_PER_MASK = 12
@@ -375,32 +376,19 @@ def main(params: Dict[str, Any]):
         epoch_loss = []
         for idx, batch in enumerate(tqdm(loader)):
             """ Anchor images """
-            print(">>> 0.1")
             x_anchor = batch['anchors'].to(device)
             x_anchor.requires_grad = True
-            logger.info(f"x_anchor: device {x_anchor.device}, dtype:{x_anchor.dtype}, "
-                        f"requires_grad: {x_anchor.requires_grad}, grad_fn: {x_anchor.grad_fn}")
 
             """ Target images """
-            print(">>> 0.2")
             z_target = batch['targets'].to(device)
 
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
-                print(">>> 1")
                 x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
-                print(">>> 2")
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
-                print(">>> 3")
-                logger.info(f"x_anchor_upscaled: device {x_anchor_upscaled[0].device}, dtype:{x_anchor_upscaled[0].dtype}, "
-                            f"requires_grad: {x_anchor_upscaled[0].requires_grad}, grad_fn: {x_anchor_upscaled[0].grad_fn}")
-                logger.info(f"z_target_upscaled: device {z_target_upscaled[0].device}, dtype:{z_target_upscaled[0].dtype}, "
-                            f"requires_grad: {z_target_upscaled[0].requires_grad}, grad_fn: {z_target_upscaled[0].grad_fn}")
-                logger.info(f"x_anchor_mask: device {x_anchor_mask.device}, dtype:{x_anchor_mask.dtype}, "
-                            f"requires_grad: {x_anchor_mask.requires_grad}, grad_fn: {x_anchor_mask.grad_fn}")
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
-                print(">>> 4")
+
                 try:
                     assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
                 except AssertionError:
@@ -413,7 +401,7 @@ def main(params: Dict[str, Any]):
                     logger.error(f"Loss is not a scalar tensor {loss.shape}")
                     logger.error(
                         f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
-            print(">>> 5")
+
             epoch_loss += [loss.item()]
 
 
@@ -423,28 +411,21 @@ def main(params: Dict[str, Any]):
 
 
             if scaler is not None:
-                print(">>> 6")
                 scaler.scale(loss).backward()
-                print(">>> 7")
                 scaler.unscale_(optimizer)
-                print(">>> 8")
                 torch.nn.utils.clip_grad_norm_(model.anchor_encoder.parameters(), max_norm=1.0)
-                print(">>> 9")
                 scaler.step(optimizer)
-                print(">>> 10")
                 scaler.update()
-                print(">>> 11")
             else:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.anchor_encoder.parameters(), max_norm=1.0)
                 optimizer.step()
-            print(">>> 12")
+
             with torch.no_grad():
-                print(">>> 13")
                 model.update_momentum_encoder()
-            print(">>> 14")
-            # if run_once:
-            #     break
+
+            if run_once:
+                break
 
         if scheduler is not None:
             scheduler.step()
