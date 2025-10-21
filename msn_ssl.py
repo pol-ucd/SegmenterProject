@@ -385,14 +385,16 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
-
+                print(">>> 1")
                 x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
-
+                print(">>> 2")
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
-
+                print(">>> 3")
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
+                print(">>> 4")
                 assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
-
+                assert loss.shape == torch.Size([]), f"Loss is not a scalar tensor {loss.shape}"
+            print(">>> 5")
             epoch_loss += [loss.item()]
 
 
@@ -400,6 +402,7 @@ def main(params: Dict[str, Any]):
                 logger.warning("Warning: loss is not finite!")
             print("Loss: ", loss.device, loss.dtype, loss.requires_grad, loss.grad_fn)
             print("Model: ", model.device, model.dtype, model.requires_grad, model.grad_fn)
+
             if scaler is not None:
                 print(">>> 6")
                 scaler.scale(loss).backward()
