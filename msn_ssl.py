@@ -146,8 +146,8 @@ class MoCoMSN(nn.Module):
         self._set_requires_grad(self.target_encoder, False)
 
     def forward(self, anchor: torch.Tensor, target: torch.Tensor):
-        anchor = anchor.to(target.device)
-        target = target.to(target.device)
+        # anchor = anchor.to(target.device)
+        # target = target.to(target.device)
         anchor_encodings = self.anchor_encoder(anchor)
         anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
 
