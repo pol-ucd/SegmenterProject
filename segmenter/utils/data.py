@@ -180,9 +180,9 @@ class SSLTransformPipeline:
             results['images'] = torch.stack([self.Image_Transform(image) for image in x['images']],
                                            dim=0)
             results['anchors'] = torch.stack([self.Anchor_Transform(image) for image in x['images']],
-                                           dim=0)
+                                           dim=0).requires_grad_(True)
             results['targets'] = torch.stack([self.Target_Transform(image) for image in x['images']],
-                                           dim=0)
+                                           dim=0).requires_grad_(True)
         except KeyError:
             raise SSLTransformException(f"No images found in input. Include images using the 'images' key.")
         return results

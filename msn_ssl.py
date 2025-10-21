@@ -379,7 +379,6 @@ def main(params: Dict[str, Any]):
             """ Anchor images """
             print(">>> 0.1")
             x_anchor = batch['anchors'].to(device)
-            x_anchor.requires_grad_(mode=True)
 
             """ Target images """
             print(">>> 0.2")
