@@ -7,23 +7,16 @@ import torch
 import torch.nn.functional as F
 
 from segmenter.loss import BaseLoss
+
 def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean'):
-    # assume predictions is a list of tensors (B, C, H, W)
-    # keep everything as tensors on the correct device/dtype
     device = predictions[0].device
     dtype = predictions[0].dtype
 
-    print("predictions : ", predictions[0].device, predictions[0].dtype, predictions[0].requires_grad, predictions.grad_fn)
-    print("targets     : ", targets[0].device, targets[0].dtype, targets[0].requires_grad, targets[0].grad_fn)
-    print("patch_mask: ", patch_mask.device, patch_mask.dtype, patch_mask.requires_grad, patch_mask.grad_fn)
+    visible_mask = (1.0 - patch_mask).to(device=device, dtype=dtype)  # (B,1,H,W)
+    total_visible = visible_mask.sum()                               # tensor
 
-
-    visible_mask = (1.0 - patch_mask).to(device=device, dtype=dtype)  # shape (B,1,H,W)
-    total_visible_patches = visible_mask.sum()                       # tensor, not .item()
-
-    # If no visible patches, return a zero that's connected to the graph by constructing it
-    # from an input tensor so it has grad_fn when multiplied by 0.
-    if total_visible_patches.item() == 0:
+    # If no visible patches return zero that is attached to the graph
+    if total_visible.item() == 0:
         return (predictions[0].sum() * 0.0).to(device=device, dtype=dtype)
 
     total_loss = torch.zeros((), dtype=dtype, device=device)
@@ -32,18 +25,16 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
         emb_A = emb_A.to(device=device, dtype=dtype)
         emb_B = emb_B.to(device=device, dtype=dtype)
 
-        emb_A_norm = F.normalize(emb_A, p=2, dim=1)
-        emb_B_norm = F.normalize(emb_B, p=2, dim=1)
+        emb_A_n = F.normalize(emb_A, p=2, dim=1)
+        emb_B_n = F.normalize(emb_B, p=2, dim=1)
 
-        # per-patch cosine similarity (sum over channel dim to get scalar per spatial location)
-        similarity = (emb_A_norm * emb_B_norm).sum(dim=1)  # shape (B,H,W)
+        # per-patch cosine similarity reduced over channel dim
+        similarity = (emb_A_n * emb_B_n).sum(dim=1)    # shape (B,H,W)
+        stage_loss = 1.0 - similarity                   # shape (B,H,W)
 
-        stage_loss = 1.0 - similarity                       # shape (B,H,W)
-        masked_stage_loss = stage_loss * visible_mask.squeeze(1)  # shape (B,H,W)
-
-        # denom as tensor so division stays in tensor world
-        denom = total_visible_patches * emb_A.shape[1]
-        total_loss = total_loss + masked_stage_loss.sum() / denom
+        masked = stage_loss * visible_mask.squeeze(1)  # shape (B,H,W)
+        denom = total_visible * emb_A.shape[1]         # tensor * int -> tensor
+        total_loss = total_loss + masked.sum() / denom
 
     final_loss = total_loss / float(len(predictions))
     return final_loss
