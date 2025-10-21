@@ -393,27 +393,34 @@ def main(params: Dict[str, Any]):
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
             print(">>> 4")
             epoch_loss += [loss.item()]
-
+            print(">>> 4")
 
             if not torch.isfinite(loss):
                 logger.warning("Warning: loss is not finite!")
 
             if scaler is not None:
+                print(">>> 6")
                 scaler.scale(loss).backward()
+                print(">>> 7")
                 scaler.unscale_(optimizer)
+                print(">>> 8")
                 torch.nn.utils.clip_grad_norm_(model.anchor_encoder.parameters(), max_norm=1.0)
+                print(">>> 9")
                 scaler.step(optimizer)
+                print(">>> 10")
                 scaler.update()
+                print(">>> 11")
             else:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.anchor_encoder.parameters(), max_norm=1.0)
                 optimizer.step()
-
+            print(">>> 12")
             with torch.no_grad():
+                print(">>> 13")
                 model.update_momentum_encoder()
-
-            if run_once:
-                break
+            print(">>> 14")
+            # if run_once:
+            #     break
 
         if scheduler is not None:
             scheduler.step()
