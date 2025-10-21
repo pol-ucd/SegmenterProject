@@ -377,7 +377,7 @@ def main(params: Dict[str, Any]):
         epoch_loss = []
         for idx, batch in enumerate(tqdm(loader)):
             """ Anchor images """
-            x_anchor = batch['anchors'].to(device)
+            x_anchor = batch['anchors'].to(device).requires_grad_(mode=True)
 
             """ Target images """
             z_target = batch['targets'].to(device)
