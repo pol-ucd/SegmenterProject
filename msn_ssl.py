@@ -379,6 +379,8 @@ def main(params: Dict[str, Any]):
             """ Anchor images """
             print(">>> 0.1")
             x_anchor = batch['anchors'].to(device)
+            logger.info(f"x_anchor: device {x_anchor.device}, dtype:{x_anchor.dtype}, "
+                        f"requires_grad: {x_anchor.requires_grad}, grad_fn: {x_anchor.grad_fn}")
 
             """ Target images """
             print(">>> 0.2")
