@@ -391,6 +391,7 @@ def main(params: Dict[str, Any]):
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
 
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
+                assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
 
             epoch_loss += [loss.item()]
 
