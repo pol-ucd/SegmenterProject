@@ -396,18 +396,22 @@ def main(params: Dict[str, Any]):
                     assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
                 except AssertionError:
                     logger.error("Loss is detached from graph")
+                    logger.error(
+                        f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
                 try:
                     assert loss.shape == torch.Size([]), f"Loss is not a scalar tensor {loss.shape}"
                 except AssertionError:
                     logger.error(f"Loss is not a scalar tensor {loss.shape}")
+                    logger.error(
+                        f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
             print(">>> 5")
             epoch_loss += [loss.item()]
 
 
             if not torch.isfinite(loss):
                 logger.warning("Warning: loss is not finite!")
-            print("Loss: ", loss.device, loss.dtype, loss.requires_grad, loss.grad_fn)
-            print("Model: ", model.device, model.dtype, model.requires_grad, model.grad_fn)
+
+
 
             if scaler is not None:
                 print(">>> 6")
