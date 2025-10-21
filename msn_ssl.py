@@ -20,6 +20,9 @@ from segmenter.loss import MaskedCosineSimilarityLoss
 from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
 MASK_RATIO = 0.7
 SHAPES_PER_MASK = 12
 PATCH_SIZE = 4  # 4x4 patches for SegFormer MiT [1]
