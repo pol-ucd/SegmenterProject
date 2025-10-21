@@ -396,7 +396,6 @@ def main(params: Dict[str, Any]):
             with torch.no_grad():
                 model.update_momentum_encoder()
 
-            break
         if scheduler is not None:
             scheduler.step()
 
