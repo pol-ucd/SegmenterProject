@@ -475,3 +475,4 @@ if __name__ == "__main__":
             handler.flush()
             handler.close()
         logger.info("Logger handlers flushed and closed. Exiting now.")
+        sys.exit(0)
