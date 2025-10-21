@@ -444,6 +444,7 @@ def main(params: Dict[str, Any]):
                 logger.error(f"Pretraining failed to save `{prefix}_segformer_pretrained.pt`: {e}")
 
         else:
+            logger.info(f"Getting bored after {boredom} epochs with no useful improvement")
             boredom += 1
         if boredom > max_boredom:
             logger.info(f"No improvement after {boredom} epochs, terminating")
