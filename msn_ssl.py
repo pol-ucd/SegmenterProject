@@ -385,19 +385,19 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
-                print(">>> 1")
+
                 x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
-                print(">>> 2")
+
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
-                print(">>> 3")
+
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
-            print(">>> 4")
+
             epoch_loss += [loss.item()]
-            print(">>> 4")
+
 
             if not torch.isfinite(loss):
                 logger.warning("Warning: loss is not finite!")
-
+            print("Loss: ", loss.device, loss.dtype, loss.requires_grad, loss.grad_fn)
             if scaler is not None:
                 print(">>> 6")
                 scaler.scale(loss).backward()
