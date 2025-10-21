@@ -310,6 +310,7 @@ def show_batch(loader: DataLoader, n_batches: int = 1) -> None:
 def main(params: Dict[str, Any]):
     logger = logging.getLogger(__name__)
 
+    run_once = bool(params.get('run_once', False))
     prefix = params.get('prefix', 'msn_moco_2')
     if prefix == '':
         prefix = 'msn_moco_2'
@@ -396,6 +397,9 @@ def main(params: Dict[str, Any]):
             with torch.no_grad():
                 model.update_momentum_encoder()
 
+            if run_once:
+                break
+
         if scheduler is not None:
             scheduler.step()
 
@@ -437,6 +441,7 @@ def get_args():
     parser.add_argument("-e", "--num_epochs", type=int, default=200, )
     parser.add_argument("-lr", "--learning_rate", type=float, default=1e-5, )
     parser.add_argument("-p", "--prefix", type=str, default='moco_msn', )
+    parser.add_argument("-ro", "--run_once", type=bool, default=False, )
 
     args = parser.parse_args()
 
@@ -445,7 +450,8 @@ def get_args():
               'num_workers': args.num_workers,
               'num_epochs': args.num_epochs,
               'learning_rate': args.learning_rate,
-              'prefix': args.prefix, }
+              'prefix': args.prefix,
+              'run_once': bool(args.run_once),}
 
     return params
 
