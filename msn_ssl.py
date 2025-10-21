@@ -398,6 +398,7 @@ def main(params: Dict[str, Any]):
             if not torch.isfinite(loss):
                 logger.warning("Warning: loss is not finite!")
             print("Loss: ", loss.device, loss.dtype, loss.requires_grad, loss.grad_fn)
+            print("Model: ", model.device, model.dtype, model.requires_grad, model.grad_fn)
             if scaler is not None:
                 print(">>> 6")
                 scaler.scale(loss).backward()
