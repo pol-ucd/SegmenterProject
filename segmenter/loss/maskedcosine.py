@@ -13,6 +13,11 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     device = predictions[0].device
     dtype = predictions[0].dtype
 
+    print("predictions : ", predictions[0].device, predictions[0].dtype, predictions[0].requires_grad, predictions.grad_fn)
+    print("targets     : ", targets[0].device, targets[0].dtype, targets[0].requires_grad, targets[0].grad_fn)
+    print("patch_mask: ", patch_mask.device, patch_mask.dtype, patch_mask.requires_grad, patch_mask.grad_fn)
+
+
     visible_mask = (1.0 - patch_mask).to(device=device, dtype=dtype)  # shape (B,1,H,W)
     total_visible_patches = visible_mask.sum()                       # tensor, not .item()
 
