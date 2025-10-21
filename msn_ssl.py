@@ -401,12 +401,12 @@ def main(params: Dict[str, Any]):
 
         avg_loss = np.mean(epoch_loss)
         logger.info(
-            f"Epoch {epoch + 1} / {params['num_epochs']}, Mean (per pixel per encoding layer) loss : {avg_loss:.4f}")
+            f"Epoch {epoch + 1} / {params['num_epochs']}, Mean (per visible patch per encoding layer) loss : {avg_loss:.4f}")
 
         if avg_loss + min_delta < best_loss:
             best_loss = avg_loss
             boredom = 0
-            logger.info("Saving best snapshot `msn_model.online_encoder` state dict for fine-tuning.")
+            logger.info("Saving best snapshot of SegFormer state dict for fine-tuning.")
             try:
                 best_model = model.anchor_encoder.model.state_dict()
                 torch.save(best_model,
