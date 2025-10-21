@@ -315,9 +315,9 @@ def main(params: Dict[str, Any]):
         prefix = 'msn_moco_2'
 
     image_size = (512, 512)
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    # scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
-    scaler = None
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
+    # scaler = None
 
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
@@ -375,7 +375,7 @@ def main(params: Dict[str, Any]):
 
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
 
-                loss = Variable(criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask), requires_grad=True)
+                loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
 
             epoch_loss += [loss.cpu().item()]
 
