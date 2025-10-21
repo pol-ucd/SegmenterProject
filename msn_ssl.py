@@ -103,7 +103,6 @@ class MSNSegFormerAdaptor(nn.Module):
     # 4) Function to Upscale SegFormer Embeddings
     # --------------------------------------------------------------------------
     @staticmethod
-    @torch.no_grad()
     def upscale_embeddings(stage_embeddings: Union[List[torch.Tensor], Tuple[torch.Tensor]]):
         """Upscales all encoder outputs to the spatial resolution of the initial patches (L1)."""
 
@@ -122,7 +121,6 @@ class MSNSegFormerAdaptor(nn.Module):
         return tuple(upscaled_outputs)
 
     @staticmethod
-    @torch.no_grad()
     def _get_components(item: torch.nn.Module) -> List[str]:
         keys = set()
         for key, value in item.named_parameters():
