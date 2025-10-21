@@ -310,9 +310,9 @@ def show_batch(loader: DataLoader, n_batches: int = 1) -> None:
 def main(params: Dict[str, Any]):
     logger = logging.getLogger(__name__)
 
-    prefix = params.get('prefix', 'msn_moco')
+    prefix = params.get('prefix', 'msn_moco_2')
     if prefix == '':
-        prefix = 'msn_moco'
+        prefix = 'msn_moco_2'
 
     image_size = (512, 512)
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
