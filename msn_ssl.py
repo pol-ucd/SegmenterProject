@@ -316,9 +316,15 @@ def main(params: Dict[str, Any]):
         prefix = 'msn_moco'
 
     image_size = (512, 512)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
-    # scaler = None
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        device_type = 'cuda'
+        scaler = torch.amp.GradScaler()
+    else:
+        device = torch.device('cpu')
+        device_type = 'cpu'
+        scaler = None
+
 
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
@@ -338,7 +344,7 @@ def main(params: Dict[str, Any]):
     # model = MSNSegFormerAdaptor(backbone=backbone_name)
     model = MoCoMSN(backbone=backbone_name).to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(),
+    optimizer = torch.optim.AdamW(model.anchor_encoder.parameters(),
                                   lr=params['learning_rate'],
                                   weight_decay=1e-2)
 
@@ -371,14 +377,17 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            with autocast(device_type='cuda'):
+            with autocast(device_type=device_type):
+
                 x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
 
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
 
+
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
 
-            epoch_loss += [loss.cpu().item()]
+            epoch_loss += [loss.item()]
+
 
             if not torch.isfinite(loss):
                 logger.warning("Warning: loss is not finite!")
@@ -386,12 +395,12 @@ def main(params: Dict[str, Any]):
             if scaler is not None:
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(model.anchor_encoder.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(model.anchor_encoder.parameters(), max_norm=1.0)
                 optimizer.step()
 
             with torch.no_grad():
