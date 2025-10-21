@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 from torch import nn, autocast
+from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 from tqdm import tqdm
@@ -20,6 +21,7 @@ from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
 MASK_RATIO = 0.7
+SHAPES_PER_MASK = 12
 PATCH_SIZE = 4  # 4x4 patches for SegFormer MiT [1]
 IMAGE_H = 512
 IMAGE_W = 512
@@ -313,7 +315,7 @@ def main(params: Dict[str, Any]):
         prefix = 'msn_moco'
 
     image_size = (512, 512)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
 
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
@@ -343,7 +345,8 @@ def main(params: Dict[str, Any]):
     criterion = MaskedCosineSimilarityLoss(reduce='mean')
 
     # Instantiate the masking utility
-    mask_generator = CompositeMask(mask_ratio=MASK_RATIO)
+    # mask_generator = CompositeMask(mask_ratio=MASK_RATIO)
+    mask_generator = CompositeMask(shapes_per_image=SHAPES_PER_MASK)
 
     """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
     best_loss = float('inf')
@@ -360,7 +363,6 @@ def main(params: Dict[str, Any]):
         for idx, batch in enumerate(tqdm(loader)):
             """ Anchor images """
             x_anchor = batch['anchors'].to(device)
-            # x_anchor_mask = mask_utility(x_anchor).to(device)
 
             """ Target images """
             z_target = batch['targets'].to(device)
@@ -372,12 +374,12 @@ def main(params: Dict[str, Any]):
 
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
 
-                loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
+                loss = Variable(criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask), requires_grad=True)
 
             epoch_loss += [loss.cpu().item()]
 
             if not torch.isfinite(loss):
-                print("Warning: loss is not finite!", loss)
+                logger.warning("Warning: loss is not finite!")
 
             if scaler is not None:
                 scaler.scale(loss).backward()
@@ -393,6 +395,7 @@ def main(params: Dict[str, Any]):
             with torch.no_grad():
                 model.update_momentum_encoder()
 
+            break
         if scheduler is not None:
             scheduler.step()
 

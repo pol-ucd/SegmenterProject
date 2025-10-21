@@ -1,55 +1,38 @@
 import random
-from typing import Union
 
 import numpy as np
-import torch
-import torchvision
-
 from segmenter.masks import BaseMask
 
 
 class FluidMask(BaseMask):
-    def __init__(self,num_shapes:int=1, max_radius=40, saturation:float=0.5):
-        BaseMask.__init__(self, num_shapes=num_shapes)
-        self.num_shapes = num_shapes
+    def __init__(self, max_radius: int = 60, saturation: float = 0.6):
         self.max_radius = max_radius
         self.saturation = saturation
         self._check_args()
 
     def _check_args(self):
-        pass
+        if not (0.0 < self.saturation <= 1.0):
+            raise ValueError("Saturation must be between 0 and 1.")
 
-    def _mask2D(self, x:Union[np.ndarray, torch.Tensor])->torch.Tensor:
+    def _mask2D(self, h: int, w: int) -> np.ndarray:
         """
-        Fluid of fog
-        Soft edged blobs with partial transparency
-        :return: mask as Torch Tensor of size (H, W)
+        Generates a 2D Gaussian blob with a sharp threshold (for occlusion).
         """
-        b, c, h, w = x.shape
-        if isinstance(x, torch.Tensor):
-            x = x.detach().cpu().numpy()
-        mask = np.ones((h, w))
-
-        x = random.randint(0, w)
-        y = random.randint(0,h)
+        # 1. Randomized parameters
+        x_center = random.randint(0, w)
+        y_center = random.randint(0, h)
         radius = random.randint(20, self.max_radius)
-        Y, X = np.meshgrid(np.arange(h),
-                              np.arange(w), indexing='ij')
-        dist = ((X - x)**2 + (Y - y)**2).astype(float)
-        blob = np.exp(-dist / (2 * radius**2))
-        mask *= 1 - blob  # simulate partial occlusion
 
-        return (np.clip(mask,0, 1) < self.saturation).astype(np.uint8)
+        # Vectorized distance calculation
+        Y, X = np.meshgrid(np.arange(h), np.arange(w), indexing='ij')
+        dist_sq = ((X - x_center) ** 2 + (Y - y_center) ** 2).astype(float)
 
-if __name__ == '__main__':
-    do_show = True
-    n_channels = 1
-    b, c, h, w = 8, 3, 240, 320
-    x_image = torch.randint(0, 1, (b, c, h, w))
-    random_mask = FluidMask()
-    mask = random_mask(x=x_image)
-    assert mask.shape == (b, c, h, w), "Something went wrong, check dimensions."
+        # Gaussian profile
+        # Note: We use 1 - blob for "occlusion" or "mask presence"
+        blob = np.exp(-dist_sq / (2 * radius ** 2))
 
-    trans = torchvision.transforms.ToPILImage()
-    out = trans(mask[0])
-    out.show()
+        # Thresholding based on saturation
+        # The mask is True where the blob is strong (less than 1-saturation)
+        mask = blob > (1 - self.saturation)
+
+        return mask.astype(np.uint8)

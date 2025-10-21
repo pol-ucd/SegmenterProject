@@ -14,7 +14,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     total_visible_patches = visible_mask.sum().item()
 
     if total_visible_patches == 0:
-        return torch.tensor(0.0, device=predictions[0].device)
+        return torch.tensor(0.0, device=predictions[0].device, requires_grad=True)
 
     total_loss = 0.0
 
@@ -22,11 +22,12 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
         emb_A_norm = F.normalize(emb_A, p=2, dim=1)
         emb_B_norm = F.normalize(emb_B, p=2, dim=1)
 
-        similarity = (emb_A_norm * emb_B_norm).sum(dim=1)
+        similarity = emb_A_norm * emb_B_norm  #.sum(dim=1)
         stage_loss = 1.0 - similarity
 
         masked_stage_loss = stage_loss * visible_mask.float()
-        total_loss += masked_stage_loss.sum() / total_visible_patches
+        n_hidden = masked_stage_loss.shape[1]
+        total_loss += masked_stage_loss.sum() / (total_visible_patches*n_hidden)
 
     final_loss = total_loss / len(predictions)
     return final_loss
