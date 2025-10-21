@@ -364,7 +364,7 @@ def main(params: Dict[str, Any]):
 
     """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
     best_loss = float('inf')
-    min_delta = 0.000001
+    min_delta = 0.0000001
     boredom = 0
     max_boredom = 10
     best_model = None
@@ -404,11 +404,8 @@ def main(params: Dict[str, Any]):
 
             epoch_loss += [loss.item()]
 
-
             if not torch.isfinite(loss):
                 logger.warning("Warning: loss is not finite!")
-
-
 
             if scaler is not None:
                 scaler.scale(loss).backward()
@@ -433,7 +430,7 @@ def main(params: Dict[str, Any]):
 
         avg_loss = np.mean(epoch_loss)
         logger.info(
-            f"Epoch {epoch + 1} / {params['num_epochs']}, Mean (per visible patch per encoding layer) loss : {avg_loss:.6f}")
+            f"Epoch {epoch + 1} / {params['num_epochs']}, Mean (per visible patch per encoding layer) loss : {avg_loss:.8f}")
 
         if avg_loss + min_delta < best_loss:
             best_loss = avg_loss
