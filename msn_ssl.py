@@ -311,9 +311,9 @@ def main(params: Dict[str, Any]):
     logger = logging.getLogger(__name__)
 
     run_once = bool(params.get('run_once', False))
-    prefix = params.get('prefix', 'msn_moco_2')
+    prefix = params.get('prefix', 'msn_moco')
     if prefix == '':
-        prefix = 'msn_moco_2'
+        prefix = 'msn_moco'
 
     image_size = (512, 512)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
