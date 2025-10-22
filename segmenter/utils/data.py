@@ -166,7 +166,7 @@ class SSLTransformPipeline:
 
         # Defined: brightness, contrast, saturation are chosen uniformly from [1-0.4, 1+0.4] = [0.6, 1.4]
         # Defined: hue is chosen uniformly from [-0.1, 0.1]
-        color_jitter = v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.08)
+        color_jitter = v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.05)
 
         # Solarization is a key non-linear augmentation often applied to the Target view
         solarize_transform = v2.RandomSolarize(threshold=0.5, p=0.2)
