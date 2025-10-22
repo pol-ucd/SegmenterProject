@@ -124,7 +124,7 @@ class TransformCheckNan(torch.nn.Module):
         Helper class to debug torchvision transform pipelines
         :param step_name: A unique string to identify the pipeline step
         """
-        super(SSLTransformException, self).__init__()
+        super(TransformCheckNan, self).__init__()
         self.step_name = step_name
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
