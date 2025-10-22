@@ -324,7 +324,7 @@ def main(params: Dict[str, Any]):
 
     image_size = (512, 512)
     if torch.cuda.is_available():
-        device = torch.device('cuda:1')
+        device = torch.device('cuda')
         device_type = 'cuda'
         scaler = torch.amp.GradScaler()
     else:
@@ -463,7 +463,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", default=source,
                         type=str, help="Path to the HDF5 file.")
-    parser.add_argument("-bs", "--batch_size", type=int, default=8, )
+    parser.add_argument("-bs", "--batch_size", type=int, default=4, )
     parser.add_argument("-nw", "--num_workers", type=int, default=4, )
     parser.add_argument("-e", "--num_epochs", type=int, default=200, )
     parser.add_argument("-lr", "--learning_rate", type=float, default=1e-5, )
