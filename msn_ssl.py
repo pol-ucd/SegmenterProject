@@ -136,26 +136,36 @@ class MSNSegFormerAdaptor(nn.Module):
 
 class MoCoMSN(nn.Module):
     def __init__(self, backbone: Union[str, PathLike] = backbone_name,
-                 momentum: float = 0.99):
+                 momentum: float = 0.99, mask_generator: CompositeMask = CompositeMask(),):
         super().__init__()
         self.backbone = backbone
         self.momentum = float(momentum)
+        self.mask_generator = mask_generator
 
         self.anchor_encoder = MSNSegFormerAdaptor(backbone)
         self.target_encoder = deepcopy(self.anchor_encoder)
         self._set_requires_grad(self.target_encoder, False)
 
-    def forward(self, anchor: torch.Tensor, target: torch.Tensor):
+    def forward(self, anchor: torch.Tensor, target: torch.Tensor) -> Tuple[Any, Any, Any]:
         # anchor = anchor.to(target.device)
         # target = target.to(target.device)
-        anchor_encodings = self.anchor_encoder(anchor)
-        anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
-
         with torch.no_grad():
             target_encodings = self.target_encoder(target)
             target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
+        anchor_mask = self.mask_generator.generate_pixel_mask(anchor)
 
-        return anchor_encodings_upscaled, target_encodings_upscaled
+        anchor_encodings = self.anchor_encoder(anchor[1 - anchor_mask])
+        anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
+
+        h_downscale, w_downscale = anchor_encodings[0].shape[-2:]
+        mask_encodings_upscaled = F.interpolate(
+                anchor_mask,
+                size=(h_downscale, w_downscale),
+                mode='bilinear',
+                align_corners=False
+            )
+
+        return anchor_encodings_upscaled, target_encodings_upscaled, mask_encodings_upscaled
 
     @staticmethod
     def _set_requires_grad(model: nn.Module, requires_grad: bool):
@@ -325,7 +335,7 @@ def main(params: Dict[str, Any]):
     image_size = (512, 512)
     if torch.cuda.is_available():
         device = torch.device('cuda')
-        device_type = 'cuda:1'
+        device_type = 'cuda'
         scaler = torch.amp.GradScaler()
     else:
         device = torch.device('cpu')
@@ -348,8 +358,12 @@ def main(params: Dict[str, Any]):
                                          worker_init_fn=hdf5_worker_init_fn
                                          )
 
+    # Instantiate the masking utility
+    # mask_generator = CompositeMask(mask_ratio=MASK_RATIO)
+    mask_generator = CompositeMask(shapes_per_image=params['num_shapes'])
+
     # model = MSNSegFormerAdaptor(backbone=backbone_name)
-    model = MoCoMSN(backbone=backbone_name).to(device)
+    model = MoCoMSN(backbone=backbone_name, mask_generator=mask_generator).to(device)
 
     optimizer = torch.optim.AdamW(model.anchor_encoder.parameters(),
                                   lr=params['learning_rate'],
@@ -358,10 +372,6 @@ def main(params: Dict[str, Any]):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
 
     criterion = MaskedCosineSimilarityLoss(reduce='mean')
-
-    # Instantiate the masking utility
-    # mask_generator = CompositeMask(mask_ratio=MASK_RATIO)
-    mask_generator = CompositeMask(shapes_per_image=params['num_shapes'])
 
     """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
     best_loss = float('inf')
@@ -386,12 +396,13 @@ def main(params: Dict[str, Any]):
             """ Target images """
             z_target = batch['targets'].to(device)
 
+
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
-                x_anchor_upscaled, z_target_upscaled = model(x_anchor, z_target)
-                x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
-                loss = criterion(x_anchor_upscaled, z_target_upscaled, x_anchor_mask)
+                x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled = model(x_anchor, z_target)
+                # x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
+                loss = criterion(x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled)
 
                 try:
                     assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"

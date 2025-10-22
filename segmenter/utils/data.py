@@ -171,7 +171,7 @@ class SSLTransformPipeline:
             v2.RandomResizedCrop(size=size, scale=global_crop_scale, interpolation=InterpolationMode.BICUBIC),
             v2.RandomHorizontalFlip(p=0.5),  # Standard geometric augmentation
             # 2. Photometric: Strong Color Jitter
-            v2.RandomApply([color_jitter], p=0.8),
+            v2.RandomApply([color_jitter], p=0.5),
             v2.RandomGrayscale(p=0.2),
             # 3. Regularization: Gaussian Blur (p=0.5 is common for Anchor)
             v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),
