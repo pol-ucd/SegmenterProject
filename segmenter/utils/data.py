@@ -227,12 +227,13 @@ class SSLTransformPipeline:
         results = {'images': Any, 'anchors': Any, 'targets': Any, 'local_anchors': Any}
         try:
             input_images = x['images']
-            try:
-                if torch.isnan(results['images']).any():
+
+            if torch.isnan(input_images).any():
                     print(">>>>> NaN in input data: x['images'] (original image)")
             except TypeError:
-                if np.isnan(results['images']).any():
+                if np.isnan(input_images).any():
                     print(">>>>> NaN in input data: x['images'] (original image)")
+
 
             # 1. Global Views (Anchor & Target)
             results['images'] = torch.stack([self.Image_Transform(image) for image in input_images], dim=0)
