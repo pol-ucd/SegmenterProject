@@ -410,7 +410,8 @@ def main(params: Dict[str, Any]):
             x_anchor = batch['anchors'].to(device)
             x_anchor.requires_grad = True
 
-            print("Exiting: CUDA memory usage: ", torch.cuda.memory_usage(device=device))
+            print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device=device))
+            print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device='cuda:0'))
             sys.exit(99)
 
             # local_anchors = batch['local_anchors']
