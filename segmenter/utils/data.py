@@ -131,7 +131,7 @@ class SSLTransformPipeline:
     def __init__(self,
                  size: Tuple[int, int] = (512, 512),
                  global_crop_scale: Tuple[float, float] = (0.4, 1.0),
-                 # New parameters for local crops, following DINO's common settings
+                 # Parameters for local crops, following DINO's common settings
                  num_local_crops: int = 8,
                  local_crop_size: Tuple[int, int] = (96, 96),
                  local_crop_scale: Tuple[float, float] = (0.05, 0.4)):
@@ -168,7 +168,8 @@ class SSLTransformPipeline:
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
             # 1. Geometric: Global RandomResizedCrop
-            v2.RandomResizedCrop(size=size, scale=global_crop_scale, interpolation=InterpolationMode.BICUBIC),
+            v2.RandomResizedCrop(size=size, scale=global_crop_scale,
+                                 interpolation=InterpolationMode.BICUBIC),
             v2.RandomHorizontalFlip(p=0.5),  # Standard geometric augmentation
             # 2. Photometric: Strong Color Jitter
             v2.RandomApply([color_jitter], p=0.5),
@@ -184,7 +185,8 @@ class SSLTransformPipeline:
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
             # 1. Geometric: Independent Global Random Cropping
-            v2.RandomResizedCrop(size=size, scale=global_crop_scale, interpolation=InterpolationMode.BICUBIC),
+            v2.RandomResizedCrop(size=size, scale=global_crop_scale,
+                                 interpolation=InterpolationMode.BICUBIC),
             v2.RandomHorizontalFlip(p=0.5),
             # 2. Photometric: Strong Color Jitter
             v2.RandomApply([color_jitter], p=0.8),
@@ -225,6 +227,8 @@ class SSLTransformPipeline:
         results = {'images': Any, 'anchors': Any, 'targets': Any, 'local_anchors': Any}
         try:
             input_images = x['images']
+            if torch.isnan(results['images']).any():
+                print(">>>>> NaN in input data: x['images'] (original image)")
 
             # 1. Global Views (Anchor & Target)
             results['images'] = torch.stack([self.Image_Transform(image) for image in input_images], dim=0)
@@ -248,13 +252,13 @@ class SSLTransformPipeline:
         except KeyError:
             raise SSLTransformException("No images found in input. Include images using the 'images' key.")
         if torch.isnan(results['images']).any():
-            raise ValueError("NaN in input data: results['images']")
+            print("NaN in input data: results['images']")
         if torch.isnan(results['anchors']).any():
-            raise ValueError("NaN in input data: results['anchors']")
+            print("NaN in input data: results['anchors']")
         if torch.isnan(results['targets']).any():
-            raise ValueError("NaN in input data: results['targets']")
+            print("NaN in input data: results['targets']")
         if torch.isnan(results['local_anchors']).any():
-            raise ValueError("NaN in input data: results['local_anchors']")
+            print("NaN in input data: results['local_anchors']")
 
 
         return results

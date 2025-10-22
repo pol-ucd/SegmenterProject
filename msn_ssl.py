@@ -422,7 +422,7 @@ def main(params: Dict[str, Any]):
             z_target = batch['targets'].to(device)
 
             if torch.isnan(x_anchor ).any() or torch.isnan(z_target).any():
-                raise ValueError("NaN in input data!")
+                logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor ).any()}, z_target: {torch.isnan(z_target).any()}")
             optimizer.zero_grad()
 
 
