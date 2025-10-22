@@ -376,14 +376,16 @@ def main(params: Dict[str, Any]):
                                          worker_init_fn=hdf5_worker_init_fn
                                          )
 
-    print("CUDA memory usage: ", torch.cuda.memory_usage(device=device))
-    sys.exit(99)
+
     # Instantiate the masking utility
     # mask_generator = CompositeMask(mask_ratio=MASK_RATIO)
     mask_generator = CompositeMask(shapes_per_image=params['num_shapes'])
 
     # model = MSNSegFormerAdaptor(backbone=backbone_name)
     model = MoCoMSN(backbone=backbone_name, mask_generator=mask_generator).to(device)
+
+    print("CUDA memory usage: ", torch.cuda.memory_usage(device=device))
+    sys.exit(99)
 
     optimizer = torch.optim.AdamW(model.anchor_encoder.parameters(),
                                   lr=params['learning_rate'],
