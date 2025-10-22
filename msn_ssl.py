@@ -384,9 +384,6 @@ def main(params: Dict[str, Any]):
     # model = MSNSegFormerAdaptor(backbone=backbone_name)
     model = MoCoMSN(backbone=backbone_name, mask_generator=mask_generator).to(device)
 
-    print("CUDA memory usage: ", torch.cuda.memory_usage(device=device))
-    sys.exit(99)
-
     optimizer = torch.optim.AdamW(model.anchor_encoder.parameters(),
                                   lr=params['learning_rate'],
                                   weight_decay=1e-2)
@@ -405,6 +402,8 @@ def main(params: Dict[str, Any]):
     logger.info(f"Starting training for {params['num_epochs']} epochs")
     model.train()
 
+    print("Exiting: CUDA memory usage: ", torch.cuda.memory_usage(device=device))
+    sys.exit(99)
     if debug_run:
         logger.debug(report_cuda_memory_usage(device, label='About to start training'))
 
