@@ -29,7 +29,6 @@ from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_wo
 """ End of debug stuff """
 
 MASK_RATIO = 0.7
-SHAPES_PER_MASK = 12
 PATCH_SIZE = 4  # 4x4 patches for SegFormer MiT [1]
 IMAGE_H = 512
 IMAGE_W = 512
@@ -501,7 +500,9 @@ if __name__ == "__main__":
         main(params)
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt detected. Shutting down gracefully.")
-        sys.exit(0)
+    except Exception as ex:
+        logger.error("Unknown exception occurred.")
+        logger.error(ex)
     finally:
         # ensure log handlers are flushed.
         for handler in logger.handlers:
