@@ -142,16 +142,14 @@ class MoCoMSN(nn.Module):
         self.backbone = backbone
         self.momentum = float(momentum)
         self.mask_generator = mask_generator
-        print(f"MoCoMSN __init__ CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
         self.anchor_encoder = MSNSegFormerAdaptor(backbone)
         self.target_encoder = deepcopy(self.anchor_encoder)
         self._set_requires_grad(self.target_encoder, False)
-        print(f"MoCoMSN __init__ CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
+        print(f"MoCoMSN.__init__() CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
     def forward(self, anchor: torch.Tensor, target: torch.Tensor) -> Tuple[Any, Any, Any]:
-        # anchor = anchor.to(target.device)
-        # target = target.to(target.device)
+        print(f"MoCoMSN.forward() CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
         with torch.no_grad():
             target_encodings = self.target_encoder(target)
             target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
