@@ -153,11 +153,11 @@ class MoCoMSN(nn.Module):
         with torch.no_grad():
             target_encodings = self.target_encoder(target)
             target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
-        anchor_mask = self.mask_generator.generate_pixel_mask(anchor)
+        anchor_mask = self.mask_generator.generate_pixel_mask(anchor).to(anchor.device)
 
-        print(f"MoCoMSN.forward() Processing CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
-
-        anchor_encodings = self.anchor_encoder(anchor[1 - anchor_mask.long()])
+        visible_mask = anchor_mask.bool()
+        visible_anchor = anchor[~visible_mask]
+        anchor_encodings = self.anchor_encoder(visible_anchor)
         anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
 
         h_downscale, w_downscale = anchor_encodings[0].shape[-2:]
