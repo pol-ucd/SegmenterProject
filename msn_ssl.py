@@ -342,6 +342,7 @@ def main(params: Dict[str, Any]):
         device_type = 'cpu'
         scaler = None
 
+    logger.info(f'Using device: {device}')
 
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
