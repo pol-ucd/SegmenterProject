@@ -402,12 +402,6 @@ def main(params: Dict[str, Any]):
     logger.info(f"Starting training for {params['num_epochs']} epochs")
     model.train()
 
-    print("Exiting: CUDA memory usage: ", torch.cuda.memory_usage(device=device))
-    sys.exit(99)
-    if debug_run:
-        logger.debug(report_cuda_memory_usage(device, label='About to start training'))
-
-
     for epoch in range(params['num_epochs']):
         logger.info(f"Starting Epoch {epoch + 1} / {params['num_epochs']}")
         epoch_loss = []
@@ -415,6 +409,9 @@ def main(params: Dict[str, Any]):
             """ Anchor images """
             x_anchor = batch['anchors'].to(device)
             x_anchor.requires_grad = True
+
+            print("Exiting: CUDA memory usage: ", torch.cuda.memory_usage(device=device))
+            sys.exit(99)
 
             # local_anchors = batch['local_anchors']
             # local_anchors.requires_grad = True
