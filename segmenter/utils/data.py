@@ -123,69 +123,133 @@ class SSLTransformPipeline:
     Creates the dual-view augmentation pipeline for the Siamese Network.
 
     This function applies two independent sets of transformations (one for the
-    Anchor view and one for the Target view) to the same image.
+    Anchor view and one for the Target view) to the same image. The pipeline is
+    designed based on best practices from self-supervised learning (DINO, MSN),
+    prioritizing strong photometric and geometric differences between views.
     """
 
-    def __init__(self, size: Tuple[int, int] = (512, 512)):
+    def __init__(self,
+                 size: Tuple[int, int] = (512, 512),
+                 global_crop_scale: Tuple[float, float] = (0.4, 1.0),
+                 # New parameters for local crops, following DINO's common settings
+                 num_local_crops: int = 8,
+                 local_crop_size: Tuple[int, int] = (96, 96),
+                 local_crop_scale: Tuple[float, float] = (0.05, 0.4)):
+        """
+        Initializes the SSL augmentation pipeline.
+
+        Args:
+            size: The output resolution (H, W) of the main anchor and target views (Global Crops).
+            global_crop_scale: The minimum and maximum scale for the global random crops.
+            num_local_crops: The number of small local crops to generate per image.
+            local_crop_size: The output resolution (H, W) of the local crops.
+            local_crop_scale: The minimum and maximum scale for the local random crops.
+        """
+        # Store local crop configuration
+        self.num_local_crops = num_local_crops
+
         # Define Common Strong Photometric Augmentations
-        # These parameters are typical for Siamese architectures (DINO/MSN) and ensure strong feature invariance [1]
         color_jitter = v2.ColorJitter(
             brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1
         )
+        # Solarization is a key non-linear augmentation often applied to the Target view
+        solarize_transform = v2.RandomSolarize(threshold=0.5, p=0.2)
 
+        # Base Image Transform (for visualization or non-augmented input)
         self.Image_Transform = v2.Compose([
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
             v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
-            ])
+        ])
 
-        # Anchor View Transform: Strong Augmentation + Gaussian Blur
+        # --- Anchor View Transform (Global Crop): Strong Augmentation + Gaussian Blur + Random Crop ---
+        # The Anchor (Student) network is typically trained with stronger noise/regularization.
         self.Anchor_Transform = v2.Compose([
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
-            v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
-            v2.RandomApply([v2.ColorJitter(
-                brightness=0.4,
-                contrast=0.4,
-                saturation=0.4,
-                hue=0.1)], p=0.8),
+            # 1. Geometric: Global RandomResizedCrop
+            v2.RandomResizedCrop(size=size, scale=global_crop_scale, interpolation=InterpolationMode.BICUBIC),
+            v2.RandomHorizontalFlip(p=0.5),  # Standard geometric augmentation
+            # 2. Photometric: Strong Color Jitter
+            v2.RandomApply([color_jitter], p=0.8),
             v2.RandomGrayscale(p=0.2),
-            v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),  # Regularization [1]
-            v2.Normalize(mean=(0.485, 0.456, 0.406),
-                         std=(0.229, 0.224, 0.225)),
-        ])
-
-        # Target View Transform: Same Strong Augmentation, but may omit some extreme noise
-        self.Target_Transform = v2.Compose([
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
-            v2.RandomApply([v2.ColorJitter(
-                brightness=0.4,
-                contrast=0.4,
-                saturation=0.4,
-                hue=0.1)], p=0.8),
-            v2.RandomGrayscale(p=0.2),
-            v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),  # Regularization [1]
+            # 3. Regularization: Gaussian Blur (p=0.5 is common for Anchor)
+            v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),
+            # 4. Final: Normalization
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ])
 
+        # --- Target View Transform (Global Crop): Strong Augmentation + Solarization + Random Crop ---
+        self.Target_Transform = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            # 1. Geometric: Independent Global Random Cropping
+            v2.RandomResizedCrop(size=size, scale=global_crop_scale, interpolation=InterpolationMode.BICUBIC),
+            v2.RandomHorizontalFlip(p=0.5),
+            # 2. Photometric: Strong Color Jitter
+            v2.RandomApply([color_jitter], p=0.8),
+            v2.RandomGrayscale(p=0.2),
+            # 3. Non-linear Augmentation: Solarization (key for non-collapse)
+            v2.RandomApply([solarize_transform], p=0.2),
+            # 4. Regularization: Reduced Gaussian Blur probability
+            v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.1),
+            # 5. Final: Normalization
+            v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ])
+
+        # --- Local Anchor View Transform (Local Crop): Small Crop + Augmentation ---
+        if num_local_crops > 0:
+            self.Local_Transform = v2.Compose([
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                # 1. Geometric: Small, Local RandomResizedCrop
+                v2.RandomResizedCrop(size=local_crop_size, scale=local_crop_scale,
+                                     interpolation=InterpolationMode.BICUBIC),
+                v2.RandomHorizontalFlip(p=0.5),
+                # 2. Photometric: Strong Color Jitter
+                v2.RandomApply([color_jitter], p=0.8),
+                v2.RandomGrayscale(p=0.2),
+                # 3. Regularization: Reduced Gaussian Blur probability for local views
+                v2.RandomApply([v2.GaussianBlur(kernel_size=3)], p=0.1),
+                # 4. Final: Normalization
+                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ])
+        else:
+            self.Local_Transform = None
+
     def __call__(self, x: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Returns the augmented Anchor and Target views of the input image."""
-        # Note: The transformations are applied independently to the same image,
-        # ensuring the resulting views are distinct (e.g., different crop locations,
-        # different photometric noise), forcing the model to learn invariance.[1]
-        results = {'images': Any, 'anchors': Any, 'targets': Any}
+        """
+        Returns the augmented Global Anchor, Global Target, and multiple Local Anchor views.
+        """
+        # Note: The transformations are applied independently to the same image.
+        results = {'images': Any, 'anchors': Any, 'targets': Any, 'local_anchors': Any}
         try:
-            results['images'] = torch.stack([self.Image_Transform(image) for image in x['images']],
-                                           dim=0)
-            results['anchors'] = torch.stack([self.Anchor_Transform(image) for image in x['images']],
-                                           dim=0)
-            results['targets'] = torch.stack([self.Target_Transform(image) for image in x['images']],
-                                           dim=0)
+            input_images = x['images']
+
+            # 1. Global Views (Anchor & Target)
+            results['images'] = torch.stack([self.Image_Transform(image) for image in input_images], dim=0)
+            results['anchors'] = torch.stack([self.Anchor_Transform(image) for image in input_images], dim=0)
+            results['targets'] = torch.stack([self.Target_Transform(image) for image in input_images], dim=0)
+
+            # 2. Local Views (Anchors only - N crops per image)
+            local_crops = []
+            if self.Local_Transform is not None:
+                for image in input_images:
+                    # Generate N local crops for the current image
+                    for _ in range(self.num_local_crops):
+                        local_crops.append(self.Local_Transform(image))
+
+                # Stack all local crops into a single batch tensor: (Batch_Size * N_Crops, C, h, w)
+                results['local_anchors'] = torch.stack(local_crops, dim=0)
+            else:
+                # Provide an empty tensor if no local crops are configured
+                results['local_anchors'] = torch.tensor([])
+
         except KeyError:
-            raise SSLTransformException(f"No images found in input. Include images using the 'images' key.")
+            raise SSLTransformException("No images found in input. Include images using the 'images' key.")
+
         return results
+
 
 #
 # class GaussianSmoothing(object):
