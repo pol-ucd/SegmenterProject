@@ -146,10 +146,10 @@ class MoCoMSN(nn.Module):
         self.anchor_encoder = MSNSegFormerAdaptor(backbone)
         self.target_encoder = deepcopy(self.anchor_encoder)
         self._set_requires_grad(self.target_encoder, False)
-        print(f"MoCoMSN.__init__() CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
+        # print(f"MoCoMSN.__init__() CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
     def forward(self, anchor: torch.Tensor, target: torch.Tensor) -> Tuple[Any, Any, Any]:
-        print(f"MoCoMSN.forward() Entering CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
+
         with torch.no_grad():
             target_encodings = self.target_encoder(target)
             target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
@@ -169,7 +169,7 @@ class MoCoMSN(nn.Module):
                 align_corners=False
             )
 
-        print(f"MoCoMSN.forward() Exiting CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
+        # print(f"MoCoMSN.forward() Exiting CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
         return anchor_encodings_upscaled, target_encodings_upscaled, mask_encodings_upscaled
 
@@ -424,13 +424,12 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            print(f"Processing: CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
             with autocast(device_type=device_type):
                 x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled = model(x_anchor, z_target)
 
-                print(f"Exiting: CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
-                sys.exit(99)
+                # print(f"Exiting: CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
+                # sys.exit(99)
 
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled)
