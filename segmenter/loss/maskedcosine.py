@@ -34,6 +34,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
 
         masked = stage_loss * visible_mask.squeeze(1)  # shape (B,H,W)
         denom = total_visible * emb_A.shape[1]         # tensor * int -> tensor
+        print("denom: ", denom)
         total_loss = total_loss + masked.sum() / denom
 
     final_loss = total_loss / float(len(predictions))
