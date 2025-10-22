@@ -421,7 +421,8 @@ def main(params: Dict[str, Any]):
             """ Target images """
             z_target = batch['targets'].to(device)
 
-
+            if torch.isnan(x_anchor ).any() or torch.isnan(z_target).any():
+                raise ValueError("NaN in input data!")
             optimizer.zero_grad()
 
 
