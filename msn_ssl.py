@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sys
+import traceback
 from copy import deepcopy
 from os import PathLike
 from typing import Any, Dict, Union, Tuple, List
@@ -501,8 +502,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt detected. Shutting down gracefully.")
     except Exception as ex:
-        logger.error("Unknown exception occurred.")
-        logger.error(ex)
+        logger.error(f"Unknown exception occurred. Error: {ex}")
+        logger.error(traceback.format_exc())
     finally:
         # ensure log handlers are flushed.
         for handler in logger.handlers:
