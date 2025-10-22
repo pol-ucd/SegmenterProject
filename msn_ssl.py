@@ -419,8 +419,8 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            if debug_run:
-                logger.debug(report_cuda_memory_usage(device, label='Before call to model.forward()'))
+            print(f"Processing: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device=device))
+            print(f"Processing: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device='cuda:0'))
 
             with autocast(device_type=device_type):
                 x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled = model(x_anchor, z_target)
