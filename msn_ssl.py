@@ -328,7 +328,7 @@ def report_cuda_memory_usage(device: torch.device, label=None) -> None:
 
     if device.type.startswith('cuda'):
         out_str = label if label is not None else ""
-        out_str += f"\nMemory Summary: \n{torch.cuda.memory_summary(device=device, abbreviated=True)}\n"
+        # out_str += f"\nMemory Summary: \n{torch.cuda.memory_summary(device=device, abbreviated=True)}\n"
         out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
 
         out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
