@@ -138,7 +138,7 @@ class TransformClamp(torch.nn.Module):
         Helper class to debug torchvision transform pipelines
         :param step_name: A unique string to identify the pipeline step
         """
-        super(TransformCheckNan, self).__init__()
+        super(TransformClamp, self).__init__()
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return x.clamp(min=0, max=1)
