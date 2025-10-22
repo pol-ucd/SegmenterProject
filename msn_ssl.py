@@ -416,6 +416,7 @@ def main(params: Dict[str, Any]):
             """ Target images """
             z_target = batch['targets'].to(device)
 
+
             optimizer.zero_grad()
 
             if debug_run:
@@ -423,13 +424,13 @@ def main(params: Dict[str, Any]):
 
             with autocast(device_type=device_type):
                 x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled = model(x_anchor, z_target)
-                if debug_run:
-                    logger.debug(report_cuda_memory_usage(device, label='After call to model.forward()'))
 
-                # x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
+                print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device=device))
+                print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device='cuda:0'))
+                sys.exit(99)
+
+                x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled)
-                if debug_run:
-                    logger.debug(report_cuda_memory_usage(device, label='After call to loss criterion'))
 
                 try:
                     assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
