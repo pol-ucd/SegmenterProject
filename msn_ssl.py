@@ -415,14 +415,15 @@ def main(params: Dict[str, Any]):
             x_anchor = batch['anchors'].to(device)
             x_anchor.requires_grad = True
 
-            # local_anchors = batch['local_anchors']
-            # local_anchors.requires_grad = True
+            local_anchors = batch['local_anchors']
+            local_anchors.requires_grad = True
 
             """ Target images """
             z_target = batch['targets'].to(device)
 
-            if torch.isnan(x_anchor ).any() or torch.isnan(z_target).any():
-                logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor ).any()}, z_target: {torch.isnan(z_target).any()}")
+            if torch.isnan(x_anchor ).any() or torch.isnan(z_target).any() or torch.isnan(local_anchors).any():
+                logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor ).any()}, "
+                             f"z_target: {torch.isnan(z_target).any()}, local_anchors: {torch.isnan(local_anchors).any()}")
             optimizer.zero_grad()
 
 
