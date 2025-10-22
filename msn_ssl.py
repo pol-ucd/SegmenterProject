@@ -361,6 +361,8 @@ def main(params: Dict[str, Any]):
 
     logger.info(f'Using device: {device}')
 
+    sys.exit("DEBUG")
+
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
 
