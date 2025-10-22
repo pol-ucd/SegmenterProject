@@ -24,20 +24,9 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     for emb_A, emb_B in zip(predictions, targets):
         emb_A = emb_A.to(device=device, dtype=dtype)
         emb_B = emb_B.to(device=device, dtype=dtype)
-        if torch.isnan(emb_A).any():
-            print("enb_A has NaN values")
-
-        if torch.isnan(emb_B).any():
-            print("enb_B has NaN values")
 
         emb_A_n = F.normalize(emb_A, p=2, dim=1)
         emb_B_n = F.normalize(emb_B, p=2, dim=1)
-
-        if torch.isnan(emb_A_n).any():
-            print("enb_A_n has NaN values")
-
-        if torch.isnan(emb_B_n).any():
-            print("enb_B_n has NaN values")
 
         # per-patch cosine similarity reduced over channel dim
         similarity = (emb_A_n * emb_B_n).sum(dim=1)    # shape (B,H,W)
@@ -50,10 +39,6 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
         total_loss = total_loss + masked.sum() / denom
 
     final_loss = total_loss / float(len(predictions))
-    if not torch.isfinite(final_loss):
-        print("Final loss: ", final_loss)
-        print(f"total_visible percentage: {100*total_visible/total_visible.numel():.2f}%")
-
 
     return final_loss
 
