@@ -22,11 +22,12 @@ from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
 """ DEBUG helpers - COmment out unless debugging """
-# import os
-# # Force synchronous CUDA errors to surface
-# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-# # Enable autograd anomaly detection and print where NaNs appear
-# torch.autograd.set_detect_anomaly(True)
+import os
+# Force synchronous CUDA errors to surface
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+# Enable autograd anomaly detection and print where NaNs appear
+torch.autograd.set_detect_anomaly(True)
 """ End of debug stuff """
 
 MASK_RATIO = 0.7
