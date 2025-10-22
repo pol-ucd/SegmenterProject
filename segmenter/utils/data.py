@@ -118,6 +118,20 @@ class HDF5Exception(Exception):
 class SSLTransformException(Exception):
     pass
 
+class TransformCheckNan(torch.nn.Module):
+    def __init__(self, step_name: str = ""):
+        """
+        Helper class to debug torchvision transform pipelines
+        :param step_name: A unique string to identify the pipeline step
+        """
+        super(SSLTransformException, self).__init__()
+        self.step_name = step_name
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        if torch.isnan(x).any():
+            print(f"NaN generated after step: {self.step_name}")
+        return x
+
 class SSLTransformPipeline:
     """
     Creates the dual-view augmentation pipeline for the Siamese Network.
@@ -149,9 +163,11 @@ class SSLTransformPipeline:
         self.num_local_crops = num_local_crops
 
         # Define Common Strong Photometric Augmentations
-        color_jitter = v2.ColorJitter(
-            brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1
-        )
+
+        # Defined: brightness, contrast, saturation are chosen uniformly from [1-0.4, 1+0.4] = [0.6, 1.4]
+        # Defined: hue is chosen uniformly from [-0.1, 0.1]
+        color_jitter = v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1)
+
         # Solarization is a key non-linear augmentation often applied to the Target view
         solarize_transform = v2.RandomSolarize(threshold=0.5, p=0.2)
 
@@ -166,18 +182,26 @@ class SSLTransformPipeline:
         # The Anchor (Student) network is typically trained with stronger noise/regularization.
         self.Anchor_Transform = v2.Compose([
             v2.ToImage(),
+            TransformCheckNan("After V2.ToImage()"),
             v2.ToDtype(torch.float32, scale=True),
             # 1. Geometric: Global RandomResizedCrop
+            TransformCheckNan("After V2.ToDtype()"),
             v2.RandomResizedCrop(size=size, scale=global_crop_scale,
                                  interpolation=InterpolationMode.BICUBIC),
+            TransformCheckNan("After v2.RandomResizedCrop()"),
             v2.RandomHorizontalFlip(p=0.5),  # Standard geometric augmentation
+            TransformCheckNan("After v2.RandomHorizontalFlip()"),
             # 2. Photometric: Strong Color Jitter
             v2.RandomApply([color_jitter], p=0.5),
+            TransformCheckNan("After color_jitter"),
             v2.RandomGrayscale(p=0.2),
+            TransformCheckNan("v2.RandomGrayscale"),
             # 3. Regularization: Gaussian Blur (p=0.5 is common for Anchor)
             v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),
+            TransformCheckNan("After v2.GaussianBlur()"),
             # 4. Final: Normalization
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            TransformCheckNan("After v2.Normalize()"),
         ])
 
         # --- Target View Transform (Global Crop): Strong Augmentation + Solarization + Random Crop ---
@@ -218,6 +242,8 @@ class SSLTransformPipeline:
             ])
         else:
             self.Local_Transform = None
+
+
 
     def __call__(self, x: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
