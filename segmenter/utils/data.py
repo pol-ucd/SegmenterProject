@@ -132,6 +132,17 @@ class TransformCheckNan(torch.nn.Module):
             print(f"NaN generated after step: {self.step_name}")
         return x
 
+class TransformClamp(torch.nn.Module):
+    def __init__(self):
+        """
+        Helper class to debug torchvision transform pipelines
+        :param step_name: A unique string to identify the pipeline step
+        """
+        super(TransformCheckNan, self).__init__()
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return x.clamp(min=0, max=1)
+
 class SSLTransformPipeline:
     """
     Creates the dual-view augmentation pipeline for the Siamese Network.
@@ -193,6 +204,7 @@ class SSLTransformPipeline:
             TransformCheckNan("After v2.RandomHorizontalFlip()"),
             # 2. Photometric: Strong Color Jitter
             v2.RandomApply([color_jitter], p=0.5),
+            TransformClamp(),
             TransformCheckNan("After color_jitter"),
             v2.RandomGrayscale(p=0.2),
             TransformCheckNan("v2.RandomGrayscale"),
@@ -214,6 +226,7 @@ class SSLTransformPipeline:
             v2.RandomHorizontalFlip(p=0.5),
             # 2. Photometric: Strong Color Jitter
             v2.RandomApply([color_jitter], p=0.8),
+            TransformClamp(),
             v2.RandomGrayscale(p=0.2),
             # 3. Non-linear Augmentation: Solarization (key for non-collapse)
             v2.RandomApply([solarize_transform], p=0.2),
@@ -234,6 +247,7 @@ class SSLTransformPipeline:
                 v2.RandomHorizontalFlip(p=0.5),
                 # 2. Photometric: Strong Color Jitter
                 v2.RandomApply([color_jitter], p=0.8),
+                TransformClamp(),
                 v2.RandomGrayscale(p=0.2),
                 # 3. Regularization: Reduced Gaussian Blur probability for local views
                 v2.RandomApply([v2.GaussianBlur(kernel_size=3)], p=0.1),
