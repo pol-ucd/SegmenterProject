@@ -159,6 +159,7 @@ class MoCoMSN(nn.Module):
         anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
 
         h_downscale, w_downscale = anchor_encodings[0].shape[-2:]
+
         mask_encodings_upscaled = F.interpolate(
                 anchor_mask,
                 size=(h_downscale, w_downscale),
