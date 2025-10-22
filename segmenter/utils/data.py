@@ -227,7 +227,7 @@ class SSLTransformPipeline:
             input_images = x['images']
 
             # 1. Global Views (Anchor & Target)
-            results['images'] = torch.stack([self.Image_Transform(image) for image in input_images], dim=0)
+            # results['images'] = torch.stack([self.Image_Transform(image) for image in input_images], dim=0)
             results['anchors'] = torch.stack([self.Anchor_Transform(image) for image in input_images], dim=0)
             results['targets'] = torch.stack([self.Target_Transform(image) for image in input_images], dim=0)
 
