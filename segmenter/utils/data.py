@@ -227,8 +227,8 @@ class SSLTransformPipeline:
         results = {'images': Any, 'anchors': Any, 'targets': Any, 'local_anchors': Any}
         try:
             input_images = x['images']
-
-            if torch.isnan(input_images).any():
+            try:
+                if torch.isnan(input_images).any():
                     print(">>>>> NaN in input data: x['images'] (original image)")
             except TypeError:
                 if np.isnan(input_images).any():
