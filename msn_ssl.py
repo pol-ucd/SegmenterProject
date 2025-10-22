@@ -155,8 +155,8 @@ class MoCoMSN(nn.Module):
             target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
         anchor_mask = self.mask_generator.generate_pixel_mask(anchor).to(anchor.device)
 
-        visible_mask = anchor_mask.bool()
-        visible_anchor = anchor[~visible_mask]
+        visible_mask = anchor_mask.long()
+        visible_anchor = anchor*(1 - visible_mask)
         anchor_encodings = self.anchor_encoder(visible_anchor)
         anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
 
