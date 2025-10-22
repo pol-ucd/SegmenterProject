@@ -360,7 +360,7 @@ def main(params: Dict[str, Any]):
 
     # Instantiate the masking utility
     # mask_generator = CompositeMask(mask_ratio=MASK_RATIO)
-    mask_generator = CompositeMask(shapes_per_image=SHAPES_PER_MASK)
+    mask_generator = CompositeMask(shapes_per_image=params['num_shapes'])
 
     """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
     best_loss = float('inf')
@@ -468,6 +468,7 @@ def get_args():
     parser.add_argument("-lr", "--learning_rate", type=float, default=1e-5, )
     parser.add_argument("-p", "--prefix", type=str, default='moco_msn', )
     parser.add_argument("-ro", "--run_once", type=bool, default=False, )
+    parser.add_argument("-ns", "--num_shapes", type=int, default=24, )
 
     args = parser.parse_args()
 
@@ -477,7 +478,8 @@ def get_args():
               'num_epochs': args.num_epochs,
               'learning_rate': args.learning_rate,
               'prefix': args.prefix,
-              'run_once': bool(args.run_once),}
+              'run_once': bool(args.run_once),
+              'num_shapes': int(args.num_shapes),}
 
     return params
 
