@@ -149,7 +149,7 @@ class MoCoMSN(nn.Module):
         print(f"MoCoMSN.__init__() CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
     def forward(self, anchor: torch.Tensor, target: torch.Tensor) -> Tuple[Any, Any, Any]:
-        print(f"MoCoMSN.forward() CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
+        print(f"MoCoMSN.forward() Entering CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
         with torch.no_grad():
             target_encodings = self.target_encoder(target)
             target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
@@ -166,6 +166,8 @@ class MoCoMSN(nn.Module):
                 mode='bilinear',
                 align_corners=False
             )
+
+        print(f"MoCoMSN.forward() Exiting CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
         return anchor_encodings_upscaled, target_encodings_upscaled, mask_encodings_upscaled
 
