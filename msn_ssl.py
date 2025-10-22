@@ -361,8 +361,6 @@ def main(params: Dict[str, Any]):
 
     logger.info(f'Using device: {device}')
 
-    sys.exit("DEBUG")
-
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
 
@@ -378,6 +376,8 @@ def main(params: Dict[str, Any]):
                                          worker_init_fn=hdf5_worker_init_fn
                                          )
 
+    print("CUDA memory usage: ", torch.cuda.memory_usage(device=device))
+    sys.exit(99)
     # Instantiate the masking utility
     # mask_generator = CompositeMask(mask_ratio=MASK_RATIO)
     mask_generator = CompositeMask(shapes_per_image=params['num_shapes'])
