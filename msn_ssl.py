@@ -420,13 +420,13 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
 
             print(f"Processing: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device=device))
-            print(f"Processing: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device='cuda:0'))
+            print(f"Processing: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device='cuda'))
 
             with autocast(device_type=device_type):
                 x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled = model(x_anchor, z_target)
 
                 print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device=device))
-                print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device='cuda:0'))
+                print(f"Exiting: CUDA memory usage (cuda:0): ", torch.cuda.memory_usage(device='cuda'))
                 sys.exit(99)
 
                 x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
