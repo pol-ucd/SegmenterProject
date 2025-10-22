@@ -37,6 +37,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
         total_loss = total_loss + masked.sum() / denom
 
     final_loss = total_loss / float(len(predictions))
+    print(final_loss)
     return final_loss
 
 

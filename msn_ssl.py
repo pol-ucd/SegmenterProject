@@ -428,11 +428,11 @@ def main(params: Dict[str, Any]):
             with autocast(device_type=device_type):
                 x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled = model(x_anchor, z_target)
 
-                # print(f"Exiting: CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
-                # sys.exit(99)
-
-                x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
+                # x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled)
+
+                if not torch.isfinite(loss):
+                    logger.warning("Warning: loss is not finite!")
 
                 try:
                     assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
@@ -448,9 +448,6 @@ def main(params: Dict[str, Any]):
                         f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
 
             epoch_loss += [loss.item()]
-
-            if not torch.isfinite(loss):
-                logger.warning("Warning: loss is not finite!")
 
             if scaler is not None:
                 scaler.scale(loss).backward()
