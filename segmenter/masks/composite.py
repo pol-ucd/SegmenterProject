@@ -7,7 +7,7 @@ from segmenter.masks import (FluidMask, InstrumentMask, RandomShapeMask, FoldMas
 
 
 class CompositeMask:
-    def __init__(self, mask_ratio: float = 0.1, shapes_per_image: int = 7):
+    def __init__(self, mask_ratio: float = 0.7, shapes_per_image: int = 7):
         """
         Orchestrator class for generating batches of composite masks.
 
@@ -59,7 +59,7 @@ class CompositeMask:
 
         # Prepare a list of all 2D masks needed for the entire batch
         all_2d_masks = []
-
+        percentage_covered = 0.0
         # Generate all 2D masks (fast part)
         for _ in range(total_shapes):
             # Pick a random mask generator
@@ -68,6 +68,9 @@ class CompositeMask:
 
             # Generate the single 2D mask (H, W)
             mask_2d = mask_gen._mask2D(h, w)
+            percentage_covered += self._mask_percentage(mask_2d)
+            if percentage_covered > self.mask_ratio:
+                break
             all_2d_masks.append(mask_2d)
 
         # Stack all masks into a single 3D array: (Total_Shapes, H, W)
