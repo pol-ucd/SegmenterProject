@@ -416,11 +416,6 @@ def main(params: Dict[str, Any]):
             """ Target images """
             z_target = batch['targets'].to(device)
 
-
-            print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device=device))
-            print(f"Exiting: CUDA memory usage ({device}): ", torch.cuda.memory_usage(device='cuda:0'))
-            sys.exit(99)
-
             optimizer.zero_grad()
 
             if debug_run:
