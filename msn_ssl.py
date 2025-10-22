@@ -147,6 +147,7 @@ class MoCoMSN(nn.Module):
         self.anchor_encoder = MSNSegFormerAdaptor(backbone)
         self.target_encoder = deepcopy(self.anchor_encoder)
         self._set_requires_grad(self.target_encoder, False)
+        print(f"MoCoMSN __init__ CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
 
     def forward(self, anchor: torch.Tensor, target: torch.Tensor) -> Tuple[Any, Any, Any]:
         # anchor = anchor.to(target.device)
