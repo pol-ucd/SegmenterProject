@@ -141,7 +141,7 @@ class TransformClamp(torch.nn.Module):
         super(TransformClamp, self).__init__()
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return x.clamp(min=0, max=1)
+        return torch.clamp(x, min=0.0, max=1.0)
 
 class SSLTransformPipeline:
     """
@@ -203,9 +203,10 @@ class SSLTransformPipeline:
             v2.RandomHorizontalFlip(p=0.5),  # Standard geometric augmentation
             TransformCheckNan("After v2.RandomHorizontalFlip()"),
             # 2. Photometric: Strong Color Jitter
+            TransformClamp(),
             v2.RandomApply([color_jitter], p=0.5),
             TransformClamp(),
-            TransformCheckNan("After color_jitter"),
+            TransformCheckNan("After color_jitter .... Anchor"),
             v2.RandomGrayscale(p=0.2),
             TransformCheckNan("v2.RandomGrayscale"),
             # 3. Regularization: Gaussian Blur (p=0.5 is common for Anchor)
@@ -225,8 +226,10 @@ class SSLTransformPipeline:
                                  interpolation=InterpolationMode.BICUBIC),
             v2.RandomHorizontalFlip(p=0.5),
             # 2. Photometric: Strong Color Jitter
+            TransformClamp(),
             v2.RandomApply([color_jitter], p=0.8),
             TransformClamp(),
+            TransformCheckNan("After color_jitter .... Target"),
             v2.RandomGrayscale(p=0.2),
             # 3. Non-linear Augmentation: Solarization (key for non-collapse)
             v2.RandomApply([solarize_transform], p=0.2),
@@ -246,8 +249,10 @@ class SSLTransformPipeline:
                                      interpolation=InterpolationMode.BICUBIC),
                 v2.RandomHorizontalFlip(p=0.5),
                 # 2. Photometric: Strong Color Jitter
+                TransformClamp(),
                 v2.RandomApply([color_jitter], p=0.8),
                 TransformClamp(),
+                TransformCheckNan("After color_jitter .... Local"),
                 v2.RandomGrayscale(p=0.2),
                 # 3. Regularization: Reduced Gaussian Blur probability for local views
                 v2.RandomApply([v2.GaussianBlur(kernel_size=3)], p=0.1),
