@@ -247,6 +247,15 @@ class SSLTransformPipeline:
 
         except KeyError:
             raise SSLTransformException("No images found in input. Include images using the 'images' key.")
+        if torch.isnan(results['images']).any():
+            raise ValueError("NaN in input data: results['images']")
+        if torch.isnan(results['anchors']).any():
+            raise ValueError("NaN in input data: results['anchors']")
+        if torch.isnan(results['targets']).any():
+            raise ValueError("NaN in input data: results['targets']")
+        if torch.isnan(results['local_anchors']).any():
+            raise ValueError("NaN in input data: results['local_anchors']")
+
 
         return results
 
