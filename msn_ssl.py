@@ -34,6 +34,7 @@ MASK_RATIO = 0.7
 PATCH_SIZE = 4  # 4x4 patches for SegFormer MiT [1]
 IMAGE_H = 512
 IMAGE_W = 512
+debug_run = True
 
 # source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/Classica.h5"
 # source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/pretrain_images.h5"
@@ -323,6 +324,19 @@ def show_batch(loader: DataLoader, n_batches: int = 1) -> None:
             break
     return
 
+def report_cuda_memory_usage(device: torch.device, label=None) -> None:
+
+    if device.type.startswith('cuda'):
+        out_str = label if label is not None else ""
+        out_str += f"\nMemory Summary: \n{torch.cuda.memory_summary(device=device, abbreviated=True)}\n"
+        out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
+
+        out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
+        out_str += f"Reserved: {torch.cuda.memory_reserved() / (1024**2):.2f} MB\n"
+    else:
+        out_str = f"\nMDevice {device} is not a CUDA device\n"
+    return out_str
+
 
 def main(params: Dict[str, Any]):
     logger = logging.getLogger(__name__)
@@ -341,6 +355,9 @@ def main(params: Dict[str, Any]):
         device = torch.device('cpu')
         device_type = 'cpu'
         scaler = None
+
+    if debug_run:
+        logger.debug(report_cuda_memory_usage(device, label='Beginning of run'))
 
     logger.info(f'Using device: {device}')
 
@@ -383,6 +400,10 @@ def main(params: Dict[str, Any]):
 
     logger.info(f"Starting training for {params['num_epochs']} epochs")
     model.train()
+
+    if debug_run:
+        logger.debug(report_cuda_memory_usage(device, label='About to start training'))
+
     for epoch in range(params['num_epochs']):
         logger.info(f"Starting Epoch {epoch + 1} / {params['num_epochs']}")
         epoch_loss = []
@@ -400,10 +421,17 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
+            if debug_run:
+                logger.debug(report_cuda_memory_usage(device, label='Before call to model.forward()'))
+
             with autocast(device_type=device_type):
                 x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled = model(x_anchor, z_target)
+                if debug_run:
+                    logger.debug(report_cuda_memory_usage(device, label='After call to model.forward()'))
                 # x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, mask_encodings_upscaled)
+                if debug_run:
+                    logger.debug(report_cuda_memory_usage(device, label='After call to loss criterion'))
 
                 try:
                     assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
