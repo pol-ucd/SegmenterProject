@@ -420,7 +420,8 @@ def main(params: Dict[str, Any]):
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
         device_type = 'cuda'
-        scaler = torch.amp.GradScaler()
+        # scaler = torch.amp.GradScaler()
+        scaler = None
     else:
         device = torch.device('cpu')
         device_type = 'cpu'
@@ -498,7 +499,7 @@ def main(params: Dict[str, Any]):
             #                  f"z_target: {torch.isnan(z_target).any()}, local_anchors: {torch.isnan(local_anchors).any()}")
 
             optimizer.zero_grad()
-            torch.cuda.empty_cache()
+
             with autocast(device_type=device_type):
 
                 x_anchor_upscaled = student_model(x_anchor_masked)
