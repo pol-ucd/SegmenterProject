@@ -452,10 +452,10 @@ def main(params: Dict[str, Any]):
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
 
-                # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
-                #         0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
+                loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled) +
+                        0.5*criterion(local_anchors_upscaled, z_target_upscaled))
                 # loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
-                loss = criterion(x_anchor_upscaled, z_target_upscaled)
+                # loss = criterion(x_anchor_upscaled, z_target_upscaled)
 
                 check_is_finite(logger, loss)
 
