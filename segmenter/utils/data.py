@@ -157,7 +157,7 @@ class SSLTransformPipeline:
                  size: Tuple[int, int] = (512, 512),
                  global_crop_scale: Tuple[float, float] = (0.4, 1.0),
                  # Parameters for local crops, following DINO's common settings
-                 num_local_crops: int = 8,
+                 num_local_crops: int = 1,
                  local_crop_size: Tuple[int, int] = (96, 96),
                  local_crop_scale: Tuple[float, float] = (0.05, 0.4)):
         """
