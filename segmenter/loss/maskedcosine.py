@@ -33,6 +33,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
         denom = total_visible * emb_A.shape[1]
 
         print(report_cuda_memory_usage(device=device, label='After call to F.cosine_similarity'))
+        print(stage_loss.shape, visible_mask.shape)
         masked = stage_loss * visible_mask      # shape (B,H,W)
         print(report_cuda_memory_usage(device=device, label='After calculating masked'))
 
