@@ -542,7 +542,7 @@ def main(params: Dict[str, Any]):
             boredom = 0
             logger.info("Saving best snapshot of SegFormer state dict for fine-tuning.")
             try:
-                best_model = model.anchor_encoder.model.state_dict()
+                best_model = student_model.model.state_dict()
                 torch.save(best_model,
                            f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pt')
             except Exception as e:
