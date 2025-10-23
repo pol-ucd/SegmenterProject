@@ -42,7 +42,7 @@ def enc_cosine_similarity_loss(predictions, targets):
     device = predictions[0].device
     dtype = predictions[0].dtype
     eps = 1e-08
-    total_loss = torch.tensor([0.0], device=device, dtype=dtype)
+    total_loss = torch.tensor(0.0, device=device, dtype=dtype)
 
     for emb_A, emb_B in zip(predictions, targets):
         emb_A = emb_A / (emb_A.norm(dim=1, keepdim=True) + eps)
