@@ -480,9 +480,12 @@ def main(params: Dict[str, Any]):
             """ Anchor images """
             x_anchor = batch['anchors'].to(device)
             x_anchor.requires_grad = True
+            pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool()).to(device)
 
             local_anchors = batch['local_anchors']
             local_anchors.requires_grad = True
+            n_local_repeats = int(local_anchors.shape[0] / pixel_mask.shape[0])
+            local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1).to(device)
 
             """ Target images """
             z_target = batch['targets'].to(device)
@@ -494,10 +497,8 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
-                pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool()).to(device)
+
                 x_anchor_upscaled = student_model(x_anchor*pixel_mask)
-                n_local_repeats = int(local_anchors.shape[0] / pixel_mask.shape[0])
-                local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1).to(device)
                 local_anchors_upscaled = student_model(local_anchors*local_pixel_mask)
 
                 with torch.no_grad():
