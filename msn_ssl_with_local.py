@@ -494,15 +494,15 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
-                pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool())
+                pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool()).to(device)
                 x_anchor_upscaled = student_model(x_anchor*pixel_mask)
                 n_local_repeats = int(local_anchors.shape[0] / pixel_mask.shape[0])
-                local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1)
+                local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1).to(device)
                 local_anchors_upscaled = student_model(local_anchors*local_pixel_mask)
 
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
-                    z_local_upscale = z_target_upscaled.repeat(n_local_repeats, 1, 1, 1)
+                    z_local_upscale = z_target_upscaled.repeat(n_local_repeats, 1, 1, 1).to(device)
 
                 # x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
                 loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
