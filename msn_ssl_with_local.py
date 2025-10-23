@@ -501,7 +501,7 @@ def main(params: Dict[str, Any]):
             with autocast(device_type=device_type):
 
                 x_anchor_upscaled = student_model(x_anchor_masked)
-                # local_anchors_upscaled = student_model(local_anchors)
+                local_anchors_upscaled = student_model(local_anchors_masked)
                 # local_output = [[]]*len(x_anchor_upscaled)
                 # for n in range(n_local_repeats):
                 #     _output = student_model(local_anchors_masked[n*n_local_repeats:(n+1)*n_local_repeats])
@@ -513,9 +513,9 @@ def main(params: Dict[str, Any]):
                     z_target_upscaled = teacher_model(z_target)
                     # z_local_upscale = z_target_upscaled.repeat(n_local_repeats, 1, 1, 1).to(device)
 
-                # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
-                #         0.5*criterion(local_anchors_upscaled, z_local_upscale, local_pixel_mask))
-                loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
+                loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
+                        0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
+                # loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
 
                 check_is_finite(logger, loss)
 
