@@ -23,20 +23,14 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     total_loss = 0.0  # torch.zeros((), dtype=dtype, device=device)
 
     for emb_A, emb_B in zip(predictions, targets):
-        # emb_A = emb_A.to(device=device, dtype=dtype)
-        # emb_B = emb_B.to(device=device, dtype=dtype)
-
-        # emb_A_n = F.normalize(emb_A, p=2, dim=1)
-        # emb_B_n = F.normalize(emb_B, p=2, dim=1)
         print(report_cuda_memory_usage(device=device, label='In cosine_loss loop'))
         stage_loss = 1.0 - F.cosine_similarity(emb_A, emb_B, dim=1)
-
-        # per-patch cosine similarity reduced over channel dim
-        # stage_loss = 1.0 - (emb_A_n * emb_B_n).sum(dim=1)    # shape (B,H,W)
-
-        # stage_loss = 1.0 - similarity                   # shape (B,H,W)
+        print(report_cuda_memory_usage(device=device, label='After call to F.cosine_similarity'))
 
         masked = stage_loss * visible_mask.squeeze(1)  # shape (B,H,W)
+        print(masked.shape)
+        print(report_cuda_memory_usage(device=device, label='After calculating masked'))
+
         denom = total_visible * emb_A.shape[1]         # tensor * int -> tensor
 
         total_loss = total_loss + masked.sum() / denom
