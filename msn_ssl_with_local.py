@@ -503,7 +503,7 @@ def main(params: Dict[str, Any]):
                 x_anchor_upscaled = student_model(x_anchor_masked)
                 local_output = [[]]*len(x_anchor_upscaled)
                 for n in range(n_local_repeats):
-                     _output = student_model(local_anchors_masked[n*n_local_repeats:(n+1)*n_local_repeats])
+                    _output = student_model(local_anchors_masked[n*n_local_repeats:(n+1)*n_local_repeats])
                     for i in range(len(_output)):
                         local_output[i] += _output[i]
                 local_anchors_upscaled = tuple(torch.stack(l_o, dim=0) for l_o in local_output)
