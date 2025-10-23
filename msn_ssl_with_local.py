@@ -511,7 +511,8 @@ def main(params: Dict[str, Any]):
 
                 # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
                 #         0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
-                loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
+                # loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
+                loss = criterion(x_anchor_upscaled, z_target_upscaled)
 
                 check_is_finite(logger, loss)
 
