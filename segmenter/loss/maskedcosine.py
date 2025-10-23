@@ -12,7 +12,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     device = predictions[0].device
     dtype = predictions[0].dtype
 
-    visible_mask = (1.0 - patch_mask).to(device=device, dtype=dtype)  # (B,1,H,W)
+    visible_mask = patch_mask.to(device=device, dtype=dtype)  # (B,1,H,W)
     total_visible = visible_mask.sum()                               # tensor
 
     # If no visible patches return zero that is attached to the graph
