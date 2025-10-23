@@ -17,7 +17,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     total_visible = visible_mask.sum().item()                               # tensor
 
     # If no visible patches return zero that is attached to the graph
-    if total_visible.item() == 0:
+    if total_visible == 0:
         return (predictions[0].sum() * 0.0) #.to(device=device, dtype=dtype)
 
     total_loss = 0.0  # torch.zeros((), dtype=dtype, device=device)
