@@ -41,14 +41,13 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask):
 def enc_cosine_similarity_loss(predictions, targets):
     device = predictions[0].device
     dtype = predictions[0].dtype
-
+    eps = 1e-08
     total_loss = torch.tensor([0.0], device=device, dtype=dtype)
 
     for emb_A, emb_B in zip(predictions, targets):
-        emb_A = emb_A / emb_A.norm(dim=1, keepdim=True)
-        emb_B = emb_B / emb_B.norm(dim=1, keepdim=True)
+        emb_A = emb_A / (emb_A.norm(dim=1, keepdim=True) + eps)
+        emb_B = emb_B / (emb_B.norm(dim=1, keepdim=True) + eps)
         similarity_matrix = torch.matmul(emb_A, emb_B.transpose(-2, -1))
-
 
         total_loss += 1.0 - similarity_matrix.mean()
     if not torch.isfinite(total_loss):
@@ -78,7 +77,7 @@ class EncodingCosineSimilarityLoss(BaseLoss):
     def __call__(self, embeddings_A: Union[Tuple, List],
                  embeddings_B: Union[Tuple, List]) -> torch.Tensor:
         return enc_cosine_similarity_loss(predictions=embeddings_A,
-                                             targets=embeddings_B)
+                                          targets=embeddings_B)
 
     forward = __call__
 
