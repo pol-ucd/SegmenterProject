@@ -100,7 +100,7 @@ def main():
     # logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
-    test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+    test_sizes = [0.1]
     n_folds = 5
     metrics = {"case": [],
                "test_split": [],
@@ -206,13 +206,7 @@ def main():
             """
             Setup the model 
             """
-            # model_config = SegformerConfig.from_pretrained(pretrained_model)
-            # model_config.num_labels = num_classes
-            # model = SegformerForSemanticSegmentation.from_pretrained(
-            #     pretrained_model,
-            #     config=model_config,
-            #     ignore_mismatched_sizes=True
-            # )
+
             model = BaseSegmenter(pretrained_model=pretrained_model,
                                             num_classes=num_classes)
 
