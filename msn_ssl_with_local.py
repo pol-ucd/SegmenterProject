@@ -26,10 +26,10 @@ from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_wo
 import os
 
 # Force synchronous CUDA errors to surface
-# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 # Enable autograd anomaly detection and print where NaNs appear
-# torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 """ End of debug stuff """
 
 MASK_RATIO = 0.7
@@ -475,7 +475,7 @@ def main(params: Dict[str, Any]):
         logger.info(f"Starting Epoch {epoch + 1} / {params['num_epochs']}")
         epoch_loss = []
         for idx, batch in enumerate(tqdm(loader)):
-            report_cuda_memory_usage(device=device, label='Beginning of epoch')
+            print(report_cuda_memory_usage(device=device, label='Beginning of epoch'))
             """ Anchor images """
             x_anchor = batch['anchors']
 
@@ -498,7 +498,7 @@ def main(params: Dict[str, Any]):
             del x_anchor
             del batch
 
-            report_cuda_memory_usage(device=device, label='End of initial data setup')
+            print(report_cuda_memory_usage(device=device, label='End of initial data setup'))
 
             # if torch.isnan(x_anchor).any() or torch.isnan(z_target).any() or torch.isnan(local_anchors).any():
             #     logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor).any()}, "
