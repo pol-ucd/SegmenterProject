@@ -51,7 +51,8 @@ def enc_cosine_similarity_loss(predictions, targets):
 
 
         total_loss += 1.0 - similarity_matrix.mean()
-
+    if not torch.isfinite(total_loss):
+        print("Infinite ....>!!!")
     return total_loss
 
 
