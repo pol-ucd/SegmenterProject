@@ -244,7 +244,7 @@ def ema_update(student_net: BackboneWrapperBase, teacher_net: BackboneWrapperBas
         teacher_encoder = teacher_net.get_encoder()
         student_decoder = student_net.get_decoder()
         teacher_decoder = teacher_net.get_decoder()
-        for q, k in zip(student_encoder.parameters(), teacher_encoder.encoder.parameters()):
+        for q, k in zip(student_encoder.parameters(), teacher_encoder.parameters()):
             k.data.mul_(momentum).add_(q.data * (1.0 - momentum))
         for q, k in zip(student_decoder.parameters(), teacher_decoder.parameters()):
             k.data.mul_(momentum).add_(q.data * (1.0 - momentum))
