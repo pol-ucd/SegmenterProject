@@ -81,6 +81,25 @@ class BackboneWrapperBase(nn.Module):
         self.decoder = decoder
 
 
+    @staticmethod
+    def _get_components(item: torch.nn.Module) -> List[str]:
+        """
+        Helper for exploring the layers in a model. The layers are not always named as
+        expected
+        :param item: An instantiate model.
+        :return: a list of layer names
+        """
+        keys = set()
+        for key, value in item.named_parameters():
+            key_0 = key.split('.')[0]
+            keys.add(key_0)
+        return list(keys)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(backbone={self.backbone})"
+
+
+
 class SegFormerBackboneWrapper(BackboneWrapperBase):
     """
     Wrapper for SegFormer backbone model. Exposes the encodings produced by the backbone
@@ -104,78 +123,13 @@ class SegFormerBackboneWrapper(BackboneWrapperBase):
                 can just assume everything is as follow 
                 """
         self.encoder = self.model.segformer.encoder
+        # Include the decoder head in case we want to replace it later
         self.decoder = self.model.decode_head
 
-        """
-        In general case can check what the names of each component is:
-
-        encoder_components = self._get_cmponents(self.encoder)
-
-        But we have a predefined model here.
-        """
-        # self.patch_embeddings = self.encoder.patch_embeddings  # List of 4 patch embedding modules
-        # self.blocks = self.encoder.block  # List of 4 ModuleLists of blocks
-        # self.norms = self.encoder.layer_norm  # List of 4 Norm modules
-
-        # self.processor = SegformerImageProcessor()
-        # Determine the patch size/stride for the first stage (MiT-style structure)
-        # self.strides = self.encoder.config.patch_sizes
-        # self.initial_stride = self.strides[0]
-        # self.hidden_dims = self.encoder.config.hidden_sizes
-        # self.initial_hidden_dim = self.hidden_dims[0]
 
     def forward(self, x: torch.Tensor, **kwargs) -> List[torch.Tensor]:
-        encodings = self.model(x, output_hidden_states=True, return_dict=True)['hidden_states']
-        upscaled_encodings = [F.interpolate(enc,
-                                            size=x.shape[-2:],
-                                            mode="bilinear",
-                                            align_corners=False) for enc in encodings]
-        return upscaled_encodings
-
-
-    #
-    # def mask2patches(self, mask: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
-    #     """
-    #     Calculate Patch Embeddings from the backbone model patch embeddings layer.
-    #     Runs the first patch embedding module only.
-    #     :param mask: torch.Tensor 0-1 mask
-    #     :return: Tuple[torch.Tensor(patch_embedding(B, HxW, N_features),
-    #                         int(Height - e.g. 128), int(Width - e.g. 128)]
-    #     """
-    #     return self.initial_patch_layer(mask)
-    #
-    # # --------------------------------------------------------------------------
-    # # 4) Function to Upscale SegFormer Embeddings
-    # # --------------------------------------------------------------------------
-    # @staticmethod
-    # def upscale_embeddings(stage_embeddings: Union[List[torch.Tensor], Tuple[torch.Tensor]]):
-    #     """Upscales all encoder outputs to the spatial resolution of the initial patches (L1)."""
-    #
-    #     _, _, h_upscale, w_upscale = stage_embeddings[0].shape
-    #
-    #     upscaled_outputs = []
-    #     for features in stage_embeddings:
-    #         upscaled_spatial = F.interpolate(
-    #             features,
-    #             size=(h_upscale, w_upscale),
-    #             mode='bilinear',
-    #             align_corners=False
-    #         )
-    #
-    #         upscaled_outputs.append(upscaled_spatial)
-    #     return tuple(upscaled_outputs)
-    #
-    # @staticmethod
-    # def _get_components(item: torch.nn.Module) -> List[str]:
-    #     keys = set()
-    #     for key, value in item.named_parameters():
-    #         key_0 = key.split('.')[0]
-    #         keys.add(key_0)
-    #     return list(keys)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(backbone={self.backbone})"
-
+        encodings = self.encoder(x, output_hidden_states=True, return_dict=True)['hidden_states']
+        return encodings
 
 class OldMoCoMSN(nn.Module):
     def __init__(self, backbone: SegFormerBackboneWrapper = SegFormerBackboneWrapper(backbone_name),
@@ -394,18 +348,6 @@ def show_batch(loader: DataLoader, n_batches: int = 1) -> None:
         else:
             break
     return
-
-
-# def report_cuda_memory_usage(device: torch.device, label=None) -> str:
-#     if device.type.startswith('cuda'):
-#         out_str = label if label is not None else ""
-#         out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
-#
-#         out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
-#         out_str += f"Reserved: {torch.cuda.memory_reserved() / (1024**2):.2f} MB\n"
-#     else:
-#         out_str = f"\nMDevice {device} is not a CUDA device\n"
-#     return out_str
 
 
 def main(params: Dict[str, Any]):
