@@ -19,7 +19,7 @@ from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
 from segmenter.core import report_cuda_memory_usage
-from segmenter.loss import MaskedCosineSimilarityLoss
+from segmenter.loss import MaskedCosineSimilarityLoss, EncodingCosineSimilarityLoss
 from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
@@ -461,7 +461,8 @@ def main(params: Dict[str, Any]):
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
 
-    criterion = MaskedCosineSimilarityLoss(reduce='mean')
+    # criterion = MaskedCosineSimilarityLoss(reduce='mean')
+    criterion = EncodingCosineSimilarityLoss()
 
     """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
     best_loss = float('inf')
