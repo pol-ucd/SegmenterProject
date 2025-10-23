@@ -476,7 +476,6 @@ def main(params: Dict[str, Any]):
         logger.info(f"Starting Epoch {epoch + 1} / {params['num_epochs']}")
         epoch_loss = []
         for idx, batch in enumerate(tqdm(loader)):
-            print(report_cuda_memory_usage(device=device, label='Beginning of epoch'))
             """ Anchor images """
             x_anchor = batch['anchors']
 
@@ -499,12 +498,6 @@ def main(params: Dict[str, Any]):
             del x_anchor
             del batch
 
-            print(report_cuda_memory_usage(device=device, label='End of initial data setup'))
-
-            # if torch.isnan(x_anchor).any() or torch.isnan(z_target).any() or torch.isnan(local_anchors).any():
-            #     logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor).any()}, "
-            #                  f"z_target: {torch.isnan(z_target).any()}, local_anchors: {torch.isnan(local_anchors).any()}")
-
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
@@ -513,8 +506,8 @@ def main(params: Dict[str, Any]):
 
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
+                    del z_target
 
-                print(report_cuda_memory_usage(device=device, label='After autocast section'))
                 # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
                 #         0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
                 loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
