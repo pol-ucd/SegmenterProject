@@ -498,20 +498,19 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            # with autocast(device_type=device_type):
+            with autocast(device_type=device_type):
 
-            x_anchor_upscaled = student_model(x_anchor_masked)
-            local_anchors_upscaled = student_model(local_anchors_masked)
+                x_anchor_upscaled = student_model(x_anchor_masked)
+                local_anchors_upscaled = student_model(local_anchors_masked)
 
-            with torch.no_grad():
-                z_target_upscaled = teacher_model(z_target)
-                z_local_upscale = z_target_upscaled.repeat(n_local_repeats, 1, 1, 1).to(device)
+                with torch.no_grad():
+                    z_target_upscaled = teacher_model(z_target)
+                    z_local_upscale = z_target_upscaled.repeat(n_local_repeats, 1, 1, 1).to(device)
 
-            # x_anchor_mask = mask_generator.generate_pixel_mask(x_anchor_upscaled[0]).to(device)
-            loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
-                    0.5*criterion(local_anchors_upscaled, z_local_upscale, local_pixel_mask))
+                loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
+                        0.5*criterion(local_anchors_upscaled, z_local_upscale, local_pixel_mask))
 
-            check_is_finite(logger, loss)
+                check_is_finite(logger, loss)
 
             epoch_loss += [loss.item()]
 
