@@ -30,3 +30,16 @@ def set_default_device(device: torch.device):
         torch.autocast(device.type,
                        dtype=torch.float).__enter__()
     return
+
+
+def report_cuda_memory_usage(device: torch.device, label=None) -> str:
+    if device.type.startswith('cuda'):
+        out_str = label if label is not None else ""
+        out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
+
+        out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
+        out_str += f"Reserved: {torch.cuda.memory_reserved() / (1024**2):.2f} MB\n"
+    else:
+        out_str = f"\nMDevice {device} is not a CUDA device\n"
+    return out_str
+

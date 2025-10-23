@@ -18,6 +18,7 @@ from torchvision.utils import make_grid
 from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
+from segmenter.core import report_cuda_memory_usage
 from segmenter.loss import MaskedCosineSimilarityLoss
 from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
@@ -395,16 +396,16 @@ def show_batch(loader: DataLoader, n_batches: int = 1) -> None:
     return
 
 
-def report_cuda_memory_usage(device: torch.device, label=None) -> str:
-    if device.type.startswith('cuda'):
-        out_str = label if label is not None else ""
-        out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
-
-        out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
-        out_str += f"Reserved: {torch.cuda.memory_reserved() / (1024**2):.2f} MB\n"
-    else:
-        out_str = f"\nMDevice {device} is not a CUDA device\n"
-    return out_str
+# def report_cuda_memory_usage(device: torch.device, label=None) -> str:
+#     if device.type.startswith('cuda'):
+#         out_str = label if label is not None else ""
+#         out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
+#
+#         out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
+#         out_str += f"Reserved: {torch.cuda.memory_reserved() / (1024**2):.2f} MB\n"
+#     else:
+#         out_str = f"\nMDevice {device} is not a CUDA device\n"
+#     return out_str
 
 
 def main(params: Dict[str, Any]):

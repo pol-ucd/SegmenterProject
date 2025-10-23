@@ -6,6 +6,7 @@ from typing import Union, Tuple, List, Optional
 import torch
 import torch.nn.functional as F
 
+from segmenter.core import report_cuda_memory_usage
 from segmenter.loss import BaseLoss
 
 def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean'):
@@ -27,7 +28,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
 
         # emb_A_n = F.normalize(emb_A, p=2, dim=1)
         # emb_B_n = F.normalize(emb_B, p=2, dim=1)
-
+        print(report_cuda_memory_usage(device=device, label='In cosine_loss loop'))
         stage_loss = 1.0 - F.cosine_similarity(emb_A, emb_B, dim=1)
 
         # per-patch cosine similarity reduced over channel dim
