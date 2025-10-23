@@ -24,9 +24,9 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
 
     for emb_A, emb_B in zip(predictions, targets):
         print(report_cuda_memory_usage(device=device, label='In cosine_loss loop'))
-        emb_A_norm = emb_A / emb_A.norm(dim=1, keepdim=True)
-        emb_B_norm = emb_B / emb_B.norm(dim=1, keepdim=True)
-        similarity_matrix = torch.matmul(emb_A_norm, emb_B_norm.transpose(-2, -1))
+        emb_A = emb_A / emb_A.norm(dim=1, keepdim=True)
+        emb_B = emb_B / emb_B.norm(dim=1, keepdim=True)
+        similarity_matrix = torch.matmul(emb_A, emb_B.transpose(-2, -1))
 
         print(report_cuda_memory_usage(device=device, label='After calculating norms'))
         denom = total_visible * emb_A.shape[1]
