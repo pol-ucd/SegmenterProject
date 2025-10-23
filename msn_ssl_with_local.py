@@ -483,7 +483,7 @@ def main(params: Dict[str, Any]):
             pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool()).to(device)
             x_anchor_masked = x_anchor*pixel_mask.float()
 
-            local_anchors = batch['local_anchors']
+            local_anchors = batch['local_anchors'].to(device)
             local_anchors.requires_grad = True
             n_local_repeats = int(local_anchors.shape[0] / pixel_mask.shape[0])
             local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1).to(device)
