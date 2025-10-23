@@ -449,16 +449,15 @@ def main(params: Dict[str, Any]):
     # Instantiate the masking utility
     mask_generator = CompositeMask(shapes_per_image=params['num_shapes'])
 
-    # model = MSNSegFormerAdaptor(backbone=backbone_name)
-    # model = MoCoMSN(backbone=backbone_name, mask_generator=mask_generator).to(device)
-
     """ MoCo setup """
     student_model = SegFormerBackboneWrapper(backbone_name=backbone_name).to(device)
     teacher_model = deepcopy(student_model).to(device)
 
-    optimizer = torch.optim.AdamW(student_model.encoder.parameters(),
-                                  lr=params['learning_rate'],
-                                  weight_decay=1e-2)
+    # optimizer = torch.optim.AdamW(student_model.encoder.parameters(),
+    #                               lr=params['learning_rate'],
+    #                               weight_decay=1e-2)
+    optimizer = torch.optim.SGD(student_model.parameters(),
+                                lr=params['learning_rate'])
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
 
@@ -480,6 +479,7 @@ def main(params: Dict[str, Any]):
             """ Anchor images """
             x_anchor = batch['anchors'].to(device)
             x_anchor.requires_grad = True
+
             pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool()).to(device)
             x_anchor_masked = x_anchor*pixel_mask.float()
 
@@ -491,6 +491,7 @@ def main(params: Dict[str, Any]):
 
             """ Target images """
             z_target = batch['targets'].to(device)
+            z_target.requires_grad = False
 
             # if torch.isnan(x_anchor).any() or torch.isnan(z_target).any() or torch.isnan(local_anchors).any():
             #     logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor).any()}, "
