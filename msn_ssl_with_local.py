@@ -498,7 +498,7 @@ def main(params: Dict[str, Any]):
             #                  f"z_target: {torch.isnan(z_target).any()}, local_anchors: {torch.isnan(local_anchors).any()}")
 
             optimizer.zero_grad()
-
+            torch.cuda.empty_cache()
             with autocast(device_type=device_type):
 
                 x_anchor_upscaled = student_model(x_anchor_masked)
@@ -520,6 +520,7 @@ def main(params: Dict[str, Any]):
 
                 check_is_finite(logger, loss)
 
+            torch.cuda.empty_cache()
             epoch_loss += [loss.item()]
 
             if scaler is not None:
