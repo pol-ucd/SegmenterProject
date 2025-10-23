@@ -13,7 +13,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     device = predictions[0].device
     dtype = predictions[0].dtype
 
-    visible_mask = patch_mask  #.to(device=device, dtype=dtype)  # (B,1,H,W)
+    visible_mask = patch_mask.squeeze(1)  #.to(device=device, dtype=dtype)  # (B,1,H,W)
     total_visible = visible_mask.sum()                               # tensor
 
     # If no visible patches return zero that is attached to the graph
@@ -21,19 +21,20 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
         return (predictions[0].sum() * 0.0) #.to(device=device, dtype=dtype)
 
     total_loss = 0.0  # torch.zeros((), dtype=dtype, device=device)
-    stage_losses = [1.0 - F.cosine_similarity(emb_A, emb_B, dim=1) for emb_A, emb_B in zip(predictions, targets)]
-    print(report_cuda_memory_usage(device=device, label='List comprehension of F.cosine_similarity'))
+    # stage_losses = [1.0 - F.cosine_similarity(emb_A, emb_B, dim=1) for emb_A, emb_B in zip(predictions, targets)]
+    # print(report_cuda_memory_usage(device=device, label='List comprehension of F.cosine_similarity'))
 
     for emb_A, emb_B in zip(predictions, targets):
         print(report_cuda_memory_usage(device=device, label='In cosine_loss loop'))
         stage_loss = 1.0 - F.cosine_similarity(emb_A, emb_B, dim=1)
         print(report_cuda_memory_usage(device=device, label='After call to F.cosine_similarity'))
-        masked = stage_loss * visible_mask.squeeze(1)  # shape (B,H,W)
+        masked = stage_loss * visible_mask      # shape (B,H,W)
         print(report_cuda_memory_usage(device=device, label='After calculating masked'))
 
         denom = total_visible * emb_A.shape[1]         # tensor * int -> tensor
-
+        print(report_cuda_memory_usage(device=device, label='After calculating denom'))
         total_loss = total_loss + masked.sum() / denom
+        print(report_cuda_memory_usage(device=device, label='After calculating total_loss'))
 
     final_loss = total_loss / float(len(predictions))
 
