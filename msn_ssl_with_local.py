@@ -479,7 +479,6 @@ def main(params: Dict[str, Any]):
             """ Anchor images """
             x_anchor = batch['anchors']
 
-
             pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool())
             x_anchor_masked = x_anchor*pixel_mask.float()
 
@@ -496,6 +495,9 @@ def main(params: Dict[str, Any]):
             z_target = batch['targets'].to(device)
             z_target.requires_grad = False
 
+            del x_anchor
+            del batch
+
             # if torch.isnan(x_anchor).any() or torch.isnan(z_target).any() or torch.isnan(local_anchors).any():
             #     logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor).any()}, "
             #                  f"z_target: {torch.isnan(z_target).any()}, local_anchors: {torch.isnan(local_anchors).any()}")
@@ -505,17 +507,11 @@ def main(params: Dict[str, Any]):
             with autocast(device_type=device_type):
 
                 x_anchor_upscaled = student_model(x_anchor_masked)
-                # local_anchors_upscaled = student_model(local_anchors_masked)
-                # local_output = [[]]*len(x_anchor_upscaled)
-                # for n in range(n_local_repeats):
-                #     _output = student_model(local_anchors_masked[n*n_local_repeats:(n+1)*n_local_repeats])
-                #     for i in range(len(_output)):
-                #         local_output[i] += _output[i]
-                # local_anchors_upscaled = tuple(torch.stack(l_o, dim=0) for l_o in local_output)
+                del x_anchor_masked
 
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
-                    # z_local_upscale = z_target_upscaled.repeat(n_local_repeats, 1, 1, 1).to(device)
+                    del z_target
 
                 # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
                 #         0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
