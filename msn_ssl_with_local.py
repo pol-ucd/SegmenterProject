@@ -484,10 +484,10 @@ def main(params: Dict[str, Any]):
             x_anchor_masked = x_anchor*pixel_mask.float()
 
             local_anchors = batch['local_anchors'].to(device)
-            local_anchors.requires_grad = True
-            n_local_repeats = int(local_anchors.shape[0] / pixel_mask.shape[0])
-            local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1).to(device)
-            local_anchors_masked = local_anchors * local_pixel_mask.float()
+            # local_anchors.requires_grad = True
+            # n_local_repeats = int(local_anchors.shape[0] / pixel_mask.shape[0])
+            # local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1).to(device)
+            # local_anchors_masked = local_anchors * local_pixel_mask.float()
 
             """ Target images """
             z_target = batch['targets'].to(device)
@@ -501,7 +501,7 @@ def main(params: Dict[str, Any]):
             with autocast(device_type=device_type):
 
                 x_anchor_upscaled = student_model(x_anchor_masked)
-                local_anchors_upscaled = student_model(local_anchors_masked)
+                # local_anchors_upscaled = student_model(local_anchors_masked)
                 # local_output = [[]]*len(x_anchor_upscaled)
                 # for n in range(n_local_repeats):
                 #     _output = student_model(local_anchors_masked[n*n_local_repeats:(n+1)*n_local_repeats])
@@ -513,9 +513,9 @@ def main(params: Dict[str, Any]):
                     z_target_upscaled = teacher_model(z_target)
                     # z_local_upscale = z_target_upscaled.repeat(n_local_repeats, 1, 1, 1).to(device)
 
-                loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
-                        0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
-                # loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
+                # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
+                #         0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
+                loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
 
                 check_is_finite(logger, loss)
 
