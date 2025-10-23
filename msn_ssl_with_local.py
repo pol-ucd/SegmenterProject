@@ -496,9 +496,6 @@ def main(params: Dict[str, Any]):
             z_target = batch['targets'].to(device)
             z_target.requires_grad = False
 
-            del x_anchor
-            del batch
-
             optimizer.zero_grad()
 
             with autocast(device_type=device_type):
@@ -507,7 +504,6 @@ def main(params: Dict[str, Any]):
 
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
-                    del z_target
 
                 # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
                 #         0.5*criterion(local_anchors_upscaled, z_target_upscaled, local_pixel_mask))
