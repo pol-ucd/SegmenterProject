@@ -25,11 +25,13 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
         # emb_A = emb_A.to(device=device, dtype=dtype)
         # emb_B = emb_B.to(device=device, dtype=dtype)
 
-        emb_A_n = F.normalize(emb_A, p=2, dim=1)
-        emb_B_n = F.normalize(emb_B, p=2, dim=1)
+        # emb_A_n = F.normalize(emb_A, p=2, dim=1)
+        # emb_B_n = F.normalize(emb_B, p=2, dim=1)
+
+        stage_loss = 1.0 - F.cosine_similarity(emb_A, emb_B, dim=1)
 
         # per-patch cosine similarity reduced over channel dim
-        stage_loss = 1.0 - (emb_A_n * emb_B_n).sum(dim=1)    # shape (B,H,W)
+        # stage_loss = 1.0 - (emb_A_n * emb_B_n).sum(dim=1)    # shape (B,H,W)
 
         # stage_loss = 1.0 - similarity                   # shape (B,H,W)
 
