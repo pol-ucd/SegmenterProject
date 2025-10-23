@@ -248,6 +248,8 @@ class SSLTransformPipeline:
                 v2.RandomResizedCrop(size=local_crop_size, scale=local_crop_scale,
                                      interpolation=InterpolationMode.BICUBIC),
                 v2.RandomHorizontalFlip(p=0.5),
+                # Added to make local patches compatible with the 512 size of SegFormer
+                v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
                 # 2. Photometric: Strong Color Jitter
                 TransformClamp(),
                 v2.RandomApply([color_jitter], p=0.8),
