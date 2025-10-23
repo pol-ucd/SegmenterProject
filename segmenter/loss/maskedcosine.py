@@ -12,26 +12,26 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     device = predictions[0].device
     dtype = predictions[0].dtype
 
-    visible_mask = patch_mask.to(device=device, dtype=dtype)  # (B,1,H,W)
+    visible_mask = patch_mask  #.to(device=device, dtype=dtype)  # (B,1,H,W)
     total_visible = visible_mask.sum()                               # tensor
 
     # If no visible patches return zero that is attached to the graph
     if total_visible.item() == 0:
-        return (predictions[0].sum() * 0.0).to(device=device, dtype=dtype)
+        return (predictions[0].sum() * 0.0) #.to(device=device, dtype=dtype)
 
-    total_loss = torch.zeros((), dtype=dtype, device=device)
+    total_loss = 0.0  # torch.zeros((), dtype=dtype, device=device)
 
     for emb_A, emb_B in zip(predictions, targets):
-        emb_A = emb_A.to(device=device, dtype=dtype)
-        emb_B = emb_B.to(device=device, dtype=dtype)
+        # emb_A = emb_A.to(device=device, dtype=dtype)
+        # emb_B = emb_B.to(device=device, dtype=dtype)
 
         emb_A_n = F.normalize(emb_A, p=2, dim=1)
         emb_B_n = F.normalize(emb_B, p=2, dim=1)
 
         # per-patch cosine similarity reduced over channel dim
-        similarity = (emb_A_n * emb_B_n).sum(dim=1)    # shape (B,H,W)
+        stage_loss = 1.0 - (emb_A_n * emb_B_n).sum(dim=1)    # shape (B,H,W)
 
-        stage_loss = 1.0 - similarity                   # shape (B,H,W)
+        # stage_loss = 1.0 - similarity                   # shape (B,H,W)
 
         masked = stage_loss * visible_mask.squeeze(1)  # shape (B,H,W)
         denom = total_visible * emb_A.shape[1]         # tensor * int -> tensor
