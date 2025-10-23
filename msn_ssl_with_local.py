@@ -510,11 +510,9 @@ def main(params: Dict[str, Any]):
             with autocast(device_type=device_type):
 
                 x_anchor_upscaled = student_model(x_anchor_masked)
-                del x_anchor_masked
 
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
-                    del z_target
 
                 print(report_cuda_memory_usage(device=device, label='After autocast section'))
                 # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
@@ -523,7 +521,6 @@ def main(params: Dict[str, Any]):
 
                 check_is_finite(logger, loss)
 
-            torch.cuda.empty_cache()
             epoch_loss += [loss.item()]
 
             if scaler is not None:
@@ -539,7 +536,7 @@ def main(params: Dict[str, Any]):
 
 
             teacher_model = ema_update(student_model, teacher_model)
-
+            torch.cuda.empty_cache()
             if run_once:
                 logger.info(f"Running one time. run_once={run_once}")
                 break
