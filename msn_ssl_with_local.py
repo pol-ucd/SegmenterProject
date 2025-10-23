@@ -424,8 +424,12 @@ def main(params: Dict[str, Any]):
 
             pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool())
             x_anchor_masked = x_anchor*pixel_mask.float()
-
             x_anchor_masked = x_anchor_masked.to(device)
+
+            local_anchors = batch['local_anchors']
+            local_anchors_masked = local_anchors*pixel_mask.float()
+            local_anchors_masked = local_anchors_masked.to(device)
+
             pixel_mask = pixel_mask.to(device)
 
             # local_anchors = batch['local_anchors'].to(device)
@@ -443,6 +447,7 @@ def main(params: Dict[str, Any]):
             with autocast(device_type=device_type):
 
                 x_anchor_upscaled = student_model(x_anchor_masked)
+                local_anchors_upscaled = student_model(local_anchors_masked)
 
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
