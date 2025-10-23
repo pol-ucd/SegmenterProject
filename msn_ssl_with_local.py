@@ -418,7 +418,7 @@ def main(params: Dict[str, Any]):
 
     image_size = (512, 512)
     if torch.cuda.is_available():
-        device = torch.device('cuda:0')
+        device = torch.device('cuda')
         device_type = 'cuda'
         scaler = torch.amp.GradScaler()
     else:
