@@ -14,7 +14,7 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     dtype = predictions[0].dtype
 
     visible_mask = patch_mask.squeeze(1)  #.to(device=device, dtype=dtype)  # (B,1,H,W)
-    total_visible = visible_mask.sum()                               # tensor
+    total_visible = visible_mask.sum().item()                               # tensor
 
     # If no visible patches return zero that is attached to the graph
     if total_visible.item() == 0:
@@ -27,12 +27,12 @@ def masked_cosine_similarity_loss(predictions, targets, patch_mask, reduce='mean
     for emb_A, emb_B in zip(predictions, targets):
         print(report_cuda_memory_usage(device=device, label='In cosine_loss loop'))
         stage_loss = 1.0 - F.cosine_similarity(emb_A, emb_B, dim=1)
+        denom = total_visible * emb_A.shape[1]
+
         print(report_cuda_memory_usage(device=device, label='After call to F.cosine_similarity'))
         masked = stage_loss * visible_mask      # shape (B,H,W)
         print(report_cuda_memory_usage(device=device, label='After calculating masked'))
 
-        denom = total_visible * emb_A.shape[1]         # tensor * int -> tensor
-        print(report_cuda_memory_usage(device=device, label='After calculating denom'))
         total_loss = total_loss + masked.sum() / denom
         print(report_cuda_memory_usage(device=device, label='After calculating total_loss'))
 
