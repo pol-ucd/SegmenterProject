@@ -453,8 +453,8 @@ def main(params: Dict[str, Any]):
     # model = MoCoMSN(backbone=backbone_name, mask_generator=mask_generator).to(device)
 
     """ MoCo setup """
-    student_model = SegFormerBackboneWrapper(backbone_name=backbone_name)
-    teacher_model = deepcopy(student_model)
+    student_model = SegFormerBackboneWrapper(backbone_name=backbone_name).to(device)
+    teacher_model = deepcopy(student_model).to(device)
 
     optimizer = torch.optim.AdamW(student_model.encoder.parameters(),
                                   lr=params['learning_rate'],
