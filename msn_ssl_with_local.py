@@ -396,15 +396,14 @@ def show_batch(loader: DataLoader, n_batches: int = 1) -> None:
 
 
 def report_cuda_memory_usage(device: torch.device, label=None) -> str:
-    out_str = f"Label: {label}, Device; {device}"
-    # if device.type.startswith('cuda'):
-    #     out_str = label if label is not None else ""
-    #     out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
-    #
-    #     out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
-    #     out_str += f"Reserved: {torch.cuda.memory_reserved() / (1024**2):.2f} MB\n"
-    # else:
-    #     out_str = f"\nMDevice {device} is not a CUDA device\n"
+    if device.type.startswith('cuda'):
+        out_str = label if label is not None else ""
+        out_str += f"\nMemory Usage:\n{torch.cuda.memory_usage(device=device)}\n"
+
+        out_str += f"Allocated: {torch.cuda.memory_allocated() / (1024**2):.2f} MB\n"
+        out_str += f"Reserved: {torch.cuda.memory_reserved() / (1024**2):.2f} MB\n"
+    else:
+        out_str = f"\nMDevice {device} is not a CUDA device\n"
     return out_str
 
 
@@ -476,6 +475,7 @@ def main(params: Dict[str, Any]):
         logger.info(f"Starting Epoch {epoch + 1} / {params['num_epochs']}")
         epoch_loss = []
         for idx, batch in enumerate(tqdm(loader)):
+            report_cuda_memory_usage(device=device, label='Beginning of epoch')
             """ Anchor images """
             x_anchor = batch['anchors']
 
@@ -497,6 +497,8 @@ def main(params: Dict[str, Any]):
 
             del x_anchor
             del batch
+
+            report_cuda_memory_usage(device=device, label='End of initial data setup')
 
             # if torch.isnan(x_anchor).any() or torch.isnan(z_target).any() or torch.isnan(local_anchors).any():
             #     logger.error(f"NaN in input data! x_anchor: {torch.isnan(x_anchor).any()}, "
