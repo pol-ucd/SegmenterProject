@@ -420,8 +420,7 @@ def main(params: Dict[str, Any]):
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
         device_type = 'cuda'
-        # scaler = torch.amp.GradScaler()
-        scaler = None
+        scaler = torch.amp.GradScaler()
     else:
         device = torch.device('cpu')
         device_type = 'cpu'
@@ -478,11 +477,14 @@ def main(params: Dict[str, Any]):
         epoch_loss = []
         for idx, batch in enumerate(tqdm(loader)):
             """ Anchor images """
-            x_anchor = batch['anchors'].to(device)
-            x_anchor.requires_grad = True
+            x_anchor = batch['anchors']
 
-            pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool()).to(device)
+
+            pixel_mask = torch.logical_not(mask_generator.generate_pixel_mask(x_anchor).bool())
             x_anchor_masked = x_anchor*pixel_mask.float()
+
+            x_anchor_masked = x_anchor_masked.to(device)
+            pixel_mask = pixel_mask.to(device)
 
             # local_anchors = batch['local_anchors'].to(device)
             # local_anchors.requires_grad = True
