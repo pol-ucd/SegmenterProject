@@ -398,7 +398,7 @@ def main(params: Dict[str, Any]):
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
 
-    criterion = MaskedCosineSimilarityLoss(reduce='mean')
+    criterion = MaskedCosineSimilarityLoss()
     # criterion = EncodingCosineSimilarityLoss()
 
     """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """

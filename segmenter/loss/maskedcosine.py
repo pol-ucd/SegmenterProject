@@ -10,11 +10,11 @@ from segmenter.core import report_cuda_memory_usage
 from segmenter.loss import BaseLoss
 
 
-def masked_cosine_similarity_loss(predictions, targets, patch_mask):
+def masked_cosine_similarity_loss(predictions, targets, mask):
     device = predictions[0].device
     dtype = predictions[0].dtype
 
-    visible_mask = patch_mask  # (B,1,H,W)
+    visible_mask = mask  # (B,1,H,W)
     total_visible = visible_mask.sum().item()  # tensor
 
     # If no visible patches return zero that is attached to the graph
@@ -56,16 +56,15 @@ def enc_cosine_similarity_loss(predictions, targets):
 
 
 class MaskedCosineSimilarityLoss(BaseLoss):
-    def __init__(self, reduce: Optional[str] = 'mean'):
+    def __init__(self):
         super(MaskedCosineSimilarityLoss, self).__init__()
-        self.reduce = reduce
 
     def __call__(self, embeddings_A: Union[Tuple, List], embeddings_B: Union[Tuple, List],
-                 patch_mask: torch.Tensor, reduce: Optional[str] = None) -> torch.Tensor:
+                 mask: torch.Tensor, reduce: Optional[str] = None) -> torch.Tensor:
         self.reduce = reduce if reduce is not None else "mean"
         return masked_cosine_similarity_loss(predictions=embeddings_A,
                                              targets=embeddings_B,
-                                             patch_mask=patch_mask, reduce=reduce)
+                                             mask=mask)
 
     forward = __call__
 
