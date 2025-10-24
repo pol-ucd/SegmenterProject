@@ -52,7 +52,7 @@ def masked_cosine_similarity_loss(predictions, targets, mask):
     total_loss = 0.0
 
     for emb_A, emb_B in zip(predictions, targets):
-        downscale_factor = int(emb_A.shape[-2] / mask.shape[-2])
+        downscale_factor = int( mask.shape[-2] // emb_A.shape[-2])
         scaled_mask = thresholded_downscale_mask(mask, downscale_factor, threshold=0.5)
         total_visible = scaled_mask.sum().item()
         similarity = F.cosine_similarity(emb_A*scaled_mask,
