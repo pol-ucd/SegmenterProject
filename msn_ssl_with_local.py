@@ -398,8 +398,8 @@ def main(params: Dict[str, Any]):
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
 
-    # criterion = MaskedCosineSimilarityLoss(reduce='mean')
-    criterion = EncodingCosineSimilarityLoss()
+    criterion = MaskedCosineSimilarityLoss(reduce='mean')
+    # criterion = EncodingCosineSimilarityLoss()
 
     """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
     best_loss = float('inf')
@@ -442,8 +442,10 @@ def main(params: Dict[str, Any]):
                 with torch.no_grad():
                     z_target_upscaled = teacher_model(z_target)
 
-                loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled) +
-                        0.5*criterion(local_anchors_upscaled, z_target_upscaled))
+                # loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled) +
+                #         0.5*criterion(local_anchors_upscaled, z_target_upscaled))
+                loss = (0.5*criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask) +
+                        0.5*criterion(local_anchors_upscaled, z_target_upscaled, pixel_mask))
                 # loss = criterion(x_anchor_upscaled, z_target_upscaled, pixel_mask)
                 # loss = criterion(x_anchor_upscaled, z_target_upscaled)
 
