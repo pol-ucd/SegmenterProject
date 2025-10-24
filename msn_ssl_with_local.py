@@ -130,56 +130,56 @@ class SegFormerBackboneWrapper(BackboneWrapperBase):
     def forward(self, x: torch.Tensor, **kwargs) -> List[torch.Tensor]:
         encodings = self.encoder(x, output_hidden_states=True, return_dict=True)['hidden_states']
         return encodings
-
-class OldMoCoMSN(nn.Module):
-    def __init__(self, backbone: SegFormerBackboneWrapper = SegFormerBackboneWrapper(backbone_name),
-                 momentum: float = 0.99, mask_generator: CompositeMask = CompositeMask(), ):
-        super().__init__()
-        self.backbone_encoder = backbone
-        self.momentum = float(momentum)
-        self.mask_generator = mask_generator
-
-        self.anchor_encoder = SegFormerBackboneWrapper(backbone)
-        self.target_encoder = deepcopy(self.anchor_encoder)
-        self._set_requires_grad(self.target_encoder, False)
-
-    def forward(self, anchor: torch.Tensor, target: torch.Tensor) -> Tuple[Any, Any, Any]:
-
-        with torch.no_grad():
-            target_encodings = self.target_encoder(target)
-            target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
-        anchor_mask = self.mask_generator.generate_pixel_mask(anchor).to(anchor.device)
-
-        visible_mask = anchor_mask.long()
-        visible_anchor = anchor * (1 - visible_mask)
-        anchor_encodings = self.anchor_encoder(visible_anchor)
-        anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
-
-        h_downscale, w_downscale = anchor_encodings[0].shape[-2:]
-
-        mask_encodings_upscaled = F.interpolate(
-            anchor_mask,
-            size=(h_downscale, w_downscale),
-            mode='bilinear',
-            align_corners=False
-        )
-
-        # print(f"MoCoMSN.forward() Exiting CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
-
-        return anchor_encodings_upscaled, target_encodings_upscaled, mask_encodings_upscaled
-
-    @staticmethod
-    def _set_requires_grad(model: nn.Module, requires_grad: bool):
-        for p in model.parameters():
-            p.requires_grad = requires_grad
-
-    @torch.no_grad()
-    def update_momentum_encoder(self):
-        for q, k in zip(self.anchor_encoder.encoder.parameters(), self.target_encoder.encoder.parameters()):
-            k.data.mul_(self.momentum).add_(q.data * (1.0 - self.momentum))
-        for q, k in zip(self.anchor_encoder.decoder.parameters(), self.target_encoder.decoder.parameters()):
-            k.data.mul_(self.momentum).add_(q.data * (1.0 - self.momentum))
-
+#
+# class OldMoCoMSN(nn.Module):
+#     def __init__(self, backbone: SegFormerBackboneWrapper = SegFormerBackboneWrapper(backbone_name),
+#                  momentum: float = 0.99, mask_generator: CompositeMask = CompositeMask(), ):
+#         super().__init__()
+#         self.backbone_encoder = backbone
+#         self.momentum = float(momentum)
+#         self.mask_generator = mask_generator
+#
+#         self.anchor_encoder = SegFormerBackboneWrapper(backbone)
+#         self.target_encoder = deepcopy(self.anchor_encoder)
+#         self._set_requires_grad(self.target_encoder, False)
+#
+#     def forward(self, anchor: torch.Tensor, target: torch.Tensor) -> Tuple[Any, Any, Any]:
+#
+#         with torch.no_grad():
+#             target_encodings = self.target_encoder(target)
+#             target_encodings_upscaled = self.target_encoder.upscale_embeddings(target_encodings)
+#         anchor_mask = self.mask_generator.generate_pixel_mask(anchor).to(anchor.device)
+#
+#         visible_mask = anchor_mask.long()
+#         visible_anchor = anchor * (1 - visible_mask)
+#         anchor_encodings = self.anchor_encoder(visible_anchor)
+#         anchor_encodings_upscaled = self.anchor_encoder.upscale_embeddings(anchor_encodings)
+#
+#         h_downscale, w_downscale = anchor_encodings[0].shape[-2:]
+#
+#         mask_encodings_upscaled = F.interpolate(
+#             anchor_mask,
+#             size=(h_downscale, w_downscale),
+#             mode='bilinear',
+#             align_corners=False
+#         )
+#
+#         # print(f"MoCoMSN.forward() Exiting CUDA memory usage : ", torch.cuda.memory_usage(device='cuda'))
+#
+#         return anchor_encodings_upscaled, target_encodings_upscaled, mask_encodings_upscaled
+#
+#     @staticmethod
+#     def _set_requires_grad(model: nn.Module, requires_grad: bool):
+#         for p in model.parameters():
+#             p.requires_grad = requires_grad
+#
+#     @torch.no_grad()
+#     def update_momentum_encoder(self):
+#         for q, k in zip(self.anchor_encoder.encoder.parameters(), self.target_encoder.encoder.parameters()):
+#             k.data.mul_(self.momentum).add_(q.data * (1.0 - self.momentum))
+#         for q, k in zip(self.anchor_encoder.decoder.parameters(), self.target_encoder.decoder.parameters()):
+#             k.data.mul_(self.momentum).add_(q.data * (1.0 - self.momentum))
+#
 
 def ema_update(student_net: BackboneWrapperBase, teacher_net: BackboneWrapperBase,
                momentum: float = 0.9) -> BackboneWrapperBase:

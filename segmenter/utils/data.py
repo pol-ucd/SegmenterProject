@@ -595,15 +595,6 @@ class HDF5ImageDataset(HDF5Dataset):
         self.masks = None
         self.original_names = None
 
-    # def _open_hdf5_file(self):
-    #     """
-    #     Opens the HDF5 file and assigns the dataset references.
-    #     This is called by each worker process on first access.
-    #     """
-    #     self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True)
-    #     self.images = self.hdf5_file['images']
-    #     self.masks = self.hdf5_file['masks']
-
     def __len__(self):
         """Returns the number of samples in the current split."""
         if self.is_train_split:

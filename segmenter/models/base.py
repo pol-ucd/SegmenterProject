@@ -61,9 +61,13 @@ class AugurSegmenterBase(nn.Module):
         self.checkpoint_path = checkpoint_path
         self.num_classes = num_classes or 1
         if self.pretrained_model is not None:
-            self.config = SegformerConfig.from_pretrained(self.pretrained_model)
+            try:
+                self.config = SegformerConfig.from_pretrained(self.pretrained_model)
+            except OSError:
+                self.config = SegformerConfig()
         else:
             self.config = SegformerConfig()
+
         self.base_model = None
         if checkpoint_path:
             self.load_model(checkpoint_path)

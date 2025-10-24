@@ -86,11 +86,18 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
         # Set `ignore_mismatched_sizes=True` because we will replace the
         # final classification layer, which will have a different output size.
         if self.pretrained_model is not None:
-            self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-                self.pretrained_model,
-                config=self.config,
-                ignore_mismatched_sizes=True
-            )
+            try:
+                self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+                    self.pretrained_model,
+                    config=self.config,
+                    ignore_mismatched_sizes=True
+                )
+            except OSError:
+                f = torch.load(self.pretrained_model,
+                           # map_location=device,
+                           # map_location=next(model.parameters()).device,
+                           weights_only=False)
+                self.base_model = SegformerForSemanticSegmentation().load_state_dict(f, strict=False)
         else:
             self.base_model = SegformerForSemanticSegmentation(config=self.config)
 
@@ -148,3 +155,10 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
 
         # return logits
         return self.median(logits)   # Smoothed logits
+
+    def load_model(self, path: str):
+        f = torch.load(path,
+                       # map_location=device,
+                       # map_location=next(self.base_model.parameters()).device,
+                       weights_only=False)
+        self.base_model.load_state_dict(f)
