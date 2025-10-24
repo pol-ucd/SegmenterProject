@@ -157,8 +157,5 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
         return self.median(logits)   # Smoothed logits
 
     def load_model(self, path: str):
-        f = torch.load(path,
-                       # map_location=device,
-                       # map_location=next(self.base_model.parameters()).device,
-                       weights_only=False)
-        self.base_model.load_state_dict(f)
+        state_dict = torch.load(path, weights_only=False)
+        self.base_model.load_state_dict(state_dict )
