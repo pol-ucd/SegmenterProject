@@ -23,7 +23,7 @@ from segmenter.loss import MaskedCosineSimilarityLoss, EncodingCosineSimilarityL
 from segmenter.utils import HDF5DatasetOptimized
 from segmenter.utils.data import SSLTransformPipeline, HDF5BatchSampler, hdf5_worker_init_fn
 
-""" DEBUG helpers - COmment out unless debugging """
+""" DEBUG helpers - Comment out unless debugging """
 import os
 
 # Force synchronous CUDA errors to surface
@@ -122,7 +122,7 @@ class SegFormerBackboneWrapper(BackboneWrapperBase):
                 and so on. But we know this is a SegFormerFor Semantic Segmentation model. So we 
                 can just assume everything is as follow 
                 """
-        self.encoder = self.model.segformer.encoder
+        self.encoder = self.model.segformer
         # Include the decoder head in case we want to replace it later
         self.decoder = self.model.decode_head
 
@@ -195,13 +195,8 @@ def ema_update(student_net: BackboneWrapperBase, teacher_net: BackboneWrapperBas
         momentum = 0.9
 
     with torch.no_grad():
-        student_encoder = student_net.get_encoder()
-        teacher_encoder = teacher_net.get_encoder()
-        student_decoder = student_net.get_decoder()
-        teacher_decoder = teacher_net.get_decoder()
-        for q, k in zip(student_encoder.parameters(), teacher_encoder.parameters()):
-            k.data.mul_(momentum).add_(q.data * (1.0 - momentum))
-        for q, k in zip(student_decoder.parameters(), teacher_decoder.parameters()):
+
+        for q, k in zip(student_net.parameters(), teacher_net.parameters()):
             k.data.mul_(momentum).add_(q.data * (1.0 - momentum))
     return teacher_net
 
@@ -395,11 +390,11 @@ def main(params: Dict[str, Any]):
     student_model = SegFormerBackboneWrapper(backbone_name=backbone_name).to(device)
     teacher_model = deepcopy(student_model).to(device)
 
-    # optimizer = torch.optim.AdamW(student_model.encoder.parameters(),
-    #                               lr=params['learning_rate'],
-    #                               weight_decay=1e-2)
-    optimizer = torch.optim.SGD(student_model.parameters(),
-                                lr=params['learning_rate'])
+    optimizer = torch.optim.AdamW(student_model.encoder.parameters(),
+                                  lr=params['learning_rate'],
+                                  weight_decay=1e-2)
+    # optimizer = torch.optim.SGD(student_model.parameters(),
+    #                             lr=params['learning_rate'])
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
 
@@ -432,11 +427,6 @@ def main(params: Dict[str, Any]):
 
             pixel_mask = pixel_mask.to(device)
 
-            # local_anchors = batch['local_anchors'].to(device)
-            # local_anchors.requires_grad = True
-            # n_local_repeats = int(local_anchors.shape[0] / pixel_mask.shape[0])
-            # local_pixel_mask = pixel_mask.repeat(n_local_repeats, 1, 1, 1).to(device)
-            # local_anchors_masked = local_anchors * local_pixel_mask.float()
 
             """ Target images """
             z_target = batch['targets'].to(device)
