@@ -286,7 +286,7 @@ if __name__ == '__main__':
     )
 
     logger = logging.getLogger()
-    params = {'batch_size': 4,
+    params = {'batch_size': 12,
               'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
 
