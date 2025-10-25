@@ -1,3 +1,5 @@
+import logging
+import sys
 from typing import Dict
 
 import torch
@@ -45,7 +47,6 @@ def mask_and_get_visible_tokens(images, patch_size=16, mask_ratio=0.75):
         .permute(0, 2, 3, 1, 4, 5) \
         .reshape(B, N_total, patch_dim)
 
-
     # --- 2. Random Masking ---
     num_masked = int(N_total * mask_ratio)
 
@@ -83,78 +84,77 @@ def mask_and_get_visible_tokens(images, patch_size=16, mask_ratio=0.75):
     return visible_tokens, masked_patches, mask_positions
 
 
-class SimpleDecoder(nn.Module):
-    def __init__(self, config, in_dim, out_h = 512, out_w = 512):
-        super().__init__()
-        self.out_h, self.out_w = out_h, out_w
-        # --- Decoder Layers ---
-        # The decoder takes the encoded token dimension (in_dim) and maps it
-        # to the required output dimensions (out_h, out_w)
-
-        # 1. Main Linear Layer: Maps the hidden state to the patch pixel space
-        # A very simple decoder might only use this one layer.
-
-        self.decoder_pred = nn.Sequential(
-            nn.Linear(in_dim, in_dim // 2),
-            nn.GELU(),
-            nn.Linear(in_dim // 2, out_h*out_w)
-        )
-
-    def forward(self, encoded_visible_tokens, mask):
-        """
-        Args:
-            encoded_visible_tokens (Tensor): (B, N_vis, D) Encoded features from the SegFormer (D is in_dim).
-            mask_positions (Tensor): (B, N_mask) Indices of the masked patches in the full sequence.
-
-        Returns:
-            Tensor: (B, N_mask, patch_dim) Predicted pixel values for the masked patches.
-        """
-        print("encoded_visible_tokens: ", len(encoded_visible_tokens),
-              encoded_visible_tokens[0].shape, encoded_visible_tokens[1].shape,
-              encoded_visible_tokens[2].shape, encoded_visible_tokens[3].shape)
-        B, N_vis, D = encoded_visible_tokens.shape
-        N_mask = mask_positions.shape[1]
-
-        # Create a full sequence of features (Visible + Mask Tokens)
-
-        # Create a batch of mask tokens for the full sequence length (N_vis + N_mask)
-        # The total number of tokens (N_total) might be fixed (e.g., 256 for a 256x256 image / 16x16 patches)
-
-        # Find the max sequence length (N_total)
-        N_total = N_vis + N_mask
-
-        # Create a tensor for the full sequence, initially filled with mask tokens
-        full_sequence = torch.zeros((B, N_total, D), device=encoded_visible_tokens.device)
-
-        # Determine the indices of the visible tokens
-        visible_indices = torch.ones((B, N_total), dtype=torch.bool, device=encoded_visible_tokens.device)
-        # Mark the masked positions as False
-        visible_indices.scatter_(1, mask_positions, False)
-
-        # Place the encoded visible tokens back into their original positions
-        full_sequence[visible_indices] = encoded_visible_tokens.flatten(0, 1)  # B*N_vis, D
-
-        # Fill the mask positions with the learned mask token
-        # The mask token is broadcasted across the batch and sequence length
-        full_sequence[~visible_indices] = self.mask_token.expand(B * N_mask, -1)  # B*N_mask, D
-
-        # 2. Decode: Predict pixel values for ALL tokens (both visible and masked)
-        # However, we only care about the masked positions for the loss calculation.
-        predictions_all = self.decoder_pred(full_sequence)
-
-        # 3. Extract Predictions for Masked Patches
-        # predictions_all is (B, N_total, patch_dim)
-        # The mask_positions tells us which N_mask tokens to extract for the loss
-
-        # Get the indices in a way that can be used to gather (B, N_mask, patch_dim)
-        mask_positions_expanded = mask_positions.unsqueeze(-1).expand(-1, -1, self.patch_dim)
-
-        predicted_patches = torch.gather(predictions_all, dim=1, index=mask_positions_expanded)
-
-        return predicted_patches  # (B, N_mask, patch_dim)
+#
+# class SimpleDecoder(nn.Module):
+#     def __init__(self, config, in_dim, out_h = 512, out_w = 512):
+#         super().__init__()
+#         self.out_h, self.out_w = out_h, out_w
+#         # --- Decoder Layers ---
+#         # The decoder takes the encoded token dimension (in_dim) and maps it
+#         # to the required output dimensions (out_h, out_w)
+#
+#         # 1. Main Linear Layer: Maps the hidden state to the patch pixel space
+#         # A very simple decoder might only use this one layer.
+#
+#         self.decoder_pred = nn.Sequential(
+#             nn.Linear(in_dim, in_dim // 2),
+#             nn.GELU(),
+#             nn.Linear(in_dim // 2, out_h*out_w)
+#         )
+#
+#     def forward(self, encoded_visible_tokens, mask):
+#         """
+#         Args:
+#             encoded_visible_tokens (Tensor): (B, N_vis, D) Encoded features from the SegFormer (D is in_dim).
+#             mask_positions (Tensor): (B, N_mask) Indices of the masked patches in the full sequence.
+#
+#         Returns:
+#             Tensor: (B, N_mask, patch_dim) Predicted pixel values for the masked patches.
+#         """
+#
+#         B, N_vis, D = encoded_visible_tokens.shape
+#         N_mask = mask_positions.shape[1]
+#
+#         # Create a full sequence of features (Visible + Mask Tokens)
+#
+#         # Create a batch of mask tokens for the full sequence length (N_vis + N_mask)
+#         # The total number of tokens (N_total) might be fixed (e.g., 256 for a 256x256 image / 16x16 patches)
+#
+#         # Find the max sequence length (N_total)
+#         N_total = N_vis + N_mask
+#
+#         # Create a tensor for the full sequence, initially filled with mask tokens
+#         full_sequence = torch.zeros((B, N_total, D), device=encoded_visible_tokens.device)
+#
+#         # Determine the indices of the visible tokens
+#         visible_indices = torch.ones((B, N_total), dtype=torch.bool, device=encoded_visible_tokens.device)
+#         # Mark the masked positions as False
+#         visible_indices.scatter_(1, mask_positions, False)
+#
+#         # Place the encoded visible tokens back into their original positions
+#         full_sequence[visible_indices] = encoded_visible_tokens.flatten(0, 1)  # B*N_vis, D
+#
+#         # Fill the mask positions with the learned mask token
+#         # The mask token is broadcasted across the batch and sequence length
+#         full_sequence[~visible_indices] = self.mask_token.expand(B * N_mask, -1)  # B*N_mask, D
+#
+#         # 2. Decode: Predict pixel values for ALL tokens (both visible and masked)
+#         # However, we only care about the masked positions for the loss calculation.
+#         predictions_all = self.decoder_pred(full_sequence)
+#
+#         # 3. Extract Predictions for Masked Patches
+#         # predictions_all is (B, N_total, patch_dim)
+#         # The mask_positions tells us which N_mask tokens to extract for the loss
+#
+#         # Get the indices in a way that can be used to gather (B, N_mask, patch_dim)
+#         mask_positions_expanded = mask_positions.unsqueeze(-1).expand(-1, -1, self.patch_dim)
+#
+#         predicted_patches = torch.gather(predictions_all, dim=1, index=mask_positions_expanded)
+#
+#         return predicted_patches  # (B, N_mask, patch_dim)
 
 class HybridSegFormer(nn.Module):
-    def __init__(self, config, ):
+    def __init__(self, config, lambda_recon=0.25):
         super().__init__()
 
         # Shared Backbone: SegFormer Encoder ---
@@ -190,7 +190,7 @@ class HybridSegFormer(nn.Module):
         self.reconstruction_loss_fn = nn.MSELoss()
 
         # Hyperparameter for balancing losses
-        self.lambda_recon = 1.0  # Can be tuned
+        self.lambda_recon = lambda_recon
 
     def forward_contrastive(self, x_i, x_j):
         # The encoder returns a BaseModelOutput object.
@@ -199,14 +199,14 @@ class HybridSegFormer(nn.Module):
         # features in the 'hidden_states' attribute by default.
 
         # 1. Get multi-scale features (list of 4 Tensors)
-        output_i = self.encoder(x_i, output_hidden_states=True, return_dict=True).hidden_states  # List of (B, H/16 * W/16, D_k) Tensors
+        output_i = self.encoder(x_i, output_hidden_states=True,
+                                return_dict=True).hidden_states  # List of (B, H/16 * W/16, D_k) Tensors
         output_j = self.encoder(x_j, output_hidden_states=True, return_dict=True).hidden_states
 
         # 2. Extract the features from the final, highest-level stage (index -1)
         # This gives a tensor of shape (B, N_tokens, D)
         final_tokens_i = output_i[-1].flatten(start_dim=-2, end_dim=-1)
         final_tokens_j = output_j[-1].flatten(start_dim=-2, end_dim=-1)
-
 
         # 3. Custom Global Average Pooling (GAP)
         # Transpose to (B, D, N_tokens) for nn.AdaptiveAvgPool1d, then squeeze the result.
@@ -229,7 +229,7 @@ class HybridSegFormer(nn.Module):
         # Mask a portion of the image and separate into visible tokens and masked patches
         # visible_tokens, masked_patches, mask_positions = mask_and_get_visible_tokens(x)
         pixel_mask = torch.logical_not(self.mask_generator.generate_pixel_mask(x).bool())
-        visible_tokens = x*pixel_mask.float()
+        visible_tokens = x * pixel_mask.float()
 
         # Encode Visible Tokens
         # The encoder only processes the visible tokens
@@ -240,18 +240,18 @@ class HybridSegFormer(nn.Module):
 
         predicted_patches = self.reconstruction_decoder(encoder_output)
         predicted_patches = F.interpolate(predicted_patches,
-                                          size = (h,w),
-                                          mode = 'bilinear',
-                                          align_corners = False)
+                                          size=(h, w),
+                                          mode='bilinear',
+                                          align_corners=False)
 
-        predicted_patches = torch.argmax(predicted_patches, keepdim=True, dim = 1).float()
+        predicted_patches = torch.argmax(predicted_patches, keepdim=True, dim=1).float()
 
         # Compute Reconstruction Loss (L_recon)
         loss_recon = self.reconstruction_loss_fn(predicted_patches, pixel_mask)
 
         return loss_recon
 
-    def forward(self, x: Dict[str, torch.Tensor])-> Dict[str, torch.Tensor]:
+    def forward(self, x: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # --- Contrastive Pass ---
         x_i = x['anchors']
         x_j = x['targets']
@@ -272,11 +272,24 @@ class HybridSegFormer(nn.Module):
 
 
 if __name__ == '__main__':
+    # --- Logging Setup ---
+    logging.basicConfig(
+        level=logging.INFO,
+        force=True,  # Resets any previous configuration - in Colab for example
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("training.log")
+        ]
+    )
+
+    logger = logging.getLogger()
     params = {'batch_size': 4,
               'dataset': '/Users/polmacaonghusa/Documents/Projects/SegmenterProject/data/all_images.hdf5',
-              'num_workers': 4,}
+              'num_workers': 4, }
 
     image_size = (512, 512)
+    prefix = 'hybrid_ssl'
 
     # --- 1. Setup (Conceptual) ---
     # Assume these components are defined and initialized:
@@ -309,7 +322,14 @@ if __name__ == '__main__':
     num_epochs = 10
     # -----------------------------
 
-    print("Starting Self-Supervised Pre-training...")
+    logger.info("Starting Self-Supervised Pre-training...")
+
+    """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
+    best_loss = float('inf')
+    min_delta = 0.0000001
+    boredom = 0
+    max_boredom = 10
+    best_model = None
 
     for epoch in range(num_epochs):
         model.train()  # Set the model to training mode
@@ -347,12 +367,30 @@ if __name__ == '__main__':
             total_epoch_loss += loss_total.item()
 
             if step % 100 == 0:
-                print(f"  Epoch {epoch + 1}/{num_epochs} | Step {step} | "
-                      f"Total Loss: {loss_total.item():.4f} | "
-                      f"Contrastive Loss: {loss_output['loss_contrastive'].item():.4f} | "
-                      f"Reconstruction Loss: {loss_output['loss_reconstruction'].item():.4f}")
+                logger.info(f"  Epoch {epoch + 1}/{num_epochs} | Step {step} | "
+                            f"Total Loss: {loss_total.item():.4f} | "
+                            f"Contrastive Loss: {loss_output['loss_contrastive'].item():.4f} | "
+                            f"Reconstruction Loss: {loss_output['loss_reconstruction'].item():.4f}")
 
         avg_epoch_loss = total_epoch_loss / len(dataloader)
-        print(f"\n---> Epoch {epoch + 1} finished. Average Loss: {avg_epoch_loss:.4f}\n")
+        logger.info(f"\n---> Epoch {epoch + 1} finished. Average Loss: {avg_epoch_loss:.4f}\n")
 
-    print("Pre-training complete.")
+        if avg_epoch_loss + min_delta < best_loss:
+            best_loss = avg_epoch_loss
+            boredom = 0
+            logger.info("Saving best snapshot of SegFormer state dict for fine-tuning.")
+            try:
+                best_model = model.segformer.state_dict()
+                torch.save(best_model,
+                           f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pt')
+            except Exception as e:
+                logger.error(f"Pretraining failed to save `{prefix}_segformer_pretrained.pt`: {e}")
+
+        else:
+            logger.info(f"Getting bored after {boredom} epochs with no useful improvement")
+            boredom += 1
+        if boredom > max_boredom:
+            logger.info(f"No improvement after {boredom} epochs, terminating")
+            break
+
+    logger.info("Pre-training complete.")
