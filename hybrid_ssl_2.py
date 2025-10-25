@@ -176,7 +176,7 @@ class HybridSegFormer(nn.Module):
 
         # Contrastive Branch Heads ---
         # Projection Head (g) for contrastive loss: maps Z to H
-        print(encoder_output_dim)
+
         self.projection_head = nn.Sequential(
             nn.Linear(encoder_output_dim, encoder_output_dim),
             nn.GELU(),
@@ -218,7 +218,7 @@ class HybridSegFormer(nn.Module):
         # This collapses the token dimension (N_tokens) to 1, creating the image embedding (Z).
         z_i = self.global_pool(final_tokens_i.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
         z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
-
+        print(z_i.shape)
         # 4. Project features (H)
         h_i = self.projection_head(z_i)
         h_j = self.projection_head(z_j)
