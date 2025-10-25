@@ -285,7 +285,7 @@ if __name__ == '__main__':
 
     logger = logging.getLogger()
     params = {'batch_size': 4,
-              'dataset': '../segmenter/data/all_images.hdf5',
+              'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
 
     image_size = (512, 512)
