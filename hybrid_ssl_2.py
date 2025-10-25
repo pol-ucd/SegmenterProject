@@ -152,7 +152,7 @@ class HybridSegFormer(nn.Module):
         # z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
         z_i = self.global_pool(final_tokens_i).squeeze(-1)  # Shape: (B, D)
         z_j = self.global_pool(final_tokens_j).squeeze(-1)  # Shape: (B, D)
-        print(z_i.shape, final_tokens_i.shape)
+
         # 4. Project features (H)
         h_i = self.projection_head(z_i)
         h_j = self.projection_head(z_j)
