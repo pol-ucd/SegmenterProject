@@ -86,75 +86,6 @@ def mask_and_get_visible_tokens(images, patch_size=16, mask_ratio=0.75):
     return visible_tokens, masked_patches, mask_positions
 
 
-#
-# class SimpleDecoder(nn.Module):
-#     def __init__(self, config, in_dim, out_h = 512, out_w = 512):
-#         super().__init__()
-#         self.out_h, self.out_w = out_h, out_w
-#         # --- Decoder Layers ---
-#         # The decoder takes the encoded token dimension (in_dim) and maps it
-#         # to the required output dimensions (out_h, out_w)
-#
-#         # 1. Main Linear Layer: Maps the hidden state to the patch pixel space
-#         # A very simple decoder might only use this one layer.
-#
-#         self.decoder_pred = nn.Sequential(
-#             nn.Linear(in_dim, in_dim // 2),
-#             nn.GELU(),
-#             nn.Linear(in_dim // 2, out_h*out_w)
-#         )
-#
-#     def forward(self, encoded_visible_tokens, mask):
-#         """
-#         Args:
-#             encoded_visible_tokens (Tensor): (B, N_vis, D) Encoded features from the SegFormer (D is in_dim).
-#             mask_positions (Tensor): (B, N_mask) Indices of the masked patches in the full sequence.
-#
-#         Returns:
-#             Tensor: (B, N_mask, patch_dim) Predicted pixel values for the masked patches.
-#         """
-#
-#         B, N_vis, D = encoded_visible_tokens.shape
-#         N_mask = mask_positions.shape[1]
-#
-#         # Create a full sequence of features (Visible + Mask Tokens)
-#
-#         # Create a batch of mask tokens for the full sequence length (N_vis + N_mask)
-#         # The total number of tokens (N_total) might be fixed (e.g., 256 for a 256x256 image / 16x16 patches)
-#
-#         # Find the max sequence length (N_total)
-#         N_total = N_vis + N_mask
-#
-#         # Create a tensor for the full sequence, initially filled with mask tokens
-#         full_sequence = torch.zeros((B, N_total, D), device=encoded_visible_tokens.device)
-#
-#         # Determine the indices of the visible tokens
-#         visible_indices = torch.ones((B, N_total), dtype=torch.bool, device=encoded_visible_tokens.device)
-#         # Mark the masked positions as False
-#         visible_indices.scatter_(1, mask_positions, False)
-#
-#         # Place the encoded visible tokens back into their original positions
-#         full_sequence[visible_indices] = encoded_visible_tokens.flatten(0, 1)  # B*N_vis, D
-#
-#         # Fill the mask positions with the learned mask token
-#         # The mask token is broadcasted across the batch and sequence length
-#         full_sequence[~visible_indices] = self.mask_token.expand(B * N_mask, -1)  # B*N_mask, D
-#
-#         # 2. Decode: Predict pixel values for ALL tokens (both visible and masked)
-#         # However, we only care about the masked positions for the loss calculation.
-#         predictions_all = self.decoder_pred(full_sequence)
-#
-#         # 3. Extract Predictions for Masked Patches
-#         # predictions_all is (B, N_total, patch_dim)
-#         # The mask_positions tells us which N_mask tokens to extract for the loss
-#
-#         # Get the indices in a way that can be used to gather (B, N_mask, patch_dim)
-#         mask_positions_expanded = mask_positions.unsqueeze(-1).expand(-1, -1, self.patch_dim)
-#
-#         predicted_patches = torch.gather(predictions_all, dim=1, index=mask_positions_expanded)
-#
-#         return predicted_patches  # (B, N_mask, patch_dim)
-
 class HybridSegFormer(nn.Module):
     def __init__(self, config, backbone, lambda_recon=0.25):
         super().__init__()
@@ -168,6 +99,7 @@ class HybridSegFormer(nn.Module):
         # Determine the dimension of the final feature map output from the SegFormer
         # (This is typically the hidden size of the last transformer layer)
         encoder_output_dim = config.hidden_sizes[-1]
+        print("econfig.hidden_sizes", config.hidden_sizes)
 
         # --- NEW: Custom Pooling Layer for Contrastive Branch ---
         # SegFormer outputs a sequence of tokens (patches) for the last layer (B, N_tokens, D)
@@ -218,7 +150,7 @@ class HybridSegFormer(nn.Module):
         # This collapses the token dimension (N_tokens) to 1, creating the image embedding (Z).
         z_i = self.global_pool(final_tokens_i.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
         z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
-        print(z_i.shape)
+        print(z_i.shape, final_tokens_i.shape)
         # 4. Project features (H)
         h_i = self.projection_head(z_i)
         h_j = self.projection_head(z_j)
