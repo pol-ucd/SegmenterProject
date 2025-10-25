@@ -288,7 +288,7 @@ if __name__ == '__main__':
     )
 
     logger = logging.getLogger()
-    params = {'batch_size': 12,
+    params = {'batch_size': 8,
               'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
     backbone_name = "nvidia/segformer-b4-finetuned-ade-512-512"
