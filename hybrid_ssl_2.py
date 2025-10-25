@@ -228,7 +228,7 @@ class HybridSegFormer(nn.Module):
         # Masking
         # Mask a portion of the image and separate into visible tokens and masked patches
         # visible_tokens, masked_patches, mask_positions = mask_and_get_visible_tokens(x)
-        pixel_mask = torch.logical_not(self.mask_generator.generate_pixel_mask(x).bool())
+        pixel_mask = torch.logical_not(self.mask_generator.generate_pixel_mask(x).bool()).to(x.device)
         visible_tokens = x * pixel_mask.float()
 
         # Encode Visible Tokens
