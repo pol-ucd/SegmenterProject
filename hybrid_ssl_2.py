@@ -2,10 +2,12 @@ import logging
 import sys
 from typing import Dict
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
+from tqdm import tqdm
 from transformers import SegformerConfig, SegformerDecodeHead
 from transformers import SegformerModel
 
@@ -314,7 +316,7 @@ if __name__ == '__main__':
                                              worker_init_fn=hdf5_worker_init_fn
                                              )
     config = SegformerConfig()
-    model = HybridSegFormer(config)
+    model = HybridSegFormer(config, lambda_recon=0.2)
     optimizer = AdamW(model.parameters(), lr=1e-4)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -333,10 +335,12 @@ if __name__ == '__main__':
 
     for epoch in range(num_epochs):
         model.train()  # Set the model to training mode
-        total_epoch_loss = 0
+        total_epoch_loss = []
+        total_contrastive_loss = []
+        total_reconstruction_loss = []
 
         # Iterate over the dataset
-        for step, data in enumerate(dataloader):
+        for step, data in enumerate(tqdm(dataloader)):
 
             # 1. Move Data to Device
             x = {}
@@ -364,16 +368,18 @@ if __name__ == '__main__':
             optimizer.step()
 
             # 6. Logging and Tracking
-            total_epoch_loss += loss_total.item()
+            total_epoch_loss += [loss_total.item()]
+            total_contrastive_loss += [loss_output['loss_contrastive'].item()]
+            total_reconstruction_loss += [loss_output['loss_reconstruction'].item()]
 
-            if step % 100 == 0:
-                logger.info(f"  Epoch {epoch + 1}/{num_epochs} | Step {step} | "
-                            f"Total Loss: {loss_total.item():.4f} | "
-                            f"Contrastive Loss: {loss_output['loss_contrastive'].item():.4f} | "
-                            f"Reconstruction Loss: {loss_output['loss_reconstruction'].item():.4f}")
+        avg_epoch_loss = np.mean(total_epoch_loss)
+        avg_contrastive_loss = np.mean(total_contrastive_loss)
+        avg_reconstruction_loss = np.mean(total_reconstruction_loss)
 
-        avg_epoch_loss = total_epoch_loss / len(dataloader)
-        logger.info(f"\n---> Epoch {epoch + 1} finished. Average Loss: {avg_epoch_loss:.4f}\n")
+        logger.info(f"Epoch {epoch + 1} finished. Average Loss: {avg_epoch_loss:.4f}, "
+                    f"Average Contrastive Loss: {avg_contrastive_loss:.4f}, "
+                    f"Average Reconstruction Loss: {avg_reconstruction_loss:.4f}")
+
 
         if avg_epoch_loss + min_delta < best_loss:
             best_loss = avg_epoch_loss
