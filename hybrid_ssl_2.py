@@ -99,7 +99,7 @@ class HybridSegFormer(nn.Module):
         # Determine the dimension of the final feature map output from the SegFormer
         # (This is typically the hidden size of the last transformer layer)
         encoder_output_dim = config.hidden_sizes[-1]
-        print("econfig.hidden_sizes", config.hidden_sizes)
+
 
         # --- NEW: Custom Pooling Layer for Contrastive Branch ---
         # SegFormer outputs a sequence of tokens (patches) for the last layer (B, N_tokens, D)
@@ -148,8 +148,10 @@ class HybridSegFormer(nn.Module):
         # 3. Custom Global Average Pooling (GAP)
         # Transpose to (B, D, N_tokens) for nn.AdaptiveAvgPool1d, then squeeze the result.
         # This collapses the token dimension (N_tokens) to 1, creating the image embedding (Z).
-        z_i = self.global_pool(final_tokens_i.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
-        z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
+        # z_i = self.global_pool(final_tokens_i.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
+        # z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
+        z_i = self.global_pool(final_tokens_i).squeeze(-1)  # Shape: (B, D)
+        z_j = self.global_pool(final_tokens_j).squeeze(-1)  # Shape: (B, D)
         print(z_i.shape, final_tokens_i.shape)
         # 4. Project features (H)
         h_i = self.projection_head(z_i)
