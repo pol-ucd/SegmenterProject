@@ -156,12 +156,14 @@ def mask_and_get_visible_tokens(images, patch_size=16, mask_ratio=0.75):
 #         return predicted_patches  # (B, N_mask, patch_dim)
 
 class HybridSegFormer(nn.Module):
-    def __init__(self, config, lambda_recon=0.25):
+    def __init__(self, config, backbone, lambda_recon=0.25):
         super().__init__()
 
         # Shared Backbone: SegFormer Encoder ---
         # The base SegFormer model (encoder only)
-        self.encoder = SegformerModel(config)
+        self.encoder = SegformerModel.from_pretrained(pretrained_model_name_or_path=backbone,
+                                                      config=config,
+                                                      ignore_mismatched_sizes=True)
 
         # Determine the dimension of the final feature map output from the SegFormer
         # (This is typically the hidden size of the last transformer layer)
@@ -289,16 +291,10 @@ if __name__ == '__main__':
     params = {'batch_size': 12,
               'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
+    backbone_name = "nvidia/segformer-b4-finetuned-ade-512-512"
 
     image_size = (512, 512)
     prefix = 'hybrid_ssl'
-
-    # --- 1. Setup (Conceptual) ---
-    # Assume these components are defined and initialized:
-    # model: An instance of the HybridSegFormer class
-    # dataloader: A PyTorch DataLoader that yields batches of (x_orig, x_i, x_j)
-    # optimizer: An optimizer, e.g., AdamW
-    # num_epochs: Total number of training epochs
 
     # Example Initialization (using placeholder values)
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
@@ -315,8 +311,8 @@ if __name__ == '__main__':
                                              num_workers=params['num_workers'],
                                              worker_init_fn=hdf5_worker_init_fn
                                              )
-    config = SegformerConfig()
-    model = HybridSegFormer(config, lambda_recon=0.2)
+    config = SegformerConfig.from_pretrained(backbone_name)
+    model = HybridSegFormer(config, backbone=backbone_name, lambda_recon=0.2)
     optimizer = AdamW(model.parameters(), lr=1e-4)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -386,7 +382,7 @@ if __name__ == '__main__':
             boredom = 0
             logger.info("Saving best snapshot of SegFormer state dict for fine-tuning.")
             try:
-                best_model = model.segformer.state_dict()
+                best_model = model.encoder.state_dict()
                 torch.save(best_model,
                            f'../segmenter/checkpoint/{prefix}_segformer_pretrained.pt')
             except Exception as e:
