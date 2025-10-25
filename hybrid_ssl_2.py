@@ -291,7 +291,7 @@ if __name__ == '__main__':
     params = {'batch_size': 8,
               'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
-    backbone_name = "nvidia/segformer-b4-finetuned-ade-512-512"
+    backbone_name = "nvidia/segformer-b2-finetuned-ade-512-512"
 
     image_size = (512, 512)
     prefix = 'hybrid_ssl'
