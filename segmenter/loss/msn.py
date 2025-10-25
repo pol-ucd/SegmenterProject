@@ -290,37 +290,89 @@ def _check_2d(z: torch.Tensor, name: str):
     if z.ndim != 2:
         raise ValueError(f"{name} must be 2D tensor of shape (N, D), got shape {z.shape}")
 
+#
+# def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
+#     """
+#     Standard SimCLR NT-Xent (InfoNCE) loss for image-level embeddings.
+#
+#     Args:
+#       z1, z2: (B, D) L2-normalized embeddings for two augmented views; must have same B.
+#       temperature: positive scalar.
+#
+#     Returns:
+#       scalar loss averaged over 2B examples.
+#     """
+#     _check_2d(z1, "z1")
+#     _check_2d(z2, "z2")
+#     if z1.shape[0] != z2.shape[0]:
+#         raise ValueError("z1 and z2 must have same batch size")
+#
+#     B = z1.shape[0]
+#     z = torch.cat([z1, z2], dim=0)  # (2B, D)
+#     sim = torch.matmul(z, z.T) / temperature  # (2B, 2B)
+#
+#     # mask self-similarities
+#     diag_mask = torch.eye(2 * B, device=sim.device, dtype=torch.bool)
+#     sim_masked = sim.masked_fill(diag_mask, -float("inf"))
+#
+#     # positives: i <-> i+B
+#     positives = torch.arange(B, device=sim.device)
+#     positives = torch.cat([positives + B, positives], dim=0)  # (2B,)
+#
+#     log_prob = F.log_softmax(sim_masked, dim=1)
+#     loss = -log_prob[torch.arange(2 * B, device=sim.device), positives]
+#     return loss.mean()
+#
+import torch
+import torch.nn.functional as F
 
-def nt_xent_image_level(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
+
+# NOTE: _check_2d is omitted as it depends on external utility code
+
+def nt_xent(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
     """
-    Standard SimCLR NT-Xent (InfoNCE) loss for image-level embeddings.
+    Standard SimCLR NT-Xent (InfoNCE) loss for embeddings.
 
     Args:
-      z1, z2: (B, D) L2-normalized embeddings for two augmented views; must have same B.
+      z1, z2: (B, D) embeddings for two augmented views; must have same B.
       temperature: positive scalar.
 
     Returns:
       scalar loss averaged over 2B examples.
     """
-    _check_2d(z1, "z1")
-    _check_2d(z2, "z2")
     if z1.shape[0] != z2.shape[0]:
         raise ValueError("z1 and z2 must have same batch size")
 
     B = z1.shape[0]
+
+    # *** NECESSARY REFINEMENT: L2 Normalize embeddings ***
+    z1 = F.normalize(z1, dim=1)
+    z2 = F.normalize(z2, dim=1)
+
     z = torch.cat([z1, z2], dim=0)  # (2B, D)
-    sim = torch.matmul(z, z.T) / temperature  # (2B, 2B)
 
-    # mask self-similarities
+    # Compute similarity matrix (2B, 2B)
+    sim = torch.matmul(z, z.T) / temperature
+
+    # 1. Mask self-similarities (Diagonal)
     diag_mask = torch.eye(2 * B, device=sim.device, dtype=torch.bool)
-    sim_masked = sim.masked_fill(diag_mask, -float("inf"))
+    # Filling with a large negative number effectively excludes self-positives from softmax
+    sim_masked = sim.masked_fill(diag_mask, -1e9)
 
-    # positives: i <-> i+B
+    # 2. Identify positive pair indices: i <-> i+B
+    # target_indices: [B, B+1, ..., 2B-1, 0, 1, ..., B-1]
     positives = torch.arange(B, device=sim.device)
     positives = torch.cat([positives + B, positives], dim=0)  # (2B,)
 
+    # 3. Calculate Log-Softmax (Log-Probabilities)
+    # log_prob[i, j] is log-probability that z[j] is the positive for z[i]
     log_prob = F.log_softmax(sim_masked, dim=1)
+
+    # 4. Extract the log-probability of the actual positive pair
+    # This is -log(P(positive)) for all 2B samples
     loss = -log_prob[torch.arange(2 * B, device=sim.device), positives]
+
+    # 5. Return the mean loss
     return loss.mean()
 
 
@@ -384,14 +436,16 @@ class NTXentLoss(nn.Module):
         z1 = F.normalize(z1, dim=1)
         z2 = F.normalize(z2, dim=1)
         if positive_index is None:
-            a = nt_xent_image_level(z1, z2, self.temperature)
-            b1 = nt_xent_image_level(z1, z1, self.temperature)
-            b2 = nt_xent_image_level(z2, z2, self.temperature)
+            a = nt_xent(z1, z2, self.temperature)
+            # b1 = nt_xent(z1, z1, self.temperature)
+            # b2 = nt_xent(z2, z2, self.temperature)
         else:
             a = nt_xent_general(z1, z2, self.temperature, positive_index)
-            b1 = nt_xent_general(z1, z1, self.temperature, positive_index)
-            b2 = nt_xent_general(z2, z2, self.temperature, positive_index)
-        return a - 0.5 * (b1 + b2)
+            # b1 = nt_xent_general(z1, z1, self.temperature, positive_index)
+            # b2 = nt_xent_general(z2, z2, self.temperature, positive_index)
+        return a   #- 0.5 * (b1 + b2)
+
+    __call__ = forward
 
 
 class NegCosineSimilarityLoss(MSNBaseLoss):

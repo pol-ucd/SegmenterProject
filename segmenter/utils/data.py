@@ -497,7 +497,7 @@ class HDF5DatasetOptimized(Dataset):
     def __len__(self):
         return self.dataset_len
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         """
         Reads a single item (scalar idx) or a batch (list idx) and applies
         transforms on a per-sample basis if necessary.
