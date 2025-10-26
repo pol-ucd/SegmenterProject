@@ -214,7 +214,7 @@ def main():
 
                         total_epoch_train_loss += [loss_train.item()]
                         with torch.no_grad():
-                            iou_epoch_train_loss += [IoULoss()(mask_out, x['masks'])]
+                            iou_epoch_train_loss += [IoULoss()(mask_out, x['masks']).item()]
 
                         b, _, _, _ = mask_out.shape
                         n_trained += b
@@ -226,7 +226,7 @@ def main():
 
                         total_epoch_test_loss += [loss_test.item()]
 
-                        iou_epoch_test_loss += [IoULoss()(mask_out, x['masks'])]
+                        iou_epoch_test_loss += [IoULoss()(mask_out, x['masks']).item()]
 
                 scheduler.step()
                 logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. "
