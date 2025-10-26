@@ -150,7 +150,6 @@ class HybridSegFormer(nn.Module):
         # This gives a tensor of shape (B, N_tokens, D)
         final_tokens_i = output_i[-1].flatten(start_dim=-2, end_dim=-1)
         final_tokens_j = output_j[-1].flatten(start_dim=-2, end_dim=-1)
-        print("final_tokens: ", final_tokens_i.shape, final_tokens_j.shape)
 
         # 3. Custom Global Average Pooling (GAP)
         # Transpose to (B, D, N_tokens) for nn.AdaptiveAvgPool1d, then squeeze the result.
@@ -159,7 +158,7 @@ class HybridSegFormer(nn.Module):
         z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
         # z_i = self.global_pool(final_tokens_i).squeeze(-1)  # Shape: (B, D)
         # z_j = self.global_pool(final_tokens_j).squeeze(-1)  # Shape: (B, D)
-        print("z_i, z_j", z_i.shape, z_j.shape)
+
         # 4. Project features (H)
         h_i = self.projection_head(z_i)
         h_j = self.projection_head(z_j)
@@ -234,6 +233,7 @@ if __name__ == '__main__':
               'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
     backbone_name = "nvidia/segformer-b2-finetuned-ade-512-512"
+    num_epochs = 200
 
     image_size = (512, 512)
     prefix = 'hybrid_ssl'
@@ -259,7 +259,7 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    num_epochs = 10
+
     # -----------------------------
 
     logger.info("Starting Self-Supervised Pre-training...")
