@@ -109,8 +109,13 @@ class HybridSegFormer(nn.Module):
         # Contrastive Branch Heads ---
         # Projection Head (g) for contrastive loss: maps Z to H
 
+        # self.projection_head = nn.Sequential(
+        #     nn.Linear(encoder_output_dim, encoder_output_dim),
+        #     nn.GELU(),
+        #     nn.Linear(encoder_output_dim, 256)  # Output dimension for the contrastive embedding
+        # )
         self.projection_head = nn.Sequential(
-            nn.Linear(encoder_output_dim, encoder_output_dim),
+            nn.Linear(16*16, encoder_output_dim),
             nn.GELU(),
             nn.Linear(encoder_output_dim, 256)  # Output dimension for the contrastive embedding
         )
