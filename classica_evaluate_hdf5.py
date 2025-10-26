@@ -16,6 +16,7 @@ from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from segmenter.loss import IoULoss
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.models.models import AugurSegformerSegmentation
 from segmenter.torch_utils import RunManager, CheckpointManager
@@ -182,6 +183,8 @@ def main():
                 logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}].")
                 total_epoch_train_loss = []
                 total_epoch_test_loss = []
+                iou_epoch_train_loss = []
+                iou_epoch_test_loss = []
                 train_names = []
                 test_names = []
                 for data in tqdm(dataloader):
@@ -210,6 +213,8 @@ def main():
                         scheduler.step()
 
                         total_epoch_train_loss += [loss_train.item()]
+                        with torch.no_grad():
+                            iou_epoch_train_loss += [IoULoss()(mask_out, x['masks'])]
 
                         b, _, _, _ = mask_out.shape
                         n_trained += b
@@ -221,10 +226,14 @@ def main():
 
                         total_epoch_test_loss += [loss_test.item()]
 
+                        iou_epoch_test_loss += [IoULoss()(mask_out, x['masks'])]
+
                 scheduler.step()
                 logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. "
-                            f"Training Loss: {np.mean(total_epoch_train_loss):.4f} "
-                            f"Test Loss: {np.mean(total_epoch_test_loss):.4f}")
+                            f"Training Total Loss: {np.mean(total_epoch_train_loss):.4f} "
+                            f"Training IoU Loss: {np.mean(iou_epoch_train_loss):.4f} "
+                            f"Test Total Loss: {np.mean(total_epoch_test_loss):.4f}"
+                            f"Test IoU Loss: {np.mean(iou_epoch_test_loss):.4f} ")
 
 
 

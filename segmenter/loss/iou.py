@@ -15,3 +15,5 @@ class IoULoss(BaseLoss):
         iou = (tp + EPSILON) / (tp + fp + fn + EPSILON)
 
         return 1 - iou
+
+    __call__ = forward
