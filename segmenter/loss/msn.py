@@ -494,8 +494,8 @@ class SimSiamLoss(nn.Module):
 
 if __name__ == '__main__':
     temperature = 0.1
-    # loss_fn = NTXentLoss(temperature=temperature)
-    loss_fn = NegCosineSimilarityLoss(temperature=temperature)
+    loss_fn = NTXentLoss(temperature=temperature)
+    # loss_fn = NegCosineSimilarityLoss(temperature=temperature)
     data_shape = (81, 1280)
 
     # ce_fn = CrossEntropyLoss()
