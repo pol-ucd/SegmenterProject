@@ -138,21 +138,23 @@ class HybridSegFormer(nn.Module):
         # 1. Get multi-scale features (list of 4 Tensors)
         output_i = self.encoder(x_i, output_hidden_states=True,
                                 return_dict=True).hidden_states  # List of (B, H/16 * W/16, D_k) Tensors
-        output_j = self.encoder(x_j, output_hidden_states=True, return_dict=True).hidden_states
+        output_j = self.encoder(x_j, output_hidden_states=True,
+                                return_dict=True).hidden_states
 
         # 2. Extract the features from the final, highest-level stage (index -1)
         # This gives a tensor of shape (B, N_tokens, D)
         final_tokens_i = output_i[-1].flatten(start_dim=-2, end_dim=-1)
         final_tokens_j = output_j[-1].flatten(start_dim=-2, end_dim=-1)
+        print("final_tokens: ", final_tokens_i.shape, final_tokens_j.shape)
 
         # 3. Custom Global Average Pooling (GAP)
         # Transpose to (B, D, N_tokens) for nn.AdaptiveAvgPool1d, then squeeze the result.
         # This collapses the token dimension (N_tokens) to 1, creating the image embedding (Z).
-        # z_i = self.global_pool(final_tokens_i.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
-        # z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
-        z_i = self.global_pool(final_tokens_i).squeeze(-1)  # Shape: (B, D)
-        z_j = self.global_pool(final_tokens_j).squeeze(-1)  # Shape: (B, D)
-
+        z_i = self.global_pool(final_tokens_i.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
+        z_j = self.global_pool(final_tokens_j.transpose(1, 2)).squeeze(-1)  # Shape: (B, D)
+        # z_i = self.global_pool(final_tokens_i).squeeze(-1)  # Shape: (B, D)
+        # z_j = self.global_pool(final_tokens_j).squeeze(-1)  # Shape: (B, D)
+        print("z_i, z_j", z_i.shape, z_j.shape)
         # 4. Project features (H)
         h_i = self.projection_head(z_i)
         h_j = self.projection_head(z_j)
