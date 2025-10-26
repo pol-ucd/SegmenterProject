@@ -67,6 +67,7 @@ def main():
 
     model_params = params['model']['params']
     pretrained_model = model_params['pretrained_model']
+    pretrained_checkpoint = model_params['pretrained_checkpoint']
 
     checkpoint_path = params['checkpoints']['path']
     checkpoint_prefix = params['checkpoints']['prefix']
@@ -205,21 +206,22 @@ def main():
             Setup the model 
             """
             model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
+                                               checkpoint_path=pretrained_checkpoint,
                                                num_classes=num_classes)
 
-            try:
-                # Get the list of saved checkpoints
-                checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
-                if checkpoints:
-                    latest_checkpoint = checkpoints[-1]
-                    cp_manager.load(model, latest_checkpoint, device=device)
-                    logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
-                else:
-                    latest_checkpoint = None
-                    logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
-            except FileNotFoundError as e:
-                logger.info(f"Unable to load checkpoint {e}")
-                latest_checkpoint = None
+            # try:
+            #     # Get the list of saved checkpoints
+            #     checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
+            #     if checkpoints:
+            #         latest_checkpoint = checkpoints[-1]
+            #         cp_manager.load(model, latest_checkpoint, device=device)
+            #         logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
+            #     else:
+            #         latest_checkpoint = None
+            #         logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
+            # except FileNotFoundError as e:
+            #     logger.info(f"Unable to load checkpoint {e}")
+            #     latest_checkpoint = None
 
             model.to(device)
             loss_params = params['loss_function']
