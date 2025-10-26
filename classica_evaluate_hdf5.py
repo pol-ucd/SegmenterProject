@@ -14,6 +14,7 @@ import torch
 from sklearn.model_selection import ShuffleSplit
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.models.models import AugurSegformerSegmentation
@@ -177,12 +178,13 @@ def main():
 
 
             logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
-            for epoch in range(n_epochs):
+            for epoch_idx, epoch in enumerate(range(n_epochs)):
+                logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}].")
                 total_epoch_train_loss = []
                 total_epoch_test_loss = []
                 train_names = []
                 test_names = []
-                for data in dataloader:
+                for data in tqdm(dataloader):
                     x = {}
                     n_trained = 0
 
@@ -193,7 +195,7 @@ def main():
                         else:
                             x[key] = data[key]
 
-                    if n_trained < n_train:
+                    while n_trained < n_train:
                         model.train()
 
                         optimizer.zero_grad()
@@ -212,13 +214,12 @@ def main():
                         b, _, _, _ = mask_out.shape
                         n_trained += b
 
-                    else: # Evaluate
-                        model.eval()
-                        with torch.no_grad():
-                            mask_out = model(x['images'])
-                            loss_test = loss_fn(mask_out, x['masks'])
+                    model.eval()
+                    with torch.no_grad():
+                        mask_out = model(x['images'])
+                        loss_test = loss_fn(mask_out, x['masks'])
 
-                            total_epoch_test_loss += [loss_test.item()]
+                        total_epoch_test_loss += [loss_test.item()]
 
                 scheduler.step()
                 logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. "
