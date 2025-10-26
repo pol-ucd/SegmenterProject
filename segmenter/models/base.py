@@ -43,7 +43,7 @@ class SegformerModelError(Exception):
 
 
 class AugurSegmenterBase(nn.Module):
-    default_model = 'nvidia/segformer-b4-finetuned-ade-512-512'
+    default_model = 'nvidia/segformer-b2-finetuned-ade-512-512'
 
     def __init__(self, /, pretrained_model: str = None, num_classes: int = None,
                  checkpoint_path: str = None):
@@ -60,17 +60,9 @@ class AugurSegmenterBase(nn.Module):
         self.pretrained_model = pretrained_model
         self.checkpoint_path = checkpoint_path
         self.num_classes = num_classes or 1
-        if self.pretrained_model is not None:
-            try:
-                self.config = SegformerConfig.from_pretrained(self.pretrained_model)
-            except OSError:
-                self.config = SegformerConfig()
-        else:
-            self.config = SegformerConfig()
 
         self.base_model = None
-        if checkpoint_path:
-            self.load_model(checkpoint_path)
+
 
     @abstractmethod
     def forward(self, pixel_values):
@@ -84,7 +76,7 @@ class SegformerBackbone(nn.Module):
     This extracts the final hidden state (feature map).
     """
 
-    def __init__(self, model_name='nvidia/segformer-b0-finetuned-ade-512-512', output_dim=256):
+    def __init__(self, model_name='nvidia/segformer-b2-finetuned-ade-512-512', output_dim=256):
         super().__init__()
         self.segformer = SegformerModel.from_pretrained(model_name)
         self.in_features = int(self.segformer.config.hidden_sizes[-1])

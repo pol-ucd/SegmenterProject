@@ -18,7 +18,8 @@ from torch.utils.data import DataLoader
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.models.models import AugurSegformerSegmentation
 from segmenter.torch_utils import RunManager, CheckpointManager
-from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset)
+from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset, hdf5_worker_init_fn,
+                                  HDF5DatasetOptimized, HDF5BatchSampler, SSLTransformPipeline)
 
 
 def check_scores(metric:dict[str,list])-> bool:
@@ -82,7 +83,7 @@ def main():
     run_params = params['run']
     num_classes = run_params['num_classes']
     batch_size = run_params['batch_size']
-    num_workers = run_params['num_workers']
+    num_workers = min(run_params['num_workers'], 1)
     n_augments = run_params['n_augments']
     image_size = tuple(run_params['image_size'])
     n_epochs = run_params['n_epochs']
@@ -101,7 +102,8 @@ def main():
     # logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
-    test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+    # test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+    test_sizes = [0.1]
     n_folds = 5
     metrics = {"case": [],
                "test_split": [],
@@ -122,108 +124,37 @@ def main():
         original_names = np.array([h.decode('utf-8') for h in original_names_hdf])
         n_records = len(original_names)
 
+    ds = HDF5DatasetOptimized(hdf5_path=hdf5_file,
+                              transform=SSLTransformPipeline(size=image_size))
+
+
+
     records_offset = 0
     for test_split in test_sizes:
-
+        n_test = int(n_records * test_split)
+        n_train = int(n_records - n_test)
         logger.info(f"Testing split {test_split} for {n_folds} iterations.")
 
-        ss = ShuffleSplit(n_splits=n_folds, test_size=test_split, random_state=42)
-        len_hdf5 = get_num_samples_from_hdf5(hdf5_file)
-        shuffled_indices = np.random.permutation(len_hdf5)
+        for idx, fold in enumerate(range(n_folds)):
 
-        for idx, (train_index, test_index) in enumerate(ss.split(shuffled_indices)):
+            batch_sampler = HDF5BatchSampler(ds.dataset_len,
+                                             batch_size,
+                                             shuffle=True)
 
-            test_names = original_names[test_index]
-            train_names = original_names[train_index]
+            dataloader = torch.utils.data.DataLoader(ds,
+                                                     batch_size=None,
+                                                     sampler=batch_sampler,
+                                                     shuffle=False,
+                                                     num_workers=num_workers,
+                                                     worker_init_fn=hdf5_worker_init_fn
+                                                     )
 
-            final_eval_dataset = HDF5ImageDataset(
-                hdf5_path=hdf5_file,
-                indices=test_index,
-                is_train_split=False,
-                image_size=image_size,
-                n_augment=0
-            )
-
-            """ 
-            Create a non-augmented test dataset from the training records so
-            we get metrics for the unaugmented records only when we train.
-            """
-            final_test_dataset = HDF5ImageDataset(
-                hdf5_path=hdf5_file,
-                indices=train_index,
-                is_train_split=False,
-                image_size=image_size,
-                n_augment=0
-            )
-
-            final_train_dataset = HDF5ImageDataset(
-                hdf5_path=hdf5_file,
-                indices=train_index,
-                is_train_split=True,
-                image_size=image_size,
-                n_augment=n_augments
-            )
-
-            logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
-
-            train_loader = DataLoader(
-                final_train_dataset,
-                batch_size=batch_size,
-                shuffle=False,  # Already randomly shuffled
-                num_workers=num_workers
-            )
-
-            test_loader = DataLoader(
-                final_test_dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=num_workers
-            )
-
-            eval_loader = DataLoader(
-                final_eval_dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=num_workers
-            )
-
-            logger.info(f"Successfully loaded training and testing dataset for {n_records} records.")
-
-            logger.info(f"Number of batches in the training DataLoader: "
-                        f"{len(train_loader)} / {len(final_train_dataset)} records")
-            logger.info(f"Number of batches in the test DataLoader: "
-                        f"{len(test_loader)} / {len(final_test_dataset)} records")
-            logger.info(f"Number of batches in the evaluation DataLoader: "
-                        f"{len(eval_loader)} / {len(final_eval_dataset)} records")
-
-            cp_manager = CheckpointManager(checkpoint_dir=checkpoint_path,
-                                           prefix=checkpoint_prefix,
-                                           patience=checkpoint_patience,
-                                           min_delta=checkpoint_min_delta,
-                                           set_point=0,
-                                           verbose=False)
-            """
-            Setup the model 
-            """
             model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
                                                checkpoint_path=pretrained_checkpoint,
-                                               num_classes=num_classes)
+                                               num_classes=num_classes).to(device)
 
-            # try:
-            #     # Get the list of saved checkpoints
-            #     checkpoints = sorted(glob.glob(os.path.join(checkpoint_path, checkpoint_prefix + "*.pt")))
-            #     if checkpoints:
-            #         latest_checkpoint = checkpoints[-1]
-            #         cp_manager.load(model, latest_checkpoint, device=device)
-            #         logger.info(f"Loaded model checkpoint {latest_checkpoint}.")
-            #     else:
-            #         latest_checkpoint = None
-            #         logger.info(f"No checkpoints were saved to load in {checkpoint_path}.")
-            # except FileNotFoundError as e:
-            #     logger.info(f"Unable to load checkpoint {e}")
-            #     latest_checkpoint = None
+            model.to(device=device)
 
-            model.to(device)
             loss_params = params['loss_function']
             loss_fn = HybridLoss(loss_params['params'])
 
@@ -244,87 +175,56 @@ def main():
             if torch.cuda.is_available():
                 scaler = GradScaler()
 
-            trainer = RunManager(model,
-                                 optimizer,
-                                 criterion=loss_fn,
-                                 scaler=scaler,
-                                 scheduler=scheduler,
-                                 train_loader=train_loader,
-                                 test_loader=test_loader,
-                                 eval_loader=eval_loader,
-                                 save_preds=False,
-                                 save_preds_path="",
-                                 config_path=params_file,
-                                 verbose=False
-                                 )
-            train_params = {}
-            eval_params = {}
 
+            logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
             for epoch in range(n_epochs):
-                logger.info(f"Epoch {epoch + 1}/{n_epochs}")
+                total_epoch_train_loss = []
+                total_epoch_test_loss = []
+                train_names = []
+                test_names = []
+                for data in dataloader:
+                    x = {}
+                    n_trained = 0
 
-                train_metrics, test_metrics = trainer.train(**train_params)
-                train_loss = train_metrics['loss']
-                train_iou = train_metrics['iou']
-                train_miou = np.mean(train_iou)
-                train_dice = train_metrics['dice']
-                train_mdice = np.mean(train_dice)
+                    """ Unpack the data and load image & mask data to device """
+                    for key, value in data.items():
+                        if key in ['images', 'anchors', 'targets', 'local_targets', 'masks']:
+                            x[key] = data[key].to(device)
+                        else:
+                            x[key] = data[key]
 
-                test_iou = test_metrics['iou']
-                test_dice = test_metrics['dice']
-                test_precision = test_metrics['precision']
-                test_recall = test_metrics['recall']
-                logger.info(
-                    f"Training Losses  : | Compound: {train_loss:.4f} | Dice: {train_mdice:.4f} | IOU: {train_miou:.4f}")
+                    if n_trained < n_train:
+                        model.train()
 
-                val_metrics = trainer.evaluate(**eval_params)
-                val_loss = val_metrics['loss']
-                val_iou = val_metrics['iou']
-                val_miou = np.mean(val_iou)
-                val_dice = val_metrics['dice']
-                val_mdice = np.mean(val_dice)
-                val_precision = val_metrics['precision']
-                val_recall = val_metrics['recall']
-                logger.info(
-                    f"Evaluation Losses: | Compound: {val_loss:.4f} | Dice: {val_mdice:.4f} | IOU: {val_miou:.4f}")
+                        optimizer.zero_grad()
 
-                stop_training, is_saved = cp_manager.save(model,
-                                                          val_miou,
-                                                          prefix=f"split_{test_split}_fold_{idx}")
+                        mask_out = model(x['images'])
+                        loss_train = loss_fn(mask_out, x['masks'])
 
-                if is_saved:
+                        loss_train.backward()
 
-                    """ Back off the last time we saved so we're only saving the best one """
-                    for k,v in metrics.items():
-                        metrics[k] = v[:records_offset]
-                    records_offset += len(original_names)
+                        optimizer.step()
 
-                    metrics["case"] += test_names.tolist()
-                    metrics["case"] += train_names.tolist()
+                        scheduler.step()
 
-                    metrics["is_test"] += [1] * len(test_names)
-                    metrics["is_test"] += [0] * len(train_names)
+                        total_epoch_train_loss += [loss_train.item()]
 
-                    metrics["test_split"] += [test_split] * n_records
-                    metrics["test_iteration"] += [idx] * n_records
+                        b, _, _, _ = mask_out.shape
+                        n_trained += b
 
-                    metrics["dice"] += val_dice + test_dice
-                    metrics["iou"] += val_iou + test_iou
-                    metrics["precision"] += val_precision + test_precision
-                    metrics["recall"] += val_recall + test_recall
-                    logger.info(f"Saving model: split: {test_split}, fold: {idx+1}")
-                    assert check_scores(metrics), "Scores don't match!"
+                    else: # Evaluate
+                        model.eval()
+                        with torch.no_grad():
+                            mask_out = model(x['images'])
+                            loss_test = loss_fn(mask_out, x['masks'])
 
-                if stop_training:
-                    logger.info(f"Training stopped early at epoch {epoch} with mIOU Score: {val_miou:.4f}")
-                    break
+                            total_epoch_test_loss += [loss_test.item()]
 
-        try:
-            results_csv = pd.DataFrame.from_dict(metrics)
-            results_csv.to_csv(results_csv_name)
-            logger.info(f"Results saved to {results_csv_name}")
-        except Exception as e:
-            logger.error(f"Error saving scores to CSV. The following exception was detected:{e}")
+                scheduler.step()
+                logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. "
+                            f"Training Loss: {np.mean(total_epoch_train_loss):.4f} "
+                            f"Test Loss: {np.mean(total_epoch_test_loss):.4f}")
+
 
 
 

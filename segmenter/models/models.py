@@ -1,7 +1,7 @@
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from transformers import SegformerForSemanticSegmentation
+from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
 from segmenter.models.base import MedianPool2d, SegformerModelError, AugurSegmenterBase
 
@@ -81,15 +81,15 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
                  checkpoint_path:str=None,
                  k:int=3):
         super().__init__(pretrained_model, num_classes, checkpoint_path)
-
         # Load the full SegformerForSemanticSegmentation model.
         # Set `ignore_mismatched_sizes=True` because we will replace the
         # final classification layer, which will have a different output size.
         if self.pretrained_model is not None:
+            config = SegformerConfig.from_pretrained(self.pretrained_model)
             try:
                 self.base_model = SegformerForSemanticSegmentation.from_pretrained(
                     self.pretrained_model,
-                    config=self.config,
+                    config=config,
                     ignore_mismatched_sizes=True
                 )
             except OSError:
@@ -99,7 +99,8 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
                            weights_only=False)
                 self.base_model = SegformerForSemanticSegmentation().load_state_dict(f, strict=False)
         else:
-            self.base_model = SegformerForSemanticSegmentation(config=self.config)
+            self.base_model = SegformerForSemanticSegmentation(config=config)
+
 
         # Get the number of channels from the previous layer to properly
         # define the input to our new classifier.
@@ -122,8 +123,10 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
         if self.checkpoint_path:
             try:
                 # Load the state dictionary from the .pt file
-                state_dict = torch.load(self.checkpoint_path, map_location=torch.device('cpu'))
-                self.base_model.load_state_dict(state_dict)
+                state_dict = torch.load(self.checkpoint_path,
+                                        weights_only=False,
+                                        map_location=torch.device('cpu'))
+                self.base_model.segformer.load_state_dict(state_dict)
             except FileNotFoundError:
                 # Raise exception for consistent error handling
                 raise SegformerModelError(f"Checkpoint file not found at: {self.checkpoint_path}")
@@ -157,5 +160,5 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
         return self.median(logits)   # Smoothed logits
 
     def load_model(self, path: str):
-        state_dict = torch.load(path, weights_only=False)
+        state_dict = torch.load(path, weights_only=False, map_location='cpu')
         self.base_model.load_state_dict(state_dict )

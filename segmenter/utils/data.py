@@ -143,6 +143,23 @@ class TransformClamp(torch.nn.Module):
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return torch.clamp(x, min=0.0, max=1.0)
 
+class TransformPrint(torch.nn.Module):
+    def __init__(self, step_name: str = ""):
+        super(TransformPrint, self).__init__()
+        self.step_name = step_name
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        print(f"{self.step_name}, input Shape: ", x.shape)
+        return x
+
+
+class TransformMaskTranspose(torch.nn.Module):
+    def __init__(self):
+        super(TransformMaskTranspose, self).__init__()
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return x.transpose(0, 1)
+
 class SSLTransformPipeline:
     """
     Creates the dual-view augmentation pipeline for the Siamese Network.
@@ -188,6 +205,15 @@ class SSLTransformPipeline:
             v2.ToDtype(torch.float32, scale=True),
             v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
         ])
+
+        # Base Image Transform (for visualization or non-augmented input)
+        self.Mask_Transform = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            TransformMaskTranspose(),
+            v2.Resize(size=size, interpolation=InterpolationMode.NEAREST),
+        ])
+
 
         # --- Anchor View Transform (Global Crop): Strong Augmentation + Gaussian Blur + Random Crop ---
         # The Anchor (Student) network is typically trained with stronger noise/regularization.
@@ -264,28 +290,33 @@ class SSLTransformPipeline:
         else:
             self.Local_Transform = None
 
-
-
     def __call__(self, x: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Returns the augmented Global Anchor, Global Target, and multiple Local Anchor views.
         """
         # Note: The transformations are applied independently to the same image.
-        results = {'images': Any, 'anchors': Any, 'targets': Any, 'local_anchors': Any}
+        results = { k: Any for k in x.keys()}
         try:
             input_images = x['images']
             try:
                 if torch.isnan(input_images).any():
-                    print(">>>>> NaN in input data: x['images'] (original image)")
+                    raise SSLTransformException("NaN in input data: x['images'] (original image)")
             except TypeError:
                 if np.isnan(input_images).any():
-                    print(">>>>> NaN in input data: x['images'] (original image)")
+                    raise SSLTransformException("Input data: x['images'] is not a Numpy array or a torch.Tensor")
 
 
             # 1. Global Views (Anchor & Target)
             results['images'] = torch.stack([self.Image_Transform(image) for image in input_images], dim=0)
             results['anchors'] = torch.stack([self.Anchor_Transform(image) for image in input_images], dim=0)
             results['targets'] = torch.stack([self.Target_Transform(image) for image in input_images], dim=0)
+            for k in x.keys():
+                if k == 'images': continue
+                elif k == 'masks':
+                    results['masks'] = torch.stack([self.Mask_Transform(mask) for mask in x['masks']], dim=0)
+                else:
+                    results[k] = [item for item in x[k]]
+
 
             # 2. Local Views (Anchors only - N crops per image)
             local_crops = []
@@ -304,13 +335,13 @@ class SSLTransformPipeline:
         except KeyError:
             raise SSLTransformException("No images found in input. Include images using the 'images' key.")
         if torch.isnan(results['images']).any():
-            print("NaN in input data: results['images']")
+            raise SSLTransformException("NaN in input data: results['images']")
         if torch.isnan(results['anchors']).any():
-            print("NaN in input data: results['anchors']")
+            raise SSLTransformException("NaN in input data: results['anchors']")
         if torch.isnan(results['targets']).any():
-            print("NaN in input data: results['targets']")
+            raise SSLTransformException("NaN in input data: results['targets']")
         if torch.isnan(results['local_anchors']).any():
-            print("NaN in input data: results['local_anchors']")
+            raise SSLTransformException("NaN in input data: results['local_anchors']")
 
 
         return results
@@ -470,6 +501,7 @@ class HDF5DatasetOptimized(Dataset):
         try:
             with h5py.File(self.hdf5_path, 'r') as f:
                 for k in f.keys():
+
                     self.key_dtype[k] = f[k].dtype
                     if self.dataset_len is None:
                         self.dataset_len = len(f[k])
@@ -477,7 +509,6 @@ class HDF5DatasetOptimized(Dataset):
             raise HDF5Exception(f"Error reading dataset length: {e}")
         if self.data_keys is None:
             self.data_keys = list(self.key_dtype.keys())
-
 
     # --- FIX for TypeError: h5py objects cannot be pickled ---
     def __getstate__(self):
@@ -591,6 +622,7 @@ class HDF5ImageDataset(HDF5Dataset):
 
         # Initialize h5py file and dataset references to None
         self.hdf5_file = None
+        self._open_hdf5_file()
         self.images = None
         self.masks = None
         self.original_names = None
@@ -640,6 +672,12 @@ class HDF5ImageDataset(HDF5Dataset):
             image_pil = color_jitter(image_pil)
 
         return image_pil, mask_tensor
+
+    def _open_hdf5_file(self):
+        try:
+            self.hdf5_file = h5py.File(self.hdf5_path, 'r', swmr=True, libver='latest')
+        except Exception as e:
+            raise RuntimeError(f"Could not open HDF5 file: {e}")
 
     def __getitem__(self, idx):
         """
