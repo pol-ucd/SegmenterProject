@@ -163,8 +163,8 @@ class HybridSegFormer(nn.Module):
         h_i = self.projection_head(z_i)
         h_j = self.projection_head(z_j)
 
-        h_i = torch.normalize(h_i, dim=1)
-        h_j = torch.normalize(h_j, dim=1)
+        h_i = F.normalize(h_i, dim=1)
+        h_j = F.normalize(h_j, dim=1)
 
         # 5. Compute Contrastive Loss (L_cont)
         loss_cont = self.contrastive_loss_fn(h_i, h_j)
