@@ -260,6 +260,9 @@ def main():
                             x[key] = [d.decode('utf-8') for d in data[key]]
                         else:
                             x[key] = data[key]
+
+                    test_names += [x_k for x_k in x['original_name'] if x_k not in test_names]
+
                     with torch.no_grad():
                         mask_out = model(x['images'])
                         loss_test = loss_fn(mask_out, x['masks'])
