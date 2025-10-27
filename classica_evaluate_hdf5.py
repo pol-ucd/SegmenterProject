@@ -26,6 +26,9 @@ from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset, h
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+# test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+test_sizes = [0.8]
+
 def check_scores(metric:dict[str,list])-> bool:
     all_lens = np.array([len(v) for v in metric.values()])
     base_len = all_lens[0]
@@ -132,8 +135,7 @@ def main():
     # logger.info(f"Using {device} device for model training.")
 
     """ Load datasets for test and training """
-    # test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
-    test_sizes = [0.9]
+
     n_folds = 5
     metrics = {"case": [],
                "test_split": [],
