@@ -171,7 +171,8 @@ def main():
                                                      batch_size=None,
                                                      sampler=batch_sampler,
                                                      shuffle=False,
-                                                     num_workers=num_workers,
+                                                     # num_workers=num_workers,
+                                                     num_workers=1,
                                                      worker_init_fn=hdf5_worker_init_fn
                                                      )
 
