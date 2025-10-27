@@ -164,7 +164,7 @@ def main():
         for idx, fold in enumerate(range(n_folds)):
 
             batch_sampler = HDF5BatchSampler(ds.dataset_len,
-                                             batch_size,
+                                             batch_size=1,
                                              shuffle=True)
 
             dataloader = torch.utils.data.DataLoader(ds,
@@ -174,6 +174,9 @@ def main():
                                                      num_workers=num_workers,
                                                      worker_init_fn=hdf5_worker_init_fn
                                                      )
+
+            all_data = [d for d in dataloader]
+
 
             model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
                                                checkpoint_path=pretrained_checkpoint,
@@ -213,11 +216,10 @@ def main():
                 iou_epoch_train_loss = []
                 iou_epoch_test_loss = []
 
-                for data in tqdm(dataloader):
-                    x = {}
-                    n_trained = 0
+                for data in all_data[:n_train]:
+                    model.train()
 
-                    """ Unpack the data and load image & mask data to device """
+                    x = {}
                     for key, value in data.items():
                         print(key)
                         if key in ['images', 'anchors', 'targets', 'local_targets', 'masks']:
@@ -227,31 +229,37 @@ def main():
                         else:
                             x[key] = data[key]
 
-                    while n_trained < n_train:
-                        model.train()
+                    train_names += [x_k for x_k in x['original_name'] if x_k not in train_names]
+                    logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}]. Training with {len(train_names)} names.")
 
-                        train_names += [x_k for x_k in x['original_name'] if x_k not in train_names]
-                        logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}]. Training with {len(train_names)} names: {train_names}")
+                    optimizer.zero_grad()
 
-                        optimizer.zero_grad()
+                    mask_out = model(x['images'])
+                    loss_train = loss_fn(mask_out, x['masks'])
 
-                        mask_out = model(x['images'])
-                        loss_train = loss_fn(mask_out, x['masks'])
+                    loss_train.backward()
 
-                        loss_train.backward()
+                    optimizer.step()
 
-                        optimizer.step()
+                    scheduler.step()
 
-                        scheduler.step()
+                    total_epoch_train_loss += [loss_train.item()]
+                    with torch.no_grad():
+                        iou_epoch_train_loss += [IoULoss()(mask_out, x['masks']).item()]
 
-                        total_epoch_train_loss += [loss_train.item()]
-                        with torch.no_grad():
-                            iou_epoch_train_loss += [IoULoss()(mask_out, x['masks']).item()]
+                    b, _, _, _ = mask_out.shape
 
-                        b, _, _, _ = mask_out.shape
-                        n_trained += b
-
+                for data in all_data[n_train:]:
                     model.eval()
+                    x = {}
+                    for key, value in data.items():
+                        print(key)
+                        if key in ['images', 'anchors', 'targets', 'local_targets', 'masks']:
+                            x[key] = data[key].to(device)
+                        elif key == 'original_name':
+                            x[key] = [d.decode('utf-8') for d in data[key]]
+                        else:
+                            x[key] = data[key]
                     with torch.no_grad():
                         mask_out = model(x['images'])
                         loss_test = loss_fn(mask_out, x['masks'])
