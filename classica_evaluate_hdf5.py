@@ -43,6 +43,9 @@ class EpochStopper:
         self.max_boredom = max_boredom
         self.current_boredom = 0
 
+    def get_score(self):
+        return self.best_loss
+
     def __call__(self, epoch: int, score: np.floating[Any]) -> bool:
         """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
         is_stopping = False
@@ -156,7 +159,8 @@ def main():
 
 
 
-    records_offset = 0
+    split_loss = []
+    split_iou = []
     for test_split in test_sizes:
         n_test = int(n_records * test_split)
         n_train = int(n_records - n_test)
@@ -208,7 +212,7 @@ def main():
 
 
             logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
-            stopper = EpochStopper(max_boredom=3, min_delta=0.01)
+            stopper = EpochStopper(max_boredom=3, min_delta=0.0001)
             train_names = []
             test_names = []
             for epoch_idx, epoch in enumerate(range(n_epochs)):
@@ -231,7 +235,6 @@ def main():
                             x[key] = data[key]
 
                     train_names += [x_k for x_k in x['original_name'] if x_k not in train_names]
-                    logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}]. Training with {len(train_names)} names.")
 
                     optimizer.zero_grad()
 
@@ -279,6 +282,7 @@ def main():
                             f"Test IoU Loss: {np.mean(iou_epoch_test_loss):.4f} ")
                 if stopper.forward(epoch=epoch, score=np.mean(total_epoch_train_loss)):
                     logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. ")
+                    split_loss += [stopper.get_score()]
                     break
 
 
