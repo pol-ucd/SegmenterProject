@@ -6,6 +6,7 @@ import random
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -31,6 +32,29 @@ def check_scores(metric:dict[str,list])-> bool:
         for k,v in metric.items():
             print(f"{k}: {len(v)}")
     return np.all(all_lens == base_len)
+
+
+class EpochStopper:
+    def __init__(self, max_boredom: int = 5, min_delta: float = 0.0001):
+
+        self.best_loss = float('inf')
+        self.min_delta = min_delta
+        self.max_boredom = max_boredom
+        self.current_boredom = 0
+
+    def __call__(self, epoch: int, score: np.floating[Any]) -> bool:
+        """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
+        is_stopping = False
+        if score + self.min_delta < self.best_loss:
+            self.best_loss = score
+            self.boredom = 0
+        else:
+            self.boredom += 1
+        if self.boredom >= self.max_boredom:
+            is_stopping = True
+        return is_stopping
+
+    forward = __call__
 
 
 
@@ -179,27 +203,35 @@ def main():
 
 
             logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
+            stopper = EpochStopper(max_boredom=3, min_delta=0.01)
+            train_names = []
+            test_names = []
             for epoch_idx, epoch in enumerate(range(n_epochs)):
                 logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}].")
                 total_epoch_train_loss = []
                 total_epoch_test_loss = []
                 iou_epoch_train_loss = []
                 iou_epoch_test_loss = []
-                train_names = []
-                test_names = []
+
                 for data in tqdm(dataloader):
                     x = {}
                     n_trained = 0
 
                     """ Unpack the data and load image & mask data to device """
                     for key, value in data.items():
+                        print(key)
                         if key in ['images', 'anchors', 'targets', 'local_targets', 'masks']:
                             x[key] = data[key].to(device)
+                        elif key == 'original_name':
+                            x[key] = [d.decode('utf-8') for d in data[key]]
                         else:
                             x[key] = data[key]
 
                     while n_trained < n_train:
                         model.train()
+
+                        train_names += [x_k for x_k in x['original_name'] if x_k not in train_names]
+                        logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}]. Training with {len(train_names)} names: {train_names}")
 
                         optimizer.zero_grad()
 
@@ -232,8 +264,12 @@ def main():
                 logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. "
                             f"Training Total Loss: {np.mean(total_epoch_train_loss):.4f} "
                             f"Training IoU Loss: {np.mean(iou_epoch_train_loss):.4f} "
-                            f"Test Total Loss: {np.mean(total_epoch_test_loss):.4f}"
+                            f"Test Total Loss: {np.mean(total_epoch_test_loss):.4f} "
                             f"Test IoU Loss: {np.mean(iou_epoch_test_loss):.4f} ")
+                if stopper.forward(epoch=epoch, score=np.mean(total_epoch_train_loss)):
+                    logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. ")
+                    break
+
 
 
 
