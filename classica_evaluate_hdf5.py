@@ -57,6 +57,7 @@ class EpochStopper:
             self.boredom = 0
         else:
             self.boredom += 1
+
         if self.boredom >= self.max_boredom:
             is_stopping = True
         return is_stopping
