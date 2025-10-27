@@ -130,7 +130,7 @@ def main():
 
     """ Load datasets for test and training """
     # test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
-    test_sizes = [0.1]
+    test_sizes = [0.9]
     n_folds = 5
     metrics = {"case": [],
                "test_split": [],
@@ -172,8 +172,8 @@ def main():
                                                      batch_size=None,
                                                      sampler=batch_sampler,
                                                      shuffle=False,
-                                                     # num_workers=num_workers,
-                                                     num_workers=1,
+                                                     num_workers=num_workers,
+                                                     # num_workers=1,
                                                      worker_init_fn=hdf5_worker_init_fn
                                                      )
 
@@ -223,7 +223,6 @@ def main():
 
                     x = {}
                     for key, value in data.items():
-                        print(key)
                         if key in ['images', 'anchors', 'targets', 'local_targets', 'masks']:
                             x[key] = data[key].to(device)
                         elif key == 'original_name':
@@ -255,7 +254,6 @@ def main():
                     model.eval()
                     x = {}
                     for key, value in data.items():
-                        print(key)
                         if key in ['images', 'anchors', 'targets', 'local_targets', 'masks']:
                             x[key] = data[key].to(device)
                         elif key == 'original_name':
