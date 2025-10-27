@@ -24,6 +24,7 @@ from segmenter.torch_utils import RunManager, CheckpointManager
 from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset, hdf5_worker_init_fn,
                                   HDF5DatasetOptimized, HDF5BatchSampler, SSLTransformPipeline)
 
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 def check_scores(metric:dict[str,list])-> bool:
     all_lens = np.array([len(v) for v in metric.values()])
