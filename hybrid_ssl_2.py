@@ -267,7 +267,7 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         scaler = GradScaler()
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
     # -----------------------------
 
