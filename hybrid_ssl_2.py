@@ -233,7 +233,7 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     logger = logging.getLogger()
-    params = {'batch_size': 8,
+    params = {'batch_size': 4,
               'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
     backbone_name = "nvidia/segformer-b4-finetuned-ade-512-512"
