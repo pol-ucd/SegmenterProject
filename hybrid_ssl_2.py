@@ -139,7 +139,7 @@ class HybridSegFormer(nn.Module):
         "weight_iou": 0.8,
         "weight_hausdorff": 0.0
         }
-        self.reconstruction_loss_fn = HybridLoss()
+        self.reconstruction_loss_fn = HybridLoss(**loss_config)
 
         # Hyperparameter for balancing losses
         self.lambda_recon = lambda_recon
@@ -238,6 +238,7 @@ if __name__ == '__main__':
         ]
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     logger = logging.getLogger()
     params = {'batch_size': 8,
               'dataset': '../segmenter/data/pretrain_images.h5',
