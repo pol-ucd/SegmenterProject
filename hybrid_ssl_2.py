@@ -298,11 +298,11 @@ if __name__ == '__main__':
             # Always start by clearing old gradients
             optimizer.zero_grad()
 
-            with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
+            # with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
 
-                # The model calculates L_cont, L_recon, and combines them into L_total
-                loss_output = model(x)
-                loss_total = loss_output['loss_total']
+            # The model calculates L_cont, L_recon, and combines them into L_total
+            loss_output = model(x)
+            loss_total = loss_output['loss_total']
 
             if scaler is not None:
                 scaler.scale(loss_total).backward()
