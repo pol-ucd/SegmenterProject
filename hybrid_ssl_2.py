@@ -14,7 +14,7 @@ from transformers import SegformerModel
 
 # Assume utility functions for loss and masking are defined elsewhere
 # from utils import mask_and_get_visible_tokens
-from segmenter.loss import NTXentLoss
+from segmenter.loss import NTXentLoss, HybridLoss
 from segmenter.masks import CompositeMask
 from segmenter.utils import HDF5DatasetOptimized, HDF5BatchSampler
 from segmenter.utils.data import SSLTransformPipeline, hdf5_worker_init_fn
@@ -130,7 +130,16 @@ class HybridSegFormer(nn.Module):
         self.mask_generator = CompositeMask()
         # Loss functions
         self.contrastive_loss_fn = NTXentLoss(temperature=0.07)
-        self.reconstruction_loss_fn = nn.MSELoss()
+        # self.reconstruction_loss_fn = nn.MSELoss()
+        loss_config = {
+        "weight_ce": 0.2,
+        "weight_dice": 0.0,
+        "weight_focal": 0.0,
+        "weight_tversky": 0.0,
+        "weight_iou": 0.8,
+        "weight_hausdorff": 0.0
+        }
+        self.reconstruction_loss_fn = HybridLoss()
 
         # Hyperparameter for balancing losses
         self.lambda_recon = lambda_recon
