@@ -321,14 +321,7 @@ class SSLTransformPipeline:
                     else:
                         results['masks'] = torch.stack([self.Mask_Transform(mask) for mask in x['masks']], dim=0)
                 else:
-
-                    if x[k][0].dtype == 'object':
-                        try:
-                            results[k] = [item.decode('utf-8') for item in x[k]]
-                        except AttributeError:
-                            results[k] = [item for item in x[k]]
-                    else:
-                        results[k] = [item for item in x[k]]
+                    results[k] = [item for item in x[k]]
 
 
             # 2. Local Views (Anchors only - N crops per image)
