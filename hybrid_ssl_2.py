@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import GradScaler, autocast
 from torch.optim import AdamW
 from tqdm import tqdm
 from transformers import SegformerConfig, SegformerDecodeHead
@@ -259,6 +260,11 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
+    scaler = None
+    if torch.cuda.is_available():
+        scaler = GradScaler()
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['num_epochs'])
 
     # -----------------------------
 
@@ -289,15 +295,23 @@ if __name__ == '__main__':
             # Always start by clearing old gradients
             optimizer.zero_grad()
 
-            # 3. Forward Pass
-            # The model calculates L_cont, L_recon, and combines them into L_total
-            loss_output = model(x)
-            loss_total = loss_output['loss_total']
+            with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
 
-            # 4. Backpropagation (The core step)
-            # Calculates the gradient of the total loss with respect to every trainable parameter (w)
-            # This determines how much each parameter contributed to the final loss.
-            loss_total.backward()
+                # The model calculates L_cont, L_recon, and combines them into L_total
+                loss_output = model(x)
+                loss_total = loss_output['loss_total']
+
+            if scaler is not None:
+                scaler.scale(loss_total).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss_total.backward()
+                torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                optimizer.step()
+
 
             # 5. Model Parameter Update
             # The optimizer uses the calculated gradients (from step 4)
@@ -309,6 +323,9 @@ if __name__ == '__main__':
             total_epoch_loss += [loss_total.item()]
             total_contrastive_loss += [loss_output['loss_contrastive'].item()]
             total_reconstruction_loss += [loss_output['loss_reconstruction'].item()]
+
+        if scheduler is not None:
+            scheduler.step()
 
         avg_epoch_loss = np.mean(total_epoch_loss)
         avg_contrastive_loss = np.mean(total_contrastive_loss)
