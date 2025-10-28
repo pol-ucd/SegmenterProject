@@ -307,15 +307,28 @@ class SSLTransformPipeline:
 
 
             # 1. Global Views (Anchor & Target)
+            if len(input_images[0].shape) == 4:
+                input_images = [ii.squeeze(0) for ii in input_images]
+
             results['images'] = torch.stack([self.Image_Transform(image) for image in input_images], dim=0)
             results['anchors'] = torch.stack([self.Anchor_Transform(image) for image in input_images], dim=0)
             results['targets'] = torch.stack([self.Target_Transform(image) for image in input_images], dim=0)
             for k in x.keys():
-                if k == 'images': continue
+                if k in ('images', 'anchors', 'targets'): continue
                 elif k == 'masks':
-                    results['masks'] = torch.stack([self.Mask_Transform(mask) for mask in x['masks']], dim=0)
+                    if len(x['masks'][0].shape) == 4:
+                        results['masks'] = torch.stack([self.Mask_Transform(mask.squeeze(0)) for mask in x['masks']], dim=0)
+                    else:
+                        results['masks'] = torch.stack([self.Mask_Transform(mask) for mask in x['masks']], dim=0)
                 else:
-                    results[k] = [item for item in x[k]]
+
+                    if x[k][0].dtype == 'object':
+                        try:
+                            results[k] = [item.decode('utf-8') for item in x[k]]
+                        except AttributeError:
+                            results[k] = [item for item in x[k]]
+                    else:
+                        results[k] = [item for item in x[k]]
 
 
             # 2. Local Views (Anchors only - N crops per image)

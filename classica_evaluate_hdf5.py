@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.model_selection import ShuffleSplit
+from torch import autocast
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -241,12 +242,20 @@ def main():
 
                     optimizer.zero_grad()
 
-                    mask_out = model(x['images'])
-                    loss_train = loss_fn(mask_out, x['masks'])
+                    with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
+                        mask_out = model(x['images'])
+                        loss_train = loss_fn(mask_out, x['masks'])
 
-                    loss_train.backward()
-
-                    optimizer.step()
+                    if scaler is not None:
+                        scaler.scale(loss_train).backward()
+                        scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        loss_train.backward()
+                        torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                        optimizer.step()
 
                     scheduler.step()
 
@@ -287,9 +296,6 @@ def main():
                     logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. ")
                     split_loss += [stopper.get_score()]
                     break
-
-
-
 
 
 if __name__ == "__main__":
