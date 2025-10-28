@@ -14,7 +14,7 @@ from transformers import SegformerModel
 
 # Assume utility functions for loss and masking are defined elsewhere
 # from utils import mask_and_get_visible_tokens
-from segmenter.loss import NTXentLoss, HybridLoss
+from segmenter.loss import NTXentLoss, HybridLoss, DiceLoss
 from segmenter.masks import CompositeMask
 from segmenter.utils import HDF5DatasetOptimized, HDF5BatchSampler
 from segmenter.utils.data import SSLTransformPipeline, hdf5_worker_init_fn
@@ -131,11 +131,8 @@ class HybridSegFormer(nn.Module):
         # Loss functions
         self.contrastive_loss_fn = NTXentLoss(temperature=0.07)
         # self.reconstruction_loss_fn = nn.MSELoss()
-        loss_config = {
-        "ce": {"weight": 0.2},
-        "iou": {"weight": 0.8},
-        }
-        self.reconstruction_loss_fn = HybridLoss(**loss_config)
+
+        self.reconstruction_loss_fn = DiceLoss()
 
         # Hyperparameter for balancing losses
         self.lambda_recon = lambda_recon
@@ -261,7 +258,7 @@ if __name__ == '__main__':
                                              worker_init_fn=hdf5_worker_init_fn
                                              )
     config = SegformerConfig.from_pretrained(backbone_name)
-    model = HybridSegFormer(config, backbone=backbone_name, lambda_recon=0.2)
+    model = HybridSegFormer(config, backbone=backbone_name, lambda_recon=1.0)
     optimizer = AdamW(model.parameters(), lr=1e-4)
 
     model.to(device)
