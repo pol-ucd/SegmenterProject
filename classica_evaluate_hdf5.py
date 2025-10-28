@@ -226,7 +226,7 @@ def main():
                 iou_epoch_train_loss = []
                 iou_epoch_test_loss = []
 
-                for data in all_data[:n_train]:
+                for data in all_data[:n_train:4]:
                     model.train()
 
                     x = {}
@@ -249,12 +249,12 @@ def main():
                     if scaler is not None:
                         scaler.scale(loss_train).backward()
                         scaler.unscale_(optimizer)
-                        torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                         scaler.step(optimizer)
                         scaler.update()
                     else:
                         loss_train.backward()
-                        torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                         optimizer.step()
 
                     scheduler.step()
