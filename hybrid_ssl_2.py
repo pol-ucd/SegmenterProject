@@ -132,12 +132,8 @@ class HybridSegFormer(nn.Module):
         self.contrastive_loss_fn = NTXentLoss(temperature=0.07)
         # self.reconstruction_loss_fn = nn.MSELoss()
         loss_config = {
-        "weight_ce": 0.2,
-        "weight_dice": 0.0,
-        "weight_focal": 0.0,
-        "weight_tversky": 0.0,
-        "weight_iou": 0.8,
-        "weight_hausdorff": 0.0
+        "ce": {"weight": 0.2},
+        "iou": {"weight": 0.8},
         }
         self.reconstruction_loss_fn = HybridLoss(**loss_config)
 

@@ -25,7 +25,7 @@ class HybridLoss(BaseLoss):
         self.weights = {}
 
         for name, config in loss_configs.items():
-            weight = config.pop('weight', 1.0)
+            weight = config.pop('weight', 0.0)
             self.weights[name] = weight
             self.loss_functions[name] = LossFactory.create(name, **config)
             # logging.info(f"Initialized loss '{name}' with weight {weight} and config {config}")
