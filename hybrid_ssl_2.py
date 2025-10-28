@@ -237,12 +237,12 @@ if __name__ == '__main__':
             logging.FileHandler("training.log")
         ]
     )
-
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger = logging.getLogger()
     params = {'batch_size': 8,
               'dataset': '../segmenter/data/pretrain_images.h5',
               'num_workers': 4, }
-    backbone_name = "nvidia/segformer-b2-finetuned-ade-512-512"
+    backbone_name = "nvidia/segformer-b4-finetuned-ade-512-512"
     num_epochs = 200
 
     image_size = (512, 512)
@@ -266,7 +266,7 @@ if __name__ == '__main__':
     config = SegformerConfig.from_pretrained(backbone_name)
     model = HybridSegFormer(config, backbone=backbone_name, lambda_recon=0.2)
     optimizer = AdamW(model.parameters(), lr=1e-4)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     model.to(device)
 
     scaler = None
