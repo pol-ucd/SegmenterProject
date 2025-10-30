@@ -149,12 +149,15 @@ class AttentionMaskingMIM(nn.Module):
                                return_dict=True).hidden_states
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
-        reconstructed = self.reconstruction_head(encoded).requires_grad_(True)
+        reconstructed = self.reconstruction_head(encoded)
         reconstructed = F.interpolate(reconstructed,
                                       size=(H, W), mode='nearest')
 
         # Pool along dim 1
         reconstructed = torch.argmax(reconstructed, dim=1).unsqueeze(1).float()
+
+        print("reconstructed_mask.requires_grad: ", reconstructed.requires_grad)
+        print("mask.requires_grad              : ", mask.requires_grad)
 
         return reconstructed, mask
 
