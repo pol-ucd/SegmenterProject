@@ -68,10 +68,10 @@ class MIMSegformerReconstructionHead(nn.Module):
         )
 
         self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size)
-        # self.activation = nn.ReLU()
-        #
-        # self.dropout = nn.Dropout(config.classifier_dropout_prob)
-        #
+        self.activation = nn.ReLU()
+
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
+
         # """
         #     Use an image reconstruction head instead of the usual classifier so
         #     that we can compare generated images to calculate loss
@@ -82,7 +82,7 @@ class MIMSegformerReconstructionHead(nn.Module):
         # decoder_head_in = h_patch * w_patch * config.decoder_hidden_size
 
         self.reconstruction_head = nn.Linear(config.decoder_hidden_size,
-                                    3*config.image_size*config.image_size)
+                                    3)
 
 
         self.config = config
@@ -113,12 +113,14 @@ class MIMSegformerReconstructionHead(nn.Module):
         Stack all of the encodings 
         """
         hidden_states = self.linear_fuse(torch.cat(all_hidden_states[::-1], dim=1))
-        print("hidden_states.shape: ", hidden_states.shape)
-        # hidden_states = self.batch_norm(hidden_states)
-        # hidden_states = self.activation(hidden_states)
-        # hidden_states = self.dropout(hidden_states)
 
-        logits = self.reconstruction_head(hidden_states)
+        hidden_states = self.batch_norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        b, d, h, w = hidden_states.shape
+        hidden_states = hidden_states.permute(1, 0, 2, 3).reshape(d, -1).permute(0,1)
+
+        logits = self.reconstruction_head(hidden_states).reshape(b, -1, h, w)
 
         return logits
 
