@@ -103,10 +103,11 @@ class MIMSegformerReconstructionHead(nn.Module):
             all_hidden_states += (encoder_hidden_state,)
 
         hidden_states = self.linear_fuse(torch.cat(all_hidden_states[::-1], dim=1))
+        print("1. hidden_states: ", hidden_states.shape)
         hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        print("hidden_states: ", hidden_states.shape)
+        print("2. hidden_states: ", hidden_states.shape)
         logits = self.reconstruction_head(hidden_states)
 
         return logits
