@@ -106,7 +106,7 @@ class MIMSegformerReconstructionHead(nn.Module):
         hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
+        print("hidden_states: ", hidden_states.shape)
         logits = self.reconstruction_head(hidden_states)
 
         return logits
