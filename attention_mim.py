@@ -158,9 +158,9 @@ class AttentionMaskingMIM(nn.Module):
         return reconstructed, mask.float()
 
 
-def check_is_finite(logger: logging.Logger, loss: torch.Tensor)-> None:
-    if not torch.isfinite(loss):
-        logger.warning("Warning: loss is not finite!")
+def check_is_finite(logger: logging.Logger, x: torch.Tensor)-> None:
+    if torch.any(torch.isinf(x)):
+        logger.warning(f"Warning: Tensor {x.__name__} is not finite!")
 
     try:
         assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
