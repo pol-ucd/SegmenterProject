@@ -77,9 +77,13 @@ class MIMSegformerReconstructionHead(nn.Module):
             that we can compare generated images to calculate loss
         """
         self.reconstruction_head = nn.Sequential(
-            nn.Linear(config.decoder_hidden_size, config.decoder_hidden_size//2),
+            nn.Conv2d(config.decoder_hidden_size,
+                      3*config.image_size*config.image_size,
+                      kernel_size=1),
+            nn.BatchNorm2d(3*config.image_size*config.image_size),
             nn.ReLU(),
-            nn.Linear(config.decoder_hidden_size//2, 3*config.image_size*config.image_size),
+            nn.Linear(3*config.image_size*config.image_size,
+                      3*config.image_size*config.image_size,)
         )
 
         self.config = config
@@ -110,8 +114,6 @@ class MIMSegformerReconstructionHead(nn.Module):
         hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        print("hidden_states.shape: ", hidden_states.shape)
 
         # logits are of shape (batch_size, num_labels, height/4, width/4)
         # logits = self.classifier(hidden_states)
