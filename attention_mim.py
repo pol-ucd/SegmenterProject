@@ -47,7 +47,6 @@ class MIMUpscalerMLP(nn.Module):
 # class SegformerDecodeHead(SegformerPreTrainedModel):
 class MIMSegformerDecodeHead(nn.Module):
     def __init__(self, config):
-        # super().__init__(config)
         super().__init__()
 
         mlps = []
@@ -99,7 +98,7 @@ class MIMSegformerDecodeHead(nn.Module):
         hidden_states = self.dropout(hidden_states)
 
         # logits are of shape (batch_size, num_labels, height/4, width/4)
-        logits = self.classifier(hidden_states)
+        logits = self.classifier(hidden_states).requires_grad_(True)
 
         return logits
 
