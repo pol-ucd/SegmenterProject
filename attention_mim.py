@@ -193,6 +193,7 @@ if __name__ == "__main__":
 
     config = SegformerConfig.from_pretrained(backbone)
 
+    config.image_size = image_size[0]
     config.num_labels = 2
     config.id2label = {0: 'negative', 1: 'positive'}
     config.label2label = {'negative': 0, 'positive': 1}
