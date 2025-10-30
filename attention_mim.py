@@ -71,20 +71,14 @@ class MIMSegformerReconstructionHead(nn.Module):
         self.activation = nn.ReLU()
 
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
-        # self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1)
+
         """
             Use an image reconstruction head instead of the usual classifier so 
             that we can compare generated images to calculate loss
         """
-        self.reconstruction_head = nn.Sequential(
-            nn.Conv2d(config.decoder_hidden_size,
-                      3*config.image_size*config.image_size,
-                      kernel_size=1),
-            nn.BatchNorm2d(3*config.image_size*config.image_size),
-            nn.ReLU(),
-            nn.Linear(3*config.image_size*config.image_size,
-                      3*config.image_size*config.image_size,)
-        )
+        self.reconstruction_head = nn.Conv2d(config.decoder_hidden_size,
+                                    3*config.image_size*config.image_size,
+                                    kernel_size=1)
 
         self.config = config
 
