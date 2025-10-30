@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import GradScaler, autocast
-from torch.nn import MSELoss
+from torch.nn import MSELoss, CrossEntropyLoss
 from torch.optim import AdamW
 from torchvision import transforms
 from tqdm import tqdm
@@ -202,7 +202,7 @@ def main(params: Dict[str, Any]):
 
     model = AttentionMaskingMIM(config)
 
-    loss_fn = MSELoss()
+    loss_fn = CrossEntropyLoss()
 
     optimizer = AdamW(model.parameters(), lr=1e-4)
 
@@ -241,9 +241,7 @@ def main(params: Dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_mask, mask = model(x)
 
-            print(mask.shape, reconstructed_mask.shape)
             loss_total  = loss_fn(reconstructed_mask,mask)
-
 
             if scaler is not None:
                 scaler.scale(loss_total).backward()
