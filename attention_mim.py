@@ -158,20 +158,20 @@ class AttentionMaskingMIM(nn.Module):
         return reconstructed, mask.float()
 
 
-def check_is_finite(logger: logging.Logger, x: torch.Tensor)-> None:
-
+def check_is_finite(logger: logging.Logger, x: torch.Tensor, label:str = None)-> None:
+    label = label or ''
     if torch.any(torch.isinf(x)):
-        logger.warning(f"Warning: Tensor is not finite!")
+        logger.warning(f"{label} Tensor is not finite!")
     try:
         assert x.requires_grad and x.grad_fn is not None
     except AssertionError:
-        logger.error(f"Tensor is detached from graph")
+        logger.error(f"{label} Tensor is detached from graph")
         logger.error(
             f":Device {x.device}, dtype:{x.dtype}, requires_grad: {x.requires_grad}, grad_fn: {x.grad_fn}")
     try:
         assert x.shape == torch.Size([])
     except AssertionError:
-        logger.error(f"Tensor is not a scalar tensor {x.shape}")
+        logger.error(f"{label} Tensor is not a scalar tensor {x.shape}")
         logger.error(
             f"Device {x.device}, dtype:{x.dtype}, requires_grad: {x.requires_grad}, grad_fn: {x.grad_fn}")
 
@@ -259,8 +259,8 @@ def main(params: Dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_mask, mask = model(x)
 
-            check_is_finite(logger, reconstructed_mask)
-            check_is_finite(logger, mask)
+            check_is_finite(logger, reconstructed_mask, "reconstructed_mask")
+            check_is_finite(logger, mask, "mask")
 
             new_mask = torch.stack([mask, 1.0 - mask], dim=1).squeeze()
             loss_total  = loss_fn(reconstructed_mask,
