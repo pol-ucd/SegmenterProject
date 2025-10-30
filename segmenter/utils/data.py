@@ -206,6 +206,7 @@ class SSLTransformPipeline:
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
             v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
+            TransformClamp(),
         ])
 
         # Base Image Transform (for visualization or non-augmented input)
@@ -214,6 +215,7 @@ class SSLTransformPipeline:
             v2.ToDtype(torch.float32, scale=True),
             TransformMaskTranspose(),
             v2.Resize(size=size, interpolation=InterpolationMode.NEAREST),
+            TransformClamp(),
         ])
 
 
@@ -223,13 +225,9 @@ class SSLTransformPipeline:
             v2.ToImage(),
             TransformCheckNan("After V2.ToImage()"),
             v2.ToDtype(torch.float32, scale=True),
-            # 1. Geometric: Global RandomResizedCrop
-            TransformCheckNan("After V2.ToDtype()"),
             v2.RandomResizedCrop(size=size, scale=global_crop_scale,
                                  interpolation=InterpolationMode.BICUBIC),
-            TransformCheckNan("After v2.RandomResizedCrop()"),
             v2.RandomHorizontalFlip(p=0.5),  # Standard geometric augmentation
-            TransformCheckNan("After v2.RandomHorizontalFlip()"),
             # 2. Photometric: Strong Color Jitter
             TransformClamp(),
             v2.RandomApply([color_jitter], p=0.5),
