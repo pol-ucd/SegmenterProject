@@ -125,11 +125,12 @@ class AttentionMaskingMIM(nn.Module):
     def forward(self, x):
         B, C, H, W = x.shape
         print(B, C, H, W)
-        h_0, w_0 = H // self.strides[0], W // self.strides[0]
+        scaling = math.prod(self.strides)
+        h_0, w_0 = H // scaling, W // scaling
         with torch.no_grad():
             features = self.encoder.encoder(x).last_hidden_state  # [B, N, C]
             print(features.shape)
-            attn_map = torch.norm(features, dim=-1).view(B, h_0, w_0)  # Approximate attention proxy
+            attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
 
         mask = self.generate_attention_mask(attn_map)
         mask = F.interpolate(mask.unsqueeze(1),
@@ -193,6 +194,12 @@ if __name__ == "__main__":
 
     config = SegformerConfig.from_pretrained(backbone)
 
+    """
+    Tweak the config settings to trim it down a bit.
+    
+    We only care about 2 class output since we'll be using it for yes/no classification
+    
+    """
     config.image_size = image_size[0]
     config.num_labels = 2
     config.id2label = {0: 'negative', 1: 'positive'}
