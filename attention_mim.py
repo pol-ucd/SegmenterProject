@@ -138,7 +138,7 @@ class AttentionMaskingMIM(nn.Module):
             print(features.shape)
             attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
 
-        mask = self.generate_attention_mask(attn_map)
+        mask = self.generate_attention_mask(attn_map).requires_grad_(True)
         mask = F.interpolate(mask.unsqueeze(1),
                              size=(H, W), mode='nearest')
         x_masked = x * mask
@@ -147,7 +147,7 @@ class AttentionMaskingMIM(nn.Module):
                                return_dict=True).hidden_states
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
-        reconstructed = self.reconstruction_head(encoded)
+        reconstructed = self.reconstruction_head(encoded).requires_grad_(True)
         reconstructed = F.interpolate(reconstructed,
                                       size=(H, W), mode='nearest')
 
@@ -233,7 +233,7 @@ def main(params: Dict[str, Any]):
         # Iterate over the dataset
         for step, data in enumerate(tqdm(dataloader)):
 
-            x = data['images'].to(device).requires_grad_(True)
+            x = data['images'].to(device)
             optimizer.zero_grad()
             reconstructed_mask, mask = model(x)
             loss_total  = loss_fn(reconstructed_mask,mask)
