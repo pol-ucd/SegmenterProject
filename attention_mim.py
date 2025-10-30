@@ -98,7 +98,7 @@ class MIMSegformerDecodeHead(nn.Module):
         hidden_states = self.dropout(hidden_states)
 
         # logits are of shape (batch_size, num_labels, height/4, width/4)
-        logits = self.classifier(hidden_states).requires_grad_(True)
+        logits = self.classifier(hidden_states)
 
         return logits
 
@@ -233,7 +233,7 @@ def main(params: Dict[str, Any]):
         # Iterate over the dataset
         for step, data in enumerate(tqdm(dataloader)):
 
-            x = data['images'].to(device)
+            x = data['images'].to(device).requires_grad_(True)
             optimizer.zero_grad()
             reconstructed_mask, mask = model(x)
             loss_total  = loss_fn(reconstructed_mask,mask)
