@@ -155,8 +155,6 @@ class AttentionMaskingMIM(nn.Module):
         # Pool along dim 1
         reconstructed = torch.softmax(reconstructed, dim=1).float()
 
-        mask = F.one_hot(mask.long(), num_classes=reconstructed.shape[1])
-
         return reconstructed, mask.float()
 
 
