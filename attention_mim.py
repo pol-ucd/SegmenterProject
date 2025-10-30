@@ -159,21 +159,21 @@ class AttentionMaskingMIM(nn.Module):
 
 
 def check_is_finite(logger: logging.Logger, x: torch.Tensor)-> None:
-    if torch.any(torch.isinf(x)):
-        logger.warning(f"Warning: Tensor {x.__name__} is not finite!")
 
+    if torch.any(torch.isinf(x)):
+        logger.warning(f"Warning: Tensor is not finite!")
     try:
-        assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
+        assert x.requires_grad and x.grad_fn is not None
     except AssertionError:
-        logger.error("Loss is detached from graph")
+        logger.error(f"Tensor is detached from graph")
         logger.error(
-            f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
+            f":Device {x.device}, dtype:{x.dtype}, requires_grad: {x.requires_grad}, grad_fn: {x.grad_fn}")
     try:
-        assert loss.shape == torch.Size([]), f"Loss is not a scalar tensor {loss.shape}"
+        assert x.shape == torch.Size([])
     except AssertionError:
-        logger.error(f"Loss is not a scalar tensor {loss.shape}")
+        logger.error(f"Tensor is not a scalar tensor {x.shape}")
         logger.error(
-            f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
+            f"Device {x.device}, dtype:{x.dtype}, requires_grad: {x.requires_grad}, grad_fn: {x.grad_fn}")
 
 
 # Example usage
