@@ -243,6 +243,7 @@ def main(params: Dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_mask, mask = model(x)
 
+            print(mask.shape, reconstructed_mask.shape)
             loss_total  = loss_fn(reconstructed_mask,mask)
 
 
