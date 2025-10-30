@@ -118,7 +118,7 @@ class MIMSegformerReconstructionHead(nn.Module):
         hidden_states = self.activation(hidden_states)
         hidden_states = self.dropout(hidden_states)
         b, d, h, w = hidden_states.shape
-        hidden_states = hidden_states.permute(1, 0, 2, 3).reshape(d, -1).transpose(0, 1)
+        hidden_states = hidden_states.permute(1, 0, 2, 3).reshape(d, -1).T
 
         logits = self.reconstruction_head(hidden_states).reshape(b, -1, h, w)
 
