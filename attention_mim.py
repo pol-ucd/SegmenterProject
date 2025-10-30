@@ -157,7 +157,7 @@ class AttentionMaskingMIM(nn.Module):
 
         print("reconstructed_mask.requires_grad: ", reconstructed.requires_grad)
         print("mask.requires_grad              : ", mask.requires_grad)
-        print("encoded.requires_grad           : ", encoded.requires_grad)
+        print("encoded.requires_grad           : ", encoded[0].requires_grad)
 
         return reconstructed, mask
 
