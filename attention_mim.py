@@ -53,7 +53,10 @@ class MIMSegformerReconstructionHead(nn.Module):
     """
     def __init__(self, config):
         super().__init__()
-
+        h_patch = config.image_size // config.strides[0]
+        w_patch = h_patch
+        n_features = sum(config.hidden_sizes)
+        decoder_head_in = n_features*h_patch*w_patch
         mlps = []
         for i in range(config.num_encoder_blocks):
             mlp = MIMUpscalerMLP(input_dim=config.hidden_sizes[i], output_dim=config.decoder_hidden_size)
@@ -75,7 +78,7 @@ class MIMSegformerReconstructionHead(nn.Module):
             Use an image reconstruction head instead of the usual classifier so 
             that we can compare generated images to calculate loss
         """
-        self.reconstruction_head = nn.Linear(config.decoder_hidden_size,
+        self.reconstruction_head = nn.Linear(decoder_head_in,
                                     3*config.image_size*config.image_size)
 
         self.config = config
