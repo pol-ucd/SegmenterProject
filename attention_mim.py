@@ -202,7 +202,7 @@ def main(params: Dict[str, Any]):
 
     model = AttentionMaskingMIM(config)
 
-    loss_fn = CrossEntropyLoss()
+    loss_fn = MSELoss()
 
     optimizer = AdamW(model.parameters(), lr=1e-4)
 
@@ -241,7 +241,7 @@ def main(params: Dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_mask, mask = model(x)
 
-            new_mask = torch.stack([mask, 1.0 - mask], dim=1)
+            new_mask = torch.stack([mask, 1.0 - mask], dim=1).squeeze()
             loss_total  = loss_fn(reconstructed_mask,
                                   new_mask)
 
