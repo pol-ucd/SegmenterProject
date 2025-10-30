@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import GradScaler
+from torch import GradScaler, autocast
 from torch.nn import MSELoss
 from torch.optim import AdamW
 from torchvision import transforms
@@ -18,6 +18,8 @@ from transformers import SegformerModel, SegformerConfig
 
 from segmenter.utils import HDF5DatasetOptimized, HDF5BatchSampler
 from segmenter.utils.data import SSLTransformPipeline, hdf5_worker_init_fn
+
+torch.autograd.set_detect_anomaly(True)
 
 backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
 data_source = '../segmenter/data/pretrain_images.h5'
@@ -234,15 +236,20 @@ def main(params: Dict[str, Any]):
         for step, data in enumerate(tqdm(dataloader)):
 
             x = data['images'].to(device)
+
             optimizer.zero_grad()
-            reconstructed_mask, mask = model(x)
-            loss_total  = loss_fn(reconstructed_mask,mask)
-            if torch.isnan(loss_total).any():
-                print(f"NaN generated in loss function")
-            if torch.isnan(reconstructed_mask).any():
-                print(f"NaN generated in reconstructed_mask")
-            if torch.isnan(mask).any():
-                print(f"NaN generated in mask")
+
+            with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
+                reconstructed_mask, mask = model(x)
+                if torch.isnan(reconstructed_mask).any():
+                    print(f"NaN generated in reconstructed_mask")
+                if torch.isnan(mask).any():
+                    print(f"NaN generated in mask")
+
+                loss_total  = loss_fn(reconstructed_mask,mask)
+                if torch.isnan(loss_total).any():
+                    print(f"NaN generated in loss function")
+
 
             if scaler is not None:
                 scaler.scale(loss_total).backward()
