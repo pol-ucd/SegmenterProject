@@ -66,21 +66,22 @@ class MIMSegformerReconstructionHead(nn.Module):
             kernel_size=1,
             bias=False,
         )
+
         self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size)
-        self.activation = nn.ReLU()
+        # self.activation = nn.ReLU()
+        #
+        # self.dropout = nn.Dropout(config.classifier_dropout_prob)
+        #
+        # """
+        #     Use an image reconstruction head instead of the usual classifier so
+        #     that we can compare generated images to calculate loss
+        # """
+        # h_patch = config.image_size // config.strides[0]
+        # w_patch = h_patch
+        #
+        # decoder_head_in = h_patch * w_patch * config.decoder_hidden_size
 
-        self.dropout = nn.Dropout(config.classifier_dropout_prob)
-
-        """
-            Use an image reconstruction head instead of the usual classifier so 
-            that we can compare generated images to calculate loss
-        """
-        h_patch = config.image_size // config.strides[0]
-        w_patch = h_patch
-
-        decoder_head_in = h_patch * w_patch * config.decoder_hidden_size
-        print("decoder_head_in: ", decoder_head_in, 3*config.image_size*config.image_size)
-        self.reconstruction_head = nn.Linear(decoder_head_in,
+        self.reconstruction_head = nn.Linear(config.decoder_hidden_size,
                                     3*config.image_size*config.image_size)
 
 
@@ -112,13 +113,12 @@ class MIMSegformerReconstructionHead(nn.Module):
         Stack all of the encodings 
         """
         hidden_states = self.linear_fuse(torch.cat(all_hidden_states[::-1], dim=1))
+        print("hidden_states.shape: ", hidden_states.shape)
+        # hidden_states = self.batch_norm(hidden_states)
+        # hidden_states = self.activation(hidden_states)
+        # hidden_states = self.dropout(hidden_states)
 
-        hidden_states = self.batch_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        print("2. hidden_states: ", hidden_states.shape)
-        logits = self.reconstruction_head(hidden_states.reshape(batch_size, -1))
+        logits = self.reconstruction_head(hidden_states)
 
         return logits
 
