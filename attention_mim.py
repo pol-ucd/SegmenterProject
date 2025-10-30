@@ -112,6 +112,7 @@ class MIMSegformerReconstructionHead(nn.Module):
         # logits are of shape (batch_size, num_labels, height/4, width/4)
         # logits = self.classifier(hidden_states)
         logits = self.reconstruction_head(hidden_states)
+
         return logits
 
 
