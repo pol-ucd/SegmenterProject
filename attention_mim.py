@@ -1,6 +1,9 @@
+import argparse
 import logging
 import math
 import sys
+import traceback
+from typing import Dict, Any
 
 import numpy as np
 import torch
@@ -13,8 +16,13 @@ from torchvision import transforms
 from tqdm import tqdm
 from transformers import SegformerModel, SegformerConfig
 
+from hanija_original.data_old import data_load
 from segmenter.utils import HDF5DatasetOptimized, HDF5BatchSampler
 from segmenter.utils.data import SSLTransformPipeline, hdf5_worker_init_fn
+
+backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
+data_source = '../segmenter/data/pretrain_images.h5'
+image_size = 256
 
 
 class MIMUpscalerMLP(nn.Module):
@@ -152,42 +160,30 @@ class AttentionMaskingMIM(nn.Module):
 
 
 # Example usage
-if __name__ == "__main__":
-    # --- Logging Setup ---
-    logging.basicConfig(
-        level=logging.INFO,
-        force=True,  # Resets any previous configuration - in Colab for example
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler("training.log")
-        ]
-    )
+def main(params: Dict[str, Any]):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     logger = logging.getLogger()
-    params = {'batch_size': 16,
-              'dataset': '../segmenter/data/pretrain_images.h5',
-              'num_workers': 4, }
-    backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
-    num_epochs = 200
 
-    image_size = (512, 512)
+    num_epochs = params['num_epochs']
+    batch_size = params['batch_size']
+    num_workers = params['num_workers']
+
+
     prefix = 'attention_mim'
 
-    # Example Initialization (using placeholder values)
     ds = HDF5DatasetOptimized(hdf5_path=params['dataset'],
                               transform=SSLTransformPipeline(size=image_size))
 
     batch_sampler = HDF5BatchSampler(ds.dataset_len,
-                                     params['batch_size'],
+                                     batch_size=batch_size,
                                      shuffle=True)
 
     dataloader = torch.utils.data.DataLoader(ds,
                                              batch_size=None,
                                              sampler=batch_sampler,
                                              shuffle=False,
-                                             num_workers=params['num_workers'],
+                                             num_workers=num_workers,
                                              worker_init_fn=hdf5_worker_init_fn
                                              )
 
@@ -200,7 +196,7 @@ if __name__ == "__main__":
     We only care about 2 class output since we'll be using it for yes/no classification
     
     """
-    config.image_size = image_size[0]
+    config.image_size = image_size
     config.num_labels = 2
     config.id2label = {0: 'negative', 1: 'positive'}
     config.label2label = {'negative': 0, 'positive': 1}
@@ -291,4 +287,65 @@ if __name__ == "__main__":
             break
 
     logger.info("Pre-training complete.")
+
+
+def get_args():
+    """
+    Command line arguments
+
+    :return: Dictionary of arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--input", default=data_source,
+                        type=str, help="Path to the HDF5 file.")
+    parser.add_argument("-bs", "--batch_size", type=int, default=4, )
+    parser.add_argument("-nw", "--num_workers", type=int, default=4, )
+    parser.add_argument("-e", "--num_epochs", type=int, default=200, )
+    parser.add_argument("-lr", "--learning_rate", type=float, default=1e-5, )
+    parser.add_argument("-p", "--prefix", type=str, default='moco_msn', )
+    parser.add_argument("-ro", "--run_once", type=bool, default=False, )
+    parser.add_argument("-ns", "--num_shapes", type=int, default=24, )
+
+    args = parser.parse_args()
+
+    params = {'dataset': args.input,
+              'batch_size': args.batch_size,
+              'num_workers': args.num_workers,
+              'num_epochs': args.num_epochs,
+              'learning_rate': args.learning_rate,
+              'prefix': args.prefix,
+              'run_once': bool(args.run_once),
+              'num_shapes': int(args.num_shapes), }
+
+    return params
+
+
+
+if __name__ == "__main__":
+    # --- Logging Setup ---
+    logging.basicConfig(
+        level=logging.INFO,
+        force=True,  # Resets any previous configuration - in Colab for example
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("training.log")
+        ]
+    )
+    logger = logging.getLogger()
+    try:
+        params = get_args()
+        main(params)
+    except KeyboardInterrupt:
+        logger.info("KeyboardInterrupt detected. Shutting down gracefully.")
+    except Exception as ex:
+        logger.error(f"Unknown exception occurred. Error: {ex}")
+        logger.error(traceback.format_exc())
+    finally:
+        # ensure log handlers are flushed.
+        for handler in logger.handlers:
+            handler.flush()
+            handler.close()
+        logger.info("Logger handlers flushed and closed. Exiting now.")
+        sys.exit(0)
 

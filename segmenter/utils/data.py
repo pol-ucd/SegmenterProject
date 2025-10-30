@@ -171,7 +171,7 @@ class SSLTransformPipeline:
     """
 
     def __init__(self,
-                 size: Tuple[int, int] = (512, 512),
+                 size: Union[int, Tuple[int, int]]= (512, 512),
                  global_crop_scale: Tuple[float, float] = (0.4, 1.0),
                  # Parameters for local crops, following DINO's common settings
                  num_local_crops: int = 1,
@@ -189,6 +189,8 @@ class SSLTransformPipeline:
         """
         # Store local crop configuration
         self.num_local_crops = num_local_crops
+        if isinstance(size, int):
+            size = (size, size)
 
         # Define Common Strong Photometric Augmentations
 
