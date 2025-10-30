@@ -16,7 +16,6 @@ from torchvision import transforms
 from tqdm import tqdm
 from transformers import SegformerModel, SegformerConfig
 
-from hanija_original.data_old import data_load
 from segmenter.utils import HDF5DatasetOptimized, HDF5BatchSampler
 from segmenter.utils.data import SSLTransformPipeline, hdf5_worker_init_fn
 
