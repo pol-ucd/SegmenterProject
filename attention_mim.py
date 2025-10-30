@@ -152,7 +152,7 @@ class AttentionMaskingMIM(nn.Module):
                                       size=(H, W), mode='nearest')
 
         # Pool along dim 1
-        reconstructed = torch.argmax(reconstructed, dim=1).unsqueeze(1)
+        reconstructed = torch.argmax(reconstructed, dim=1).unsqueeze(1).float()
 
         return reconstructed, mask
 
