@@ -60,7 +60,6 @@ class MIMSegformerReconstructionHead(nn.Module):
             mlps.append(mlp)
         self.linear_c = nn.ModuleList(mlps)
 
-        # the following 3 layers implement the ConvModule of the original implementation
         self.linear_fuse = nn.Conv2d(
             in_channels=config.decoder_hidden_size * config.num_encoder_blocks,
             out_channels=config.decoder_hidden_size,
@@ -76,9 +75,8 @@ class MIMSegformerReconstructionHead(nn.Module):
             Use an image reconstruction head instead of the usual classifier so 
             that we can compare generated images to calculate loss
         """
-        self.reconstruction_head = nn.Conv2d(config.decoder_hidden_size,
-                                    3*config.image_size*config.image_size,
-                                    kernel_size=1)
+        self.reconstruction_head = nn.Linear(config.decoder_hidden_size,
+                                    3*config.image_size*config.image_size)
 
         self.config = config
 
@@ -109,8 +107,6 @@ class MIMSegformerReconstructionHead(nn.Module):
         hidden_states = self.activation(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        # logits are of shape (batch_size, num_labels, height/4, width/4)
-        # logits = self.classifier(hidden_states)
         logits = self.reconstruction_head(hidden_states)
 
         return logits
@@ -155,9 +151,6 @@ class AttentionMaskingMIM(nn.Module):
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
-
-        reconstructed = F.interpolate(reconstructed,
-                                      size=(H, W), mode='nearest').float()
 
         return reconstructed, mask
 
