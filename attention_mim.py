@@ -128,6 +128,7 @@ class AttentionMaskingMIM(nn.Module):
         h_0, w_0 = H // self.strides[0], W // self.strides[0]
         with torch.no_grad():
             features = self.encoder.encoder(x).last_hidden_state  # [B, N, C]
+            print(features.shape)
             attn_map = torch.norm(features, dim=-1).view(B, h_0, w_0)  # Approximate attention proxy
 
         mask = self.generate_attention_mask(attn_map)
