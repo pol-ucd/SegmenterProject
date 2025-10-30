@@ -147,7 +147,7 @@ class AttentionMaskingMIM(nn.Module):
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
-        print("1. reconstructed.requires_grad", reconstructed..requires_grad)
+        print("1. reconstructed.requires_grad", reconstructed.requires_grad)
         reconstructed = F.interpolate(reconstructed,
                                       size=(H, W), mode='nearest')
         print("2. reconstructed.requires_grad", reconstructed.requires_grad)
