@@ -101,7 +101,6 @@ class MIMSegformerDecodeHead(nn.Module):
 
         # logits are of shape (batch_size, num_labels, height/4, width/4)
         logits = self.classifier(hidden_states)
-        print("logits.requires_grad: ", logits.requires_grad)
         return logits
 
 
@@ -148,11 +147,14 @@ class AttentionMaskingMIM(nn.Module):
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
+        print("1. reconstructed.requires_grad", reconstructed..requires_grad)
         reconstructed = F.interpolate(reconstructed,
                                       size=(H, W), mode='nearest')
+        print("2. reconstructed.requires_grad", reconstructed.requires_grad)
 
         # Pool along dim 1
         reconstructed = torch.argmax(reconstructed, dim=1).unsqueeze(1).float()
+        print("3. reconstructed.requires_grad", reconstructed.requires_grad)
 
         return reconstructed, mask
 
