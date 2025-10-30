@@ -246,9 +246,10 @@ def main(params: Dict[str, Any]):
                 if torch.isnan(mask).any():
                     print(f"NaN generated in mask")
 
-                loss_total  = loss_fn(reconstructed_mask,mask)
-                if torch.isnan(loss_total).any():
-                    print(f"NaN generated in loss function")
+            # loss_total  = loss_fn(reconstructed_mask,mask)
+            loss_total = loss_fn(mask, mask)
+            if torch.isnan(loss_total).any():
+                print(f"NaN generated in loss function")
 
 
             if scaler is not None:
