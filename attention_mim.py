@@ -158,6 +158,24 @@ class AttentionMaskingMIM(nn.Module):
         return reconstructed, mask.float()
 
 
+def check_is_finite(logger: logging.Logger, loss: torch.Tensor)-> None:
+    if not torch.isfinite(loss):
+        logger.warning("Warning: loss is not finite!")
+
+    try:
+        assert loss.requires_grad and loss.grad_fn is not None, "Loss is detached from graph"
+    except AssertionError:
+        logger.error("Loss is detached from graph")
+        logger.error(
+            f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
+    try:
+        assert loss.shape == torch.Size([]), f"Loss is not a scalar tensor {loss.shape}"
+    except AssertionError:
+        logger.error(f"Loss is not a scalar tensor {loss.shape}")
+        logger.error(
+            f"Loss: device {loss.device}, dtype:{loss.dtype}, requires_grad: {loss.requires_grad}, grad_fn: {loss.grad_fn}")
+
+
 # Example usage
 def main(params: Dict[str, Any]):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -240,6 +258,9 @@ def main(params: Dict[str, Any]):
 
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_mask, mask = model(x)
+
+            check_is_finite(logger, reconstructed_mask)
+            check_is_finite(logger, mask)
 
             new_mask = torch.stack([mask, 1.0 - mask], dim=1).squeeze()
             loss_total  = loss_fn(reconstructed_mask,
