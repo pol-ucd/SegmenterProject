@@ -78,10 +78,10 @@ class MIMSegformerReconstructionHead(nn.Module):
             Use an image reconstruction head instead of the usual classifier so 
             that we can compare generated images to calculate loss
         """
+        print("decoder_head_in: ", decoder_head_in, 3*config.image_size*config.image_size)
         self.reconstruction_head = nn.Linear(decoder_head_in,
                                     3*config.image_size*config.image_size)
 
-        print(self.reconstruction_head)
 
         self.config = config
 
