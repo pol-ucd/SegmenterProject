@@ -155,87 +155,6 @@ class MSNLoss(MSNBaseLoss):
         loss = loss_matrix.sum(dim=1).mean()  # average over N_masked
         return loss
 
-#
-# class SimSiamLoss(nn.Module):
-#     """
-#     Calculates the full symmetric SimSiam loss using MSE between predictions and targets.
-#     L_sym = 0.5 * [ L(p1, z2_det) + L(p2, z1_det) ]
-#     """
-#
-#     def __init__(self):
-#         super().__init__()
-#         # MSE is used for the loss calculation
-#         self.mse_loss = nn.MSELoss()
-#
-#     def forward(self, p1: torch.Tensor, z2_detached: torch.Tensor,
-#                 p2: torch.Tensor, z1_detached: torch.Tensor) -> torch.Tensor:
-#         """
-#         Calculates the full symmetric loss.
-#         :param p1: Prediction from view 1 (Anchor) [B, D].
-#         :param z2_detached: Target embedding from detached view 2 (Positive) [B, D].
-#         :param p2: Prediction from view 2 (Positive) [B, D].
-#         :param z1_detached: Target embedding from detached view 1 (Anchor) [B, D].
-#         :return: Scalar total symmetric loss tensor.
-#         """
-#         B = p1.shape[0]
-#         # Normalize embeddings before calculating loss (as per SimSiam implementation)
-#         p1 = F.normalize(p1, dim=1)
-#         z2_detached = F.normalize(z2_detached, dim=1)
-#         p2 = F.normalize(p2, dim=1)
-#         z1_detached = F.normalize(z1_detached, dim=1)
-#
-#         # Calculate the two symmetric loss terms (MSE)
-#         # Term 1: Prediction from view 1 vs Target from detached view 2
-#         loss1 = self.mse_loss(p1, z2_detached)
-#
-#         # Prediction from view 2 vs Target from detached view 1
-#         loss2 = self.mse_loss(p2, z1_detached)
-#
-#         # 3. Total Symmetric Loss (Averaged)
-#         total_loss = 0.5 * (loss1 + loss2)
-#
-#         return total_loss / B
-#
-
-#
-# class InfoNCELoss(MSNBaseLoss):
-#     """
-#     SimCLR-style InfoNCE Loss for contrastive learning.
-#     Calculates the loss over the full 2B embeddings (Anchor and Positive views).
-#     """
-#
-#     def __init__(self, temperature=0.1, reduction='mean', symmetric=False):
-#         super().__init__(reduction, symmetric)
-#         self.temperature = temperature
-#
-#
-#     def forward(self, z_anchor: torch.Tensor, z_positive: torch.Tensor) -> torch.Tensor:
-#         """
-#         :param z_anchor: Anchor embeddings [N, B].
-#         :param z_positive: Positive embeddings [N, B].
-#         :return: Scalar InfoNCE loss.
-#         """
-#         self._check_inputs(z_anchor, z_positive)
-#
-#         N, B = z_anchor.shape
-#
-#         # Normalize embeddings (Crucial for cosine similarity)
-#         z_anchor = F.normalize(z_anchor, dim=1)
-#         z_positive = F.normalize(z_positive, dim=1)
-#
-#         similarity_matrix = torch.einsum('i c h w, j c h w -> i j c h w',
-#                                          z_anchor, z_positive) / self.temperature
-#
-#         logits = similarity_matrix.reshape(B * B, -1)
-#
-#         # The label for the positive pair is always 0 (it is in the 0th column)
-#         labels = torch.eye(B, dtype=torch.long, device=logits.device).reshape(B * B)
-#
-#         # Apply Cross Entropy Loss (equivalent to InfoNCE)
-#         loss = F.cross_entropy(logits, labels)
-#
-#         return loss / (B * B)
-#
 class ContrastiveLoss(nn.Module):
     def __init__(self, temperature=0.25, eps=1e-6):
         super().__init__()
@@ -355,7 +274,7 @@ def nt_xent(z1: torch.Tensor, z2: torch.Tensor, temperature: float = 0.5) -> tor
     # 1. Mask self-similarities (Diagonal)
     diag_mask = torch.eye(2 * B, device=sim.device, dtype=torch.bool)
     # Filling with a large negative number effectively excludes self-positives from softmax
-    sim_masked = sim.masked_fill(diag_mask, -1e9)
+    sim_masked = sim.masked_fill_(diag_mask, -1e9)
 
     # 2. Identify positive pair indices: i <-> i+B
     # target_indices: [B, B+1, ..., 2B-1, 0, 1, ..., B-1]
