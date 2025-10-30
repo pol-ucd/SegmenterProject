@@ -241,7 +241,9 @@ def main(params: Dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_mask, mask = model(x)
 
-            loss_total  = loss_fn(reconstructed_mask,mask)
+            new_mask = torch.stack([mask, 1.0 - mask], dim=1)
+            loss_total  = loss_fn(reconstructed_mask,
+                                  new_mask)
 
             if scaler is not None:
                 scaler.scale(loss_total).backward()
