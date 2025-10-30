@@ -237,6 +237,12 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
             reconstructed_mask, mask = model(x)
             loss_total  = loss_fn(reconstructed_mask,mask)
+            if torch.isnan(loss_total).any():
+                print(f"NaN generated in loss function")
+            if torch.isnan(reconstructed_mask).any():
+                print(f"NaN generated in reconstructed_mask")
+            if torch.isnan(mask).any():
+                print(f"NaN generated in mask")
 
             if scaler is not None:
                 scaler.scale(loss_total).backward()
