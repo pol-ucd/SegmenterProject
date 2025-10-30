@@ -147,14 +147,14 @@ class AttentionMaskingMIM(nn.Module):
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
-        print("1. reconstructed.requires_grad", reconstructed.requires_grad)
+
         reconstructed = F.interpolate(reconstructed,
                                       size=(H, W), mode='nearest')
-        print("2. reconstructed.requires_grad", reconstructed.requires_grad)
+
 
         # Pool along dim 1
-        reconstructed = torch.argmax(reconstructed, dim=1).unsqueeze(1).float()
-        print("3. reconstructed.requires_grad", reconstructed.requires_grad)
+        reconstructed = torch.softmax(reconstructed, dim=1).unsqueeze(1).float()
+        print("With softmax(). reconstructed.requires_grad", reconstructed.requires_grad)
 
         return reconstructed, mask
 
