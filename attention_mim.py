@@ -158,23 +158,22 @@ class AttentionMaskingMIM(nn.Module):
         return reconstructed, mask.float()
 
 
-def check_is_finite(logger: logging.Logger, x: torch.Tensor, label:str = None)-> None:
+def check_is_finite(logger: logging.Logger, x: torch.Tensor, label:str = None)-> bool:
     label = label or ''
     if torch.any(torch.isinf(x)):
         logger.warning(f"{label} Tensor is not finite!")
+        return False
+    return True
+
+def check_is_attached(logger: logging.Logger, x: torch.Tensor, label:str = None)-> bool:
     try:
         assert x.requires_grad and x.grad_fn is not None
     except AssertionError:
         logger.error(f"{label} Tensor is detached from graph")
         logger.error(
             f":Device {x.device}, dtype:{x.dtype}, requires_grad: {x.requires_grad}, grad_fn: {x.grad_fn}")
-    try:
-        assert x.shape == torch.Size([])
-    except AssertionError:
-        logger.error(f"{label} Tensor is not a scalar tensor {x.shape}")
-        logger.error(
-            f"Device {x.device}, dtype:{x.dtype}, requires_grad: {x.requires_grad}, grad_fn: {x.grad_fn}")
-
+        return False
+    return True
 
 # Example usage
 def main(params: Dict[str, Any]):
