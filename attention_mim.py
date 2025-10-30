@@ -164,7 +164,7 @@ class AttentionMaskingMIM(nn.Module):
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
-
+        reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear')
         return reconstructed, mask
 
 
