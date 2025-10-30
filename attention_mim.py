@@ -247,7 +247,7 @@ def main(params: Dict[str, Any]):
                     print(f"NaN generated in mask")
 
             # loss_total  = loss_fn(reconstructed_mask,mask)
-            loss_total = loss_fn(mask, mask)
+            loss_total = loss_fn(reconstructed_mask, reconstructed_mask)
             if torch.isnan(loss_total).any():
                 print(f"NaN generated in loss function")
 
