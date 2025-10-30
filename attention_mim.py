@@ -154,7 +154,6 @@ class AttentionMaskingMIM(nn.Module):
 
         # Pool along dim 1
         reconstructed = torch.softmax(reconstructed, dim=1).unsqueeze(1).float()
-        print("With softmax(). reconstructed.requires_grad", reconstructed.requires_grad)
 
         return reconstructed, mask
 
@@ -241,15 +240,8 @@ def main(params: Dict[str, Any]):
 
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_mask, mask = model(x)
-                if torch.isnan(reconstructed_mask).any():
-                    print(f"NaN generated in reconstructed_mask")
-                if torch.isnan(mask).any():
-                    print(f"NaN generated in mask")
 
-            # loss_total  = loss_fn(reconstructed_mask,mask)
-            loss_total = loss_fn(reconstructed_mask, reconstructed_mask)
-            if torch.isnan(loss_total).any():
-                print(f"NaN generated in loss function")
+            loss_total  = loss_fn(reconstructed_mask,mask)
 
 
             if scaler is not None:
