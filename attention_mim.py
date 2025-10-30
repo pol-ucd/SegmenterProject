@@ -47,7 +47,10 @@ class MIMUpscalerMLP(nn.Module):
         return hidden_state
 
 # class SegformerDecodeHead(SegformerPreTrainedModel):
-class MIMSegformerDecodeHead(nn.Module):
+class MIMSegformerReconstructionHead(nn.Module):
+    """
+    Reconstruct a full image segmentation model
+    """
     def __init__(self, config):
         super().__init__()
 
@@ -68,7 +71,16 @@ class MIMSegformerDecodeHead(nn.Module):
         self.activation = nn.ReLU()
 
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
-        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1)
+        # self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1)
+        """
+            Use an image reconstruction head instead of the usual classifier so 
+            that we can compare generated images to calculate loss
+        """
+        self.reconstruction_head = nn.Sequential(
+            nn.Linear(config.decoder_hidden_size, config.decoder_hidden_size//2),
+            nn.ReLU(),
+            nn.Linear(config.decoder_hidden_size//2, 3*config.image_size*config.image_size),
+        )
 
         self.config = config
 
@@ -100,7 +112,8 @@ class MIMSegformerDecodeHead(nn.Module):
         hidden_states = self.dropout(hidden_states)
 
         # logits are of shape (batch_size, num_labels, height/4, width/4)
-        logits = self.classifier(hidden_states)
+        # logits = self.classifier(hidden_states)
+        logits = self.reconstruction_head(hidden_states)
         return logits
 
 
@@ -114,12 +127,8 @@ class AttentionMaskingMIM(nn.Module):
         self.strides = config.strides
         self.num_blocks = config.num_encoder_blocks
         self.mask_ratio = mask_ratio
-        # self.reconstruction_head = nn.Sequential(
-        #     nn.Linear(self.encoder.config.hidden_sizes[-1], 512),
-        #     nn.ReLU(),
-        #     nn.Linear(512, 3 * 16 * 16)  # Assuming 16x16 patch reconstruction
-        # )
-        self.reconstruction_head = MIMSegformerDecodeHead(config)
+
+        self.reconstruction_head = MIMSegformerReconstructionHead(config)
 
     def generate_attention_mask(self, attention_map):
         B, H, W = attention_map.shape
@@ -149,13 +158,9 @@ class AttentionMaskingMIM(nn.Module):
         reconstructed = self.reconstruction_head(encoded)
 
         reconstructed = F.interpolate(reconstructed,
-                                      size=(H, W), mode='nearest')
+                                      size=(H, W), mode='nearest').float()
 
-
-        # Pool along dim 1
-        reconstructed = torch.softmax(reconstructed, dim=1).float()
-
-        return reconstructed, mask.float()
+        return reconstructed, mask
 
 
 def check_is_finite(logger: logging.Logger, x: torch.Tensor, label:str = None)-> bool:
@@ -213,9 +218,9 @@ def main(params: Dict[str, Any]):
     
     """
     config.image_size = image_size
-    config.num_labels = 2
-    config.id2label = {0: 'negative', 1: 'positive'}
-    config.label2label = {'negative': 0, 'positive': 1}
+    # config.num_labels = 2
+    # config.id2label = {0: 'negative', 1: 'positive'}
+    # config.label2label = {'negative': 0, 'positive': 1}
 
     model = AttentionMaskingMIM(config)
 
@@ -256,14 +261,12 @@ def main(params: Dict[str, Any]):
             optimizer.zero_grad()
 
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
-                reconstructed_mask, mask = model(x)
+                reconstructed_x, mask = model(x)
 
-            check_is_finite(logger, reconstructed_mask, "reconstructed_mask")
-            check_is_finite(logger, mask, "mask")
+            # check_is_finite(logger, reconstructed_x, "reconstructed_mask")
+            # check_is_finite(logger, mask, "mask")
 
-            new_mask = torch.stack([mask, 1.0 - mask], dim=1).squeeze()
-            loss_total  = loss_fn(reconstructed_mask,
-                                  new_mask)
+            loss_total  = loss_fn(reconstructed_x, x)
 
             if scaler is not None:
                 scaler.scale(loss_total).backward()
@@ -327,7 +330,7 @@ def get_args():
     parser.add_argument("-nw", "--num_workers", type=int, default=4, )
     parser.add_argument("-e", "--num_epochs", type=int, default=200, )
     parser.add_argument("-lr", "--learning_rate", type=float, default=1e-5, )
-    parser.add_argument("-p", "--prefix", type=str, default='moco_msn', )
+    parser.add_argument("-p", "--prefix", type=str, default='attention_mim', )
     parser.add_argument("-ro", "--run_once", type=bool, default=False, )
     parser.add_argument("-ns", "--num_shapes", type=int, default=24, )
 
