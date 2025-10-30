@@ -100,8 +100,8 @@ class MIMSegformerDecodeHead(nn.Module):
         hidden_states = self.dropout(hidden_states)
 
         # logits are of shape (batch_size, num_labels, height/4, width/4)
-        logits = self.classifier(hidden_states).requires_grad_(True)
-
+        logits = self.classifier(hidden_states)
+        print("logits.requires_grad: ", logits.requires_grad)
         return logits
 
 
@@ -132,7 +132,6 @@ class AttentionMaskingMIM(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.shape
-        print(B, C, H, W)
         scaling = math.prod(self.strides)
         h_0, w_0 = H // scaling, W // scaling
         with torch.no_grad():
