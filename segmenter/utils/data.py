@@ -205,8 +205,9 @@ class SSLTransformPipeline:
         self.Image_Transform = v2.Compose([
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
-            v2.Resize(size=size, interpolation=InterpolationMode.BICUBIC),
+            v2.Resize(size=size, interpolation=InterpolationMode.BILINEAR),
             TransformClamp(),
+            TransformCheckNan("Image pipeline"),
         ])
 
         # Base Image Transform (for visualization or non-augmented input)
@@ -216,6 +217,7 @@ class SSLTransformPipeline:
             TransformMaskTranspose(),
             v2.Resize(size=size, interpolation=InterpolationMode.NEAREST),
             TransformClamp(),
+            TransformCheckNan("Mask pipeline"),
         ])
 
 
@@ -226,21 +228,18 @@ class SSLTransformPipeline:
             TransformCheckNan("After V2.ToImage()"),
             v2.ToDtype(torch.float32, scale=True),
             v2.RandomResizedCrop(size=size, scale=global_crop_scale,
-                                 interpolation=InterpolationMode.BICUBIC),
+                                 interpolation=InterpolationMode.BILINEAR),
             v2.RandomHorizontalFlip(p=0.5),  # Standard geometric augmentation
             # 2. Photometric: Strong Color Jitter
             TransformClamp(),
             v2.RandomApply([color_jitter], p=0.5),
             TransformClamp(),
-            TransformCheckNan("After color_jitter .... Anchor"),
             v2.RandomGrayscale(p=0.2),
-            TransformCheckNan("v2.RandomGrayscale"),
             # 3. Regularization: Gaussian Blur (p=0.5 is common for Anchor)
             v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.5),
-            TransformCheckNan("After v2.GaussianBlur()"),
             # 4. Final: Normalization
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            TransformCheckNan("After v2.Normalize()"),
+            TransformCheckNan("Anchor Pipeline"),
         ])
 
         # --- Target View Transform (Global Crop): Strong Augmentation + Solarization + Random Crop ---
@@ -255,7 +254,6 @@ class SSLTransformPipeline:
             TransformClamp(),
             v2.RandomApply([color_jitter], p=0.8),
             TransformClamp(),
-            TransformCheckNan("After color_jitter .... Target"),
             v2.RandomGrayscale(p=0.2),
             # 3. Non-linear Augmentation: Solarization (key for non-collapse)
             v2.RandomApply([solarize_transform], p=0.2),
@@ -263,6 +261,7 @@ class SSLTransformPipeline:
             v2.RandomApply([v2.GaussianBlur(kernel_size=5)], p=0.1),
             # 5. Final: Normalization
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            TransformCheckNan("Target Pipeline"),
         ])
 
         # --- Local Anchor View Transform (Local Crop): Small Crop + Augmentation ---
@@ -280,12 +279,12 @@ class SSLTransformPipeline:
                 TransformClamp(),
                 v2.RandomApply([color_jitter], p=0.8),
                 TransformClamp(),
-                TransformCheckNan("After color_jitter .... Local"),
                 v2.RandomGrayscale(p=0.2),
                 # 3. Regularization: Reduced Gaussian Blur probability for local views
                 v2.RandomApply([v2.GaussianBlur(kernel_size=3)], p=0.1),
                 # 4. Final: Normalization
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                TransformCheckNan("Local crops pipeline"),
             ])
         else:
             self.Local_Transform = None
