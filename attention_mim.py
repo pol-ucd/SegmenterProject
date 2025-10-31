@@ -278,7 +278,7 @@ def main(params: Dict[str, Any]):
 
             x = data['images'].to(device)
 
-            check_is_finite(logger, xx, "x, input image")
+            check_is_finite(logger, x, "x, input image")
 
             optimizer.zero_grad()
 
