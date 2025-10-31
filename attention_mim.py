@@ -175,6 +175,15 @@ def check_is_attached(logger: logging.Logger, x: torch.Tensor, label:str = None)
         return False
     return True
 
+def nan_hook(name):
+    def hook(model, input, output):
+        logger = logging.getLogger()
+        if not torch.isfinite(output).all():
+            logger.error(f"nan_hook: Invalid output in {name}")
+        if not torch.isfinite(input).all():
+            logger.error(f"nan_hook: Invalid input in {name}")
+    return hook
+
 # Example usage
 def main(params: Dict[str, Any]):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -218,6 +227,9 @@ def main(params: Dict[str, Any]):
     # config.label2label = {'negative': 0, 'positive': 1}
 
     model = AttentionMaskingMIM(config)
+
+    for name, module in model.named_modules():
+        module.register_forward_hook(nan_hook(name))
 
     loss_fn = MSELoss()
 
