@@ -242,9 +242,9 @@ def main(params: Dict[str, Any]):
     # config.label2label = {'negative': 0, 'positive': 1}
 
     model = AttentionMaskingMIM(config)
-
-    for name, module in model.named_modules():
-        module.register_forward_hook(nan_hook(name))
+    #
+    # for name, module in model.named_modules():
+    #     module.register_forward_hook(nan_hook(name))
 
     loss_fn = MSELoss()
 
@@ -278,14 +278,16 @@ def main(params: Dict[str, Any]):
 
             x = data['images'].to(device)
 
+            check_is_finite(logger, xx, "x, input image")
+
             optimizer.zero_grad()
 
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_x, mask = model(x)
 
-            check_is_finite(logger, reconstructed_x, "reconstructed_x")
+                check_is_finite(logger, reconstructed_x, "reconstructed_x, generated image")
 
-            loss_total  = loss_fn(reconstructed_x, x)
+                loss_total  = loss_fn(reconstructed_x, x)
 
             if scaler is not None:
                 scaler.scale(loss_total).backward()
