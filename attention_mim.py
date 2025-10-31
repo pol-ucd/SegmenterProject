@@ -298,7 +298,8 @@ def main(params: Dict[str, Any]):
                 scaler.update()
             else:
                 loss_total.backward()
-                torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                # torch.nn.utils.clip_grad_norm_(model.encoder.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             optimizer.step()
