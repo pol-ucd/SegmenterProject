@@ -146,7 +146,8 @@ class AttentionMaskingMIM(nn.Module):
 
         mask = self.generate_attention_mask(attn_map).requires_grad_(True)
         mask = F.interpolate(mask.unsqueeze(1),
-                             size=(H, W), mode='nearest').long().clamp(min=0, max=1)
+                             size=(H, W), mode='nearest')
+        mask = (mask > 0.5).long()
         x_masked = x * mask
 
         encoded = self.encoder(x_masked, output_hidden_states=True,
