@@ -72,18 +72,8 @@ class MIMSegformerReconstructionHead(nn.Module):
 
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
 
-        # """
-        #     Use an image reconstruction head instead of the usual classifier so
-        #     that we can compare generated images to calculate loss
-        # """
-        # h_patch = config.image_size // config.strides[0]
-        # w_patch = h_patch
-        #
-        # decoder_head_in = h_patch * w_patch * config.decoder_hidden_size
-
         self.reconstruction_head = nn.Linear(config.decoder_hidden_size,
                                     3)
-
 
         self.config = config
 
@@ -164,7 +154,7 @@ class AttentionMaskingMIM(nn.Module):
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
-        reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear')
+        reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear').clamp(0, 1)
         return reconstructed, mask
 
 
@@ -255,8 +245,6 @@ def main(params: Dict[str, Any]):
     for epoch in range(num_epochs):
         model.train()  # Set the model to training mode
         total_epoch_loss = []
-        total_contrastive_loss = []
-        total_reconstruction_loss = []
 
         # Iterate over the dataset
         for step, data in enumerate(tqdm(dataloader)):
@@ -268,8 +256,7 @@ def main(params: Dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 reconstructed_x, mask = model(x)
 
-            # check_is_finite(logger, reconstructed_x, "reconstructed_mask")
-            # check_is_finite(logger, mask, "mask")
+            check_is_finite(logger, reconstructed_x, "reconstructed_x")
 
             loss_total  = loss_fn(reconstructed_x, x)
 
@@ -294,12 +281,8 @@ def main(params: Dict[str, Any]):
             scheduler.step()
 
         avg_epoch_loss = np.mean(total_epoch_loss)
-        avg_contrastive_loss = np.mean(total_contrastive_loss)
-        avg_reconstruction_loss = np.mean(total_reconstruction_loss)
 
-        logger.info(f"Epoch {epoch + 1} finished. Average Loss: {avg_epoch_loss:.4f}, "
-                    f"Average Contrastive Loss: {avg_contrastive_loss:.4f}, "
-                    f"Average Reconstruction Loss: {avg_reconstruction_loss:.4f}")
+        logger.info(f"Epoch {epoch + 1} finished. Average Loss: {avg_epoch_loss:.4f}")
 
         if avg_epoch_loss + min_delta < best_loss:
             best_loss = avg_epoch_loss
