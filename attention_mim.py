@@ -3,7 +3,7 @@ import logging
 import math
 import sys
 import traceback
-from typing import Dict, Any
+from typing import Dict, Any, Iterable
 
 import numpy as np
 import torch
@@ -178,10 +178,25 @@ def check_is_attached(logger: logging.Logger, x: torch.Tensor, label:str = None)
 def nan_hook(name):
     def hook(model, input, output):
         logger = logging.getLogger()
-        if not torch.isfinite(output).all():
-            logger.error(f"nan_hook: Invalid output in {name}")
-        if not torch.isfinite(input).all():
-            logger.error(f"nan_hook: Invalid input in {name}")
+        if isinstance(output, Iterable):
+            if not torch.isfinite(output[0]).all():
+                logger.error(f"nan_hook: Invalid output in {name}")
+        elif isinstance(output, torch.Tensor):
+            if not torch.isfinite(output).all():
+                logger.error(f"nan_hook: Invalid output in {name}")
+        else:
+            logger.error(f"nan_hook: Invalid output in {name} - "
+                         f"expected Iterable or torch.Tensor type not: {type(output)}")
+
+        if isinstance(input, Iterable):
+            if not torch.isfinite(input[0]).all():
+                logger.error(f"nan_hook: Invalid input in {name}")
+        elif isinstance(input, torch.Tensor):
+            if not torch.isfinite(input).all():
+                logger.error(f"nan_hook: Invalid input in {name}")
+        else:
+            logger.error(f"nan_hook: Invalid input in {name} - "
+                         f"expected Iterable or torch.Tensor type not: {type(input)}")
     return hook
 
 # Example usage
