@@ -67,10 +67,10 @@ class MIMSegformerReconstructionHead(nn.Module):
             bias=False,
         )
 
-        self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size)
+        # self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size, eps=1e-4)
         self.activation = nn.ReLU()
 
-        self.dropout = nn.Dropout(config.classifier_dropout_prob)
+        # self.dropout = nn.Dropout(config.classifier_dropout_prob)
 
         self.reconstruction_head = nn.Linear(config.decoder_hidden_size,
                                     3)
@@ -104,9 +104,9 @@ class MIMSegformerReconstructionHead(nn.Module):
         """
         hidden_states = self.linear_fuse(torch.cat(all_hidden_states[::-1], dim=1))
 
-        hidden_states = self.batch_norm(hidden_states)
+        # hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        # hidden_states = self.dropout(hidden_states)
         b, d, h, w = hidden_states.shape
         hidden_states = hidden_states.permute(1, 0, 2, 3).reshape(d, -1).T
 
@@ -116,7 +116,7 @@ class MIMSegformerReconstructionHead(nn.Module):
 
 
 class AttentionMaskingMIM(nn.Module):
-    def __init__(self, config, mask_ratio=0.4):
+    def __init__(self, config, mask_ratio=0.7):
         super().__init__()
         self.encoder = SegformerModel.from_pretrained(pretrained_model_name_or_path=backbone,
                                                       config=config,
@@ -154,7 +154,7 @@ class AttentionMaskingMIM(nn.Module):
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
-        reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear').clamp(0,1)
+        reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear')
         return reconstructed, mask
 
 
