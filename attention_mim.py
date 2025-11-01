@@ -161,7 +161,9 @@ class AttentionMaskingMIM(nn.Module):
         pixel_mask = (pixel_mask > 0.5).long()
 
         mask = mask*pixel_mask*attention_mask + MASK_VALUE
-        x = (x*mask).clamp(0,1)    # Set mask locations to common mask_value
+        x = x*mask   # Set mask locations to common mask_value
+
+        print("SHAPES: x, mask", x.shape, mask.shape)
 
         encoded = self.encoder(x, output_hidden_states=True,
                                return_dict=True).hidden_states
