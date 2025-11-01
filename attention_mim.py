@@ -137,7 +137,7 @@ class AttentionMaskingMIM(nn.Module):
         _, indices = torch.topk(flat, int(H * W * self.mask_ratio), dim=1, largest=False)
         mask = torch.ones_like(flat)
         mask.scatter_(1, indices, 0)
-        return mask.view(B, H, W)
+        return mask.view(B, H, W).unsqueeze(1)
 
     def forward(self, x):
         B, C, H, W = x.shape
@@ -147,17 +147,20 @@ class AttentionMaskingMIM(nn.Module):
             features = self.encoder.encoder(x).last_hidden_state  # [B, N, C]
             attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
 
-        # mask = self.generate_attention_mask(attn_map).requires_grad_(True)
-        # mask = F.interpolate(mask.unsqueeze(1),
-        #                      size=(H, W), mode='nearest')
-        mask = self.mask_generator.generate_pixel_mask(x).to(x.device)
-        mask = F.interpolate(mask,
+        mask = torch.ones_like(x)
+        attention_mask = 1.0 - self.generate_attention_mask(attn_map).requires_grad_(True)
+        attention_mask = F.interpolate(mask.unsqueeze(1),
                              size=(H, W), mode='nearest')
-        mask_value = x.mean() + EPSILON
-        mask = (mask < 0.5).bool()  # Flip the mask to mask out te shapes by setting to 0
+        attention_mask = (attention_mask > 0.5).long()
+
+        pixel_mask = 1.0 - self.mask_generator.generate_pixel_mask(x).to(x.device)
+        pixel_mask = F.interpolate(pixel_mask,
+                             size=(H, W), mode='nearest')
+
+        pixel_mask = (pixel_mask > 0.5).long()
+        mask = mask*pixel_mask*attention_mask
+        mask_value = torch.mean(x)
         x[mask] = mask_value    # Set mask locations to common mask_value
-        # mask = (mask < 0.5).long()  # Flip the mask to mask out te shapes by setting to 0
-        # x_masked = x * mask
 
         encoded = self.encoder(x, output_hidden_states=True,
                                return_dict=True).hidden_states
