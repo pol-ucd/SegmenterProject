@@ -149,21 +149,24 @@ class AttentionMaskingMIM(nn.Module):
             attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
 
         mask = torch.ones_like(x).long()
+        print("1. MASK", mask.shape)
         attention_mask = 1.0 - self.generate_attention_mask(attn_map).requires_grad_(True)
         attention_mask = F.interpolate(attention_mask,
                              size=(H, W), mode='nearest').unsqueeze(1)
         attention_mask = (attention_mask > 0.5).long()
+        print("2. ATTENTION_MASK: ", attention_mask.shape)
 
         pixel_mask = 1.0 - self.mask_generator.generate_pixel_mask(x).to(x.device)
         pixel_mask = F.interpolate(pixel_mask,
                              size=(H, W), mode='nearest')
 
         pixel_mask = (pixel_mask > 0.5).long()
+        print("3. PIXEL MASK: ", pixel_mask.shape)
 
         mask = mask*pixel_mask*attention_mask + MASK_VALUE
         x = x*mask   # Set mask locations to common mask_value
 
-        print("SHAPES: x, mask", x.shape, mask.shape)
+        print("4. SHAPES: x, mask", x.shape, mask.shape)
 
         encoded = self.encoder(x, output_hidden_states=True,
                                return_dict=True).hidden_states
