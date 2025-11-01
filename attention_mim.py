@@ -16,6 +16,7 @@ from torchvision import transforms
 from tqdm import tqdm
 from transformers import SegformerModel, SegformerConfig
 
+from segmenter.masks import CompositeMask
 from segmenter.utils import HDF5DatasetOptimized, HDF5BatchSampler
 from segmenter.utils.data import SSLTransformPipeline, hdf5_worker_init_fn
 
@@ -125,6 +126,7 @@ class AttentionMaskingMIM(nn.Module):
         self.strides = config.strides
         self.num_blocks = config.num_encoder_blocks
         self.mask_ratio = mask_ratio
+        self.mask_generator = CompositeMask(shapes_per_image=12)
 
         self.reconstruction_head = MIMSegformerReconstructionHead(config)
 
@@ -144,8 +146,11 @@ class AttentionMaskingMIM(nn.Module):
             features = self.encoder.encoder(x).last_hidden_state  # [B, N, C]
             attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
 
-        mask = self.generate_attention_mask(attn_map).requires_grad_(True)
-        mask = F.interpolate(mask.unsqueeze(1),
+        # mask = self.generate_attention_mask(attn_map).requires_grad_(True)
+        # mask = F.interpolate(mask.unsqueeze(1),
+        #                      size=(H, W), mode='nearest')
+        mask = self.mask_generator.generate_pixel_mask(x).to(x.device)
+        mask = F.interpolate(mask,
                              size=(H, W), mode='nearest')
         mask = (mask > 0.5).long()
         x_masked = x * mask
