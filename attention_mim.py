@@ -149,8 +149,8 @@ class AttentionMaskingMIM(nn.Module):
 
         mask = torch.ones_like(x)
         attention_mask = 1.0 - self.generate_attention_mask(attn_map).requires_grad_(True)
-        attention_mask = F.interpolate(mask.unsqueeze(1),
-                             size=(H, W), mode='nearest')
+        attention_mask = F.interpolate(mask,
+                             size=(H, W), mode='nearest').unsqueeze(1)
         attention_mask = (attention_mask > 0.5).long()
 
         pixel_mask = 1.0 - self.mask_generator.generate_pixel_mask(x).to(x.device)
