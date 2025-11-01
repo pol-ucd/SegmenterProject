@@ -149,7 +149,7 @@ class AttentionMaskingMIM(nn.Module):
 
         mask = torch.ones_like(x).long()
         attention_mask = 1.0 - self.generate_attention_mask(attn_map).requires_grad_(True)
-        attention_mask = F.interpolate(mask,
+        attention_mask = F.interpolate(attention_mask,
                              size=(H, W), mode='nearest').unsqueeze(1)
         attention_mask = (attention_mask > 0.5).long()
 
