@@ -158,8 +158,9 @@ class AttentionMaskingMIM(nn.Module):
                              size=(H, W), mode='nearest')
 
         pixel_mask = (pixel_mask > 0.5).long()
+
         mask = mask*pixel_mask*attention_mask
-        mask_value = torch.mean(x)
+        mask_value = torch.mean(x)  # Common mask value
         x[mask] = mask_value    # Set mask locations to common mask_value
 
         encoded = self.encoder(x, output_hidden_states=True,
