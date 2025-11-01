@@ -154,6 +154,7 @@ class AttentionMaskingMIM(nn.Module):
         mask = F.interpolate(mask,
                              size=(H, W), mode='nearest')
         mask_value = x.mean() + EPSILON
+        mask = (mask < 0.5).bool()  # Flip the mask to mask out te shapes by setting to 0
         x[mask] = mask_value    # Set mask locations to common mask_value
         # mask = (mask < 0.5).long()  # Flip the mask to mask out te shapes by setting to 0
         # x_masked = x * mask
