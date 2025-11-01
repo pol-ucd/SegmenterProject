@@ -16,6 +16,7 @@ from torchvision import transforms
 from tqdm import tqdm
 from transformers import SegformerModel, SegformerConfig
 
+from segmenter.loss import EPSILON
 from segmenter.masks import CompositeMask
 from segmenter.utils import HDF5DatasetOptimized, HDF5BatchSampler
 from segmenter.utils.data import SSLTransformPipeline, hdf5_worker_init_fn
@@ -152,10 +153,12 @@ class AttentionMaskingMIM(nn.Module):
         mask = self.mask_generator.generate_pixel_mask(x).to(x.device)
         mask = F.interpolate(mask,
                              size=(H, W), mode='nearest')
-        mask = (mask < 0.5).long()  # Flip the mask to mask out te shapes by setting to 0
-        x_masked = x * mask
+        mask_value = x.mean() + EPSILON
+        x[mask] = mask_value    # Set mask locations to common mask_value
+        # mask = (mask < 0.5).long()  # Flip the mask to mask out te shapes by setting to 0
+        # x_masked = x * mask
 
-        encoded = self.encoder(x_masked, output_hidden_states=True,
+        encoded = self.encoder(x, output_hidden_states=True,
                                return_dict=True).hidden_states
 
         # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
