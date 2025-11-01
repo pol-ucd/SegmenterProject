@@ -26,6 +26,7 @@ torch.autograd.set_detect_anomaly(True)
 backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
 data_source = '../segmenter/data/pretrain_images.h5'
 image_size = 256
+MASK_VALUE = 1e-0.6
 
 
 class MIMUpscalerMLP(nn.Module):
@@ -159,9 +160,8 @@ class AttentionMaskingMIM(nn.Module):
 
         pixel_mask = (pixel_mask > 0.5).long()
 
-        mask = mask*pixel_mask*attention_mask
-        mask_value = torch.mean(x)  # Common mask value
-        x[mask] = mask_value    # Set mask locations to common mask_value
+        mask = mask*pixel_mask*attention_mask + MASK_VALUE
+        x = (x*mask).clamp(0,1)    # Set mask locations to common mask_value
 
         encoded = self.encoder(x, output_hidden_states=True,
                                return_dict=True).hidden_states
