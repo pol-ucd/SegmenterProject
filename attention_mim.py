@@ -26,7 +26,7 @@ torch.autograd.set_detect_anomaly(True)
 backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
 data_source = '../segmenter/data/pretrain_images.h5'
 image_size = 256
-MASK_VALUE = 1e-0.6
+MASK_VALUE = 1e-06
 
 
 class MIMUpscalerMLP(nn.Module):
