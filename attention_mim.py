@@ -152,7 +152,7 @@ class AttentionMaskingMIM(nn.Module):
         mask = self.mask_generator.generate_pixel_mask(x).to(x.device)
         mask = F.interpolate(mask,
                              size=(H, W), mode='nearest')
-        mask = (mask > 0.5).long()
+        mask = (mask < 0.5).long()  # Flip the mask to mask out te shapes by setting to 0
         x_masked = x * mask
 
         encoded = self.encoder(x_masked, output_hidden_states=True,
