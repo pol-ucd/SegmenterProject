@@ -296,7 +296,7 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu', dtype=torch.float64):
+            with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu', dtype=torch.float):
                 reconstructed_x, mask = model(x)
 
                 check_is_finite(logger, reconstructed_x, "reconstructed_x, generated image")
