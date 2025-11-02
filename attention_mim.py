@@ -70,10 +70,10 @@ class MIMSegformerReconstructionHead(nn.Module):
             bias=False,
         )
 
-        # self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size, eps=1e-4)
+        self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size, eps=1e-4)
         self.activation = nn.ReLU()
 
-        # self.dropout = nn.Dropout(config.classifier_dropout_prob)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
 
         self.reconstruction_head = nn.Linear(config.decoder_hidden_size,
                                     3)
@@ -107,9 +107,9 @@ class MIMSegformerReconstructionHead(nn.Module):
         """
         hidden_states = self.linear_fuse(torch.cat(all_hidden_states[::-1], dim=1))
 
-        # hidden_states = self.batch_norm(hidden_states)
+        hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
-        # hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         b, d, h, w = hidden_states.shape
         hidden_states = hidden_states.permute(1, 0, 2, 3).reshape(d, -1).T
 
@@ -119,7 +119,7 @@ class MIMSegformerReconstructionHead(nn.Module):
 
 
 class AttentionMaskingMIM(nn.Module):
-    def __init__(self, config, mask_ratio=0.7):
+    def __init__(self, config, mask_ratio=0.9):
         super().__init__()
         self.encoder = SegformerModel.from_pretrained(pretrained_model_name_or_path=backbone,
                                                       config=config,
@@ -149,29 +149,24 @@ class AttentionMaskingMIM(nn.Module):
             attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
 
         mask = torch.ones_like(x).long()
-        # print("1. MASK", mask.shape)
+
         attention_mask = 1.0 - self.generate_attention_mask(attn_map).requires_grad_(True)
         attention_mask = F.interpolate(attention_mask,
                              size=(H, W), mode='nearest')
         attention_mask = (attention_mask > 0.5).long()
-        # print("2. ATTENTION_MASK: ", attention_mask.shape)
 
         pixel_mask = 1.0 - self.mask_generator.generate_pixel_mask(x).to(x.device)
         pixel_mask = F.interpolate(pixel_mask,
                              size=(H, W), mode='nearest')
 
         pixel_mask = (pixel_mask > 0.5).long()
-        # print("3. PIXEL MASK: ", pixel_mask.shape)
 
         mask = mask*pixel_mask*attention_mask + MASK_VALUE
         x = x*mask   # Set mask locations to common mask_value
 
-        # print("4. SHAPES: x, mask", x.shape, mask.shape)
-
         encoded = self.encoder(x, output_hidden_states=True,
                                return_dict=True).hidden_states
 
-        # reconstructed = self.reconstruction_head(encoded.mean(dim=1))
         reconstructed = self.reconstruction_head(encoded)
         reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear')
         return reconstructed, mask
@@ -301,7 +296,7 @@ def main(params: Dict[str, Any]):
 
             optimizer.zero_grad()
 
-            with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
+            with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu', dtype=torch.float64):
                 reconstructed_x, mask = model(x)
 
                 check_is_finite(logger, reconstructed_x, "reconstructed_x, generated image")
