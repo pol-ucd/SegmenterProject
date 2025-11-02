@@ -150,16 +150,16 @@ class AttentionMaskingMIM(nn.Module):
 
         mask = torch.ones_like(x).long()
 
-        attention_mask = 1.0 - self.generate_attention_mask(attn_map).requires_grad_(True)
+        attention_mask = self.generate_attention_mask(attn_map).requires_grad_(True)
         attention_mask = F.interpolate(attention_mask,
-                             size=(H, W), mode='nearest')
-        attention_mask = (attention_mask > 0.5).long()
+                             size=(H, W), mode='nearest-exact')
+        # attention_mask = (attention_mask > 0.5).long()
 
         pixel_mask = 1.0 - self.mask_generator.generate_pixel_mask(x).to(x.device)
         pixel_mask = F.interpolate(pixel_mask,
-                             size=(H, W), mode='nearest')
+                             size=(H, W), mode='nearest-exact')
 
-        pixel_mask = (pixel_mask > 0.5).long()
+        # pixel_mask = (pixel_mask > 0.5).long()
 
         mask = mask*pixel_mask*attention_mask + MASK_VALUE
         x = x*mask   # Set mask locations to common mask_value
@@ -168,7 +168,7 @@ class AttentionMaskingMIM(nn.Module):
                                return_dict=True).hidden_states
 
         reconstructed = self.reconstruction_head(encoded)
-        reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear')
+        reconstructed = F.interpolate(reconstructed, size=(H, W), mode='bilinear').clamp(0,1)
         return reconstructed, mask
 
 
