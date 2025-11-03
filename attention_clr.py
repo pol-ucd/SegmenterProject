@@ -147,17 +147,25 @@ class SimCLRSegFormer(nn.Module):
         scaling = math.prod(self.strides)
         h_0, w_0 = H // scaling, W // scaling
         with torch.no_grad():
-            features = self.encoder.encoder(x).last_hidden_state  # [B, N, C]
-            attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
+            features1 = self.encoder.encoder(x1).last_hidden_state  # [B, N, C]
+            features2 = self.encoder.encoder(x1).last_hidden_state  # [B, N, C]
+            attn_map1 = torch.norm(features1, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
+            attn_map2 = torch.norm(features2, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
 
-        mask = torch.ones_like(x1).long()
+        mask1 = torch.ones_like(x1).long()
+        mask2 = torch.ones_like(x2).long()
 
-        attention_mask = self.generate_attention_mask(attn_map).requires_grad_(True)
-        attention_mask = F.interpolate(attention_mask,
+        attention_mask1 = self.generate_attention_mask(attn_map1).requires_grad_(True)
+        attention_mask2 = self.generate_attention_mask(attn_map2).requires_grad_(True)
+        attention_mask1 = F.interpolate(attention_mask1,
                                        size=(H, W), mode='nearest-exact')
-        mask = mask * attention_mask + MASK_VALUE
-        x1 = x1 * mask  # Set mask locations to common mask_value
-        x2 = x2 * mask
+        attention_mask2 = F.interpolate(attention_mask2,
+                                       size=(H, W), mode='nearest-exact')
+        mask1 = mask1 * attention_mask1 + MASK_VALUE
+        mask2 = mask2 * attention_mask2 + MASK_VALUE
+
+        x1 = x1 * mask1  # Set mask locations to common mask_value
+        x2 = x2 * mask2
 
         # Encode both views
 
