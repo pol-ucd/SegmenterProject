@@ -1,4 +1,4 @@
-import glob
+import json
 import json
 import logging
 import os
@@ -12,17 +12,13 @@ import h5py
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.model_selection import ShuffleSplit
 from torch import autocast
 from torch.amp import GradScaler
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from segmenter.loss import IoULoss
 from segmenter.loss.hybrid import HybridLoss
 from segmenter.models.models import AugurSegformerSegmentation
-from segmenter.torch_utils import RunManager, CheckpointManager
-from segmenter.utils.data import (get_num_samples_from_hdf5, HDF5ImageDataset, hdf5_worker_init_fn,
+from segmenter.utils.data import (hdf5_worker_init_fn,
                                   HDF5DatasetOptimized, HDF5BatchSampler, SSLTransformPipeline)
 
 torch.multiprocessing.set_sharing_strategy('file_system')

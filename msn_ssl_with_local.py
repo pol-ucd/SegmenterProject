@@ -35,8 +35,8 @@ torch.autograd.set_detect_anomaly(True)
 
 MASK_RATIO = 0.7
 PATCH_SIZE = 4  # 4x4 patches for SegFormer MiT [1]
-IMAGE_H = 512
-IMAGE_W = 512
+IMAGE_H = 256
+IMAGE_W = 256
 debug_run = True
 
 # source = "/Users/polmacaonghusa/Documents/Projects/segmenter/data/Classica.h5"
