@@ -134,8 +134,33 @@ class SimCLRSegFormer(nn.Module):
 
         self.reconstruction_head = MIMSegformerReconstructionHead(config)
 
+    def generate_attention_mask(self, attention_map):
+        B, H, W = attention_map.shape
+        flat = attention_map.view(B, -1)
+        _, indices = torch.topk(flat, int(H * W * self.mask_ratio), dim=1, largest=False)
+        mask = torch.ones_like(flat)
+        mask.scatter_(1, indices, 0)
+        return mask.view(B, H, W).unsqueeze(1)
+
     def forward(self, x1, x2):
+        B, C, H, W = x1.shape
+        scaling = math.prod(self.strides)
+        h_0, w_0 = H // scaling, W // scaling
+        with torch.no_grad():
+            features = self.encoder.encoder(x).last_hidden_state  # [B, N, C]
+            attn_map = torch.norm(features, dim=1).view(B, h_0, w_0)  # Approximate attention proxy
+
+        mask = torch.ones_like(x1).long()
+
+        attention_mask = self.generate_attention_mask(attn_map).requires_grad_(True)
+        attention_mask = F.interpolate(attention_mask,
+                                       size=(H, W), mode='nearest-exact')
+        mask = mask * attention_mask + MASK_VALUE
+        x1 = x1 * mask  # Set mask locations to common mask_value
+        x2 = x2 * mask
+
         # Encode both views
+
         f1 = self.encoder(x1, output_hidden_states=True,
                                return_dict=True).hidden_states
         f2 = self.encoder(x2, output_hidden_states=True,
@@ -365,7 +390,7 @@ def get_args():
     parser.add_argument("-nw", "--num_workers", type=int, default=4, )
     parser.add_argument("-e", "--num_epochs", type=int, default=200, )
     parser.add_argument("-lr", "--learning_rate", type=float, default=1e-5, )
-    parser.add_argument("-p", "--prefix", type=str, default='attention_mim', )
+    parser.add_argument("-p", "--prefix", type=str, default='attention_clr', )
     parser.add_argument("-ro", "--run_once", type=bool, default=False, )
     parser.add_argument("-ns", "--num_shapes", type=int, default=24, )
 
