@@ -121,7 +121,7 @@ class MIMSegformerReconstructionHead(nn.Module):
 
 
 class SimCLRSegFormer(nn.Module):
-    def __init__(self, config, projection_dim=128):
+    def __init__(self, config, mask_ratio=0.9):
 
         super().__init__()
         self.encoder = SegformerModel.from_pretrained(pretrained_model_name_or_path=backbone,
@@ -133,6 +133,7 @@ class SimCLRSegFormer(nn.Module):
         self.num_blocks = config.num_encoder_blocks
 
         self.reconstruction_head = MIMSegformerReconstructionHead(config)
+        self.mask_ratio = mask_ratio
 
     def generate_attention_mask(self, attention_map):
         B, H, W = attention_map.shape
