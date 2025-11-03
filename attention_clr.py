@@ -246,7 +246,7 @@ def nan_hook(name):
 
 # Example usage
 def main(params: Dict[str, Any]):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
     logger = logging.getLogger()
 
