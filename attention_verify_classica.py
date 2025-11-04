@@ -66,15 +66,35 @@ class SimpleMaskSegmenter(torch.nn.Module):
 
 
 class EpochStopper:
-    def __init__(self, max_boredom: int = 5, min_delta: float = 0.0001):
-
+    def __init__(self, max_boredom: int = 5, min_delta: float = None):
         self.best_loss = float('inf')
-        self.min_delta = min_delta
+        self.min_delta = min_delta or 0.0001
         self.max_boredom = max_boredom
         self.current_boredom = 0
 
-    def get_score(self):
+    @property
+    def best_loss(self):
         return self.best_loss
+
+    @best_loss.setter
+    def best_loss(self, value):
+        self.best_loss = value
+
+    @property
+    def current_boredom(self):
+        return self.current_boredom
+
+    @current_boredom.setter
+    def current_boredom(self, value):
+        self.current_boredom = value
+
+    @property
+    def max_boredom(self):
+        return self.max_boredom
+
+    @max_boredom.setter
+    def max_boredom(self, value):
+        self.max_boredom = value
 
     def __call__(self, epoch: int, score: np.floating[Any]) -> bool:
         """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
@@ -155,9 +175,6 @@ def main(params: dict[str, Any]):
 
             all_data = [d for d in dataloader]
 
-            # model = SegformerForSemanticSegmentation.from_pretrained(pretrained_model_name_or_path=backbone,
-            #                                                          config=config,
-            #                                                          ignore_mismatched_sizes=True)
             model = SimpleMaskSegmenter(pretrained_model_name_or_path=backbone,
                                         config=config,
                                         num_classes=2)
@@ -214,6 +231,7 @@ def main(params: dict[str, Any]):
 
             logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
             stopper = EpochStopper(max_boredom=3, min_delta=0.0001)
+
             train_names = []
             test_names = []
             for epoch_idx, epoch in enumerate(range(num_epochs)):
@@ -294,10 +312,13 @@ def main(params: dict[str, Any]):
                             f"Training IoU Loss: {np.mean(iou_epoch_train_loss):.4f} "
                             f"Test Total Loss: {np.mean(total_epoch_test_loss):.4f} "
                             f"Test IoU Loss: {np.mean(iou_epoch_test_loss):.4f} ")
-                if stopper.forward(epoch=epoch, score=np.mean(total_epoch_train_loss)):
+                if stopper(epoch=epoch, score=np.mean(total_epoch_train_loss)):
                     logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
-                    split_loss += [stopper.get_score()]
+                    split_loss += [stopper.best_loss]
                     break
+                else:
+                    if stopper.boredom > 0:
+                        logger.info(f"No obvious improvement. Current boredom level is {stopper.boredom} / {stopper.max_boredom}.")
 
 
 def get_args():
