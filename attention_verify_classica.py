@@ -79,7 +79,7 @@ class SimpleMaskSegmenter(torch.nn.Module):
         device = next(self.model.parameters()).device
         state_dict = torch.load(path, weights_only=False,
                                 map_location=device)
-        self.base_model.load_state_dict(state_dict )
+        self.model.segformer.load_state_dict(state_dict )
 
 
 class EpochStopper:
