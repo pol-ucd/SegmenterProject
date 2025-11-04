@@ -170,6 +170,7 @@ def main(params: dict[str, Any]):
 
             model = SimpleMaskSegmenter(pretrained_model_name_or_path=backbone,
                                         config=config,
+                                        load_dict_path=WEIGHTS_MAP['mim'],
                                         num_classes=2)
 
             model.to(device=device)
