@@ -4,7 +4,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import h5py
 import numpy as np
@@ -22,10 +22,13 @@ from segmenter.utils.data import (hdf5_worker_init_fn,
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+WEIGHTS_MAP = {'base': None,
+               'mim': '../segmenter/checkpoint/attention_mim_segformer_pretrained.pt'}
+
 # test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
 test_sizes = [0.9]
-backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
-# model_name = "nvidia/segformer-b5-finetuned-ade-640-640"
+# backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
+model_name = "nvidia/segformer-b5-finetuned-ade-640-640"
 hdf5_file = '../segmenter/data/Classica.h5'
 prefix = 'attention_verify_classica'
 image_size = 256
@@ -43,13 +46,21 @@ def check_scores(metric: dict[str, list]) -> bool:
 
 
 class SimpleMaskSegmenter(torch.nn.Module):
-    def __init__(self, pretrained_model_name_or_path, config, num_classes=2):
+    def __init__(self,
+                 pretrained_model_name_or_path: Union[str, Any],
+                 config: SegformerConfig,
+                 load_dict_path: Union[str, Any] = None,
+                 num_classes: int = 2):
         super().__init__()
         self.config = config
         self.num_classes = num_classes
+        self.load_dict_path = load_dict_path
         self.model = SegformerForSemanticSegmentation.from_pretrained(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=True)
+
+        if self.load_dict_path is not None:
+            self.load_model(self.load_dict_path)
 
         self.segmenter_head = nn.Linear(config.num_labels, num_classes)
 
@@ -63,6 +74,12 @@ class SimpleMaskSegmenter(torch.nn.Module):
         out = F.interpolate(out, size=(h, w), mode="nearest-exact")
         assert out.shape == (b, self.num_classes,h, w), f"{__class__: }: Size mismatch between image and segmenter output"
         return out
+
+    def load_model(self, path: str):
+        device = next(self.model.parameters()).device
+        state_dict = torch.load(path, weights_only=False,
+                                map_location=device)
+        self.base_model.load_state_dict(state_dict )
 
 
 class EpochStopper:
