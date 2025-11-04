@@ -30,7 +30,7 @@ hdf5_file = '../segmenter/data/Classica.h5'
 prefix = 'attention_verify_classica'
 image_size = 256
 checkpoint_path = "../segmenter/checkpoint/attention_mim_segformer_pretrained.pt"
-n_folds = 5
+n_folds = 10
 
 
 def check_scores(metric: dict[str, list]) -> bool:
@@ -71,18 +71,6 @@ class EpochStopper:
         self.min_delta = min_delta or 0.0001
         self.max_boredom = max_boredom
         self.current_boredom = 0
-
-    @property
-    def best_loss(self):
-        return self.best_loss
-
-    @property
-    def current_boredom(self):
-        return self.current_boredom
-
-    @property
-    def max_boredom(self):
-        return self.max_boredom
 
     def __call__(self, epoch: int, score: np.floating[Any]) -> bool:
         """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
