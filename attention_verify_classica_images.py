@@ -347,7 +347,8 @@ def main(params: dict[str, Any]):
 
             total_epoch_train_loss += [loss_train.item()]
             with torch.no_grad():
-                iou_epoch_train_loss += [IoULoss()(seg_map, masks).item()]
+                seg = (seg_map > 0.5).float()
+                iou_epoch_train_loss += [IoULoss()(seg, masks).item()]
 
             b, _, _, _ = seg_map.shape
 
@@ -362,7 +363,8 @@ def main(params: dict[str, Any]):
 
             total_epoch_test_loss += [loss_test.item()]
 
-            iou_epoch_test_loss += [IoULoss()(mask_out, masks).item()]
+            seg = (mask_out > 0.5).float()
+            iou_epoch_test_loss += [IoULoss()(seg, masks).item()]
 
         scheduler.step()
         logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. "
