@@ -205,10 +205,10 @@ class SimpleMaskSegmenter(torch.nn.Module):
 class EpochStopper:
     def __init__(self, max_boredom: int = 5, min_delta: float = None):
         self.best_loss = float('inf')
-        self.min_delta = min_delta or 0.0001
+        self.min_delta = min_delta or 0.00001
         self.max_boredom = max_boredom
         self.current_boredom = 0
-        self.save_model = True
+        self.save_model = False
 
     def __call__(self, epoch: int, score: np.floating[Any]) -> bool:
         """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
