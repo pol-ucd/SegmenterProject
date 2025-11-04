@@ -27,8 +27,8 @@ WEIGHTS_MAP = {'base': None,
 
 # test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
 test_sizes = [0.9]
-# backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
-model_name = "nvidia/segformer-b5-finetuned-ade-640-640"
+backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
+# backbone = "nvidia/segformer-b5-finetuned-ade-640-640"
 hdf5_file = '../segmenter/data/Classica.h5'
 prefix = 'attention_verify_classica'
 image_size = 256
