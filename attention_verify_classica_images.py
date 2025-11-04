@@ -285,7 +285,8 @@ def main(params: dict[str, Any]):
             "dt_backend": "kornia"
         }
     }
-    loss_fn = HybridLoss(loss_params)
+    # loss_fn = HybridLoss(loss_params)
+    loss_fn = torch.nn.BCEWithLogitsLoss()
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
