@@ -266,36 +266,6 @@ def main(params: dict[str, Any]):
 
     model.to(device=device)
 
-    loss_params = {
-        "ce": {
-            "weight": 0.1
-        },
-        "dice": {
-            "weight": 0.0
-        },
-        "focal": {
-            "weight": 0.0,
-            "alpha": 0.25,
-            "gamma": 2.0
-        },
-        "tversky": {
-            "weight": 0.0,
-            "alpha": 0.8,
-            "beta": 0.2
-        },
-        "iou": {
-            "weight": 1.0
-        },
-        "boundary_sdf": {
-            "weight": 0.0,
-            "dt_backend": "kornia"
-        },
-        "soft_chamfer": {
-            "weight": 0.0,
-            "dt_backend": "kornia"
-        }
-    }
-    # loss_fn = HybridLoss(loss_params)
     loss_fn = torch.nn.BCEWithLogitsLoss()
 
     # Only pass the parameters that require gradients to the optimizer
