@@ -20,9 +20,6 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
-from segmenter.loss import IoULoss
-from segmenter.loss.hybrid import HybridLoss
-
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 WEIGHTS_MAP = {'base': None,
