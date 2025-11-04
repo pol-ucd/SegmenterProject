@@ -17,6 +17,7 @@ from albumentations import ToTensorV2
 from torch import autocast, nn
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
 from segmenter.loss import IoULoss
@@ -52,7 +53,7 @@ def check_scores(metric: dict[str, list]) -> bool:
     return np.all(all_lens == base_len)
 
 
-def iou_loss(y_true, y_pred):
+def iou_score(y_true, y_pred):
     true = (y_true > 0.5).long().flatten()
     pred = (y_pred > 0.5).long().flatten()
     tp = torch.sum(true*pred)
@@ -320,11 +321,11 @@ def main(params: dict[str, Any]):
     for epoch_idx, epoch in enumerate(range(num_epochs)):
         logger.info(f"Epoch [{epoch_idx + 1}/{num_epochs}].")
         total_epoch_train_loss = []
-        total_epoch_test_loss = []
-        iou_epoch_train_loss = []
-        iou_epoch_test_loss = []
+        total_epoch_test_score = []
+        iou_epoch_train_score = []
+        iou_epoch_test_score = []
 
-        for imgs, masks in train_dataloader:
+        for imgs, masks in tqdm(train_dataloader):
             model.train()
 
             imgs = imgs.to(device=device)
@@ -355,11 +356,11 @@ def main(params: dict[str, Any]):
 
             total_epoch_train_loss += [loss_train.item()]
             with torch.no_grad():
-                iou_epoch_train_loss += [iou_loss(seg_map, masks).item()]
+                iou_epoch_train_score += [iou_score(seg_map, masks).item()]
 
             b, _, _, _ = seg_map.shape
 
-        for imgs, masks in val_dataloader:
+        for imgs, masks in tqdm(val_dataloader):
             model.eval()
             imgs = imgs.to(device=device)
             masks = (masks > 0).float().to(device=device)
@@ -368,16 +369,16 @@ def main(params: dict[str, Any]):
                 seg_map = model(imgs)
                 loss_test = loss_fn(seg_map, masks)
 
-            total_epoch_test_loss += [loss_test.item()]
+            total_epoch_test_score += [loss_test.item()]
 
-            iou_epoch_test_loss += [iou_loss(seg_map, masks).item()]
+            iou_epoch_test_score += [iou_score(seg_map, masks).item()]
 
         scheduler.step()
         logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. "
                     f"Training Total Loss: {np.mean(total_epoch_train_loss):.4f} "
-                    f"Training IoU Loss: {np.mean(iou_epoch_train_loss):.4f} "
-                    f"Test Total Loss: {np.mean(total_epoch_test_loss):.4f} "
-                    f"Test IoU Loss: {np.mean(iou_epoch_test_loss):.4f} ")
+                    f"Training IoU Score: {np.mean(iou_epoch_train_score):.4f} "
+                    f"Test Total Loss: {np.mean(total_epoch_test_score):.4f} "
+                    f"Test IoU Score: {np.mean(iou_epoch_test_score):.4f} ")
 
         if stopper(epoch=epoch, score=np.mean(total_epoch_train_loss)):
             logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
