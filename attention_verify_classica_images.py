@@ -20,6 +20,8 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
+from hanija_original.modules_old import IoULoss
+
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 WEIGHTS_MAP = {'base': None,
@@ -49,15 +51,25 @@ def check_scores(metric: dict[str, list]) -> bool:
             print(f"{k}: {len(v)}")
     return np.all(all_lens == base_len)
 
+class IOULoss(nn.Module):
+    def __init__(self, eps=1e-06):
+        super(IOULoss, self).__init__()
+        self.eps = eps
 
-def iou_score(y_true, y_pred):
+    def forward(self, y_pred, y_true):
+        return 1.0 - iou_score(y_true, y_pred, self.eps)
+
+    __call__ = forward
+
+
+def iou_score(y_true, y_pred, eps=1e-06):
     true = (y_true > 0.5).long().flatten()
     pred = (y_pred > 0.5).long().flatten()
     tp = torch.sum(true*pred)
     tn = torch.sum((1-true)*(1-pred))
     fn = torch.sum((1-true)*pred)
     fp = torch.sum(true*(1-pred))
-    eps = 1e-7
+
     score = tp/(tp + fp + fn + eps)
     return score
 
@@ -266,7 +278,8 @@ def main(params: dict[str, Any]):
 
     model.to(device=device)
 
-    loss_fn = torch.nn.BCEWithLogitsLoss()
+    loss_fn1 = torch.nn.BCEWithLogitsLoss()
+    loss_fn2 = IoULoss()
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
@@ -310,7 +323,7 @@ def main(params: dict[str, Any]):
                 assert seg_map.shape == masks.shape, (f"Size mismatch between "
                                                       f"generated mask: {seg_map.shape}, "
                                                       f"and target mask: {masks.shape}")
-                loss_train = loss_fn(seg_map, masks)
+                loss_train = 0.5*loss_fn1(seg_map, masks) + 0.5*loss_fn2(seg_map, masks)
 
             if scaler is not None:
                 scaler.scale(loss_train).backward()
@@ -338,7 +351,7 @@ def main(params: dict[str, Any]):
 
             with torch.no_grad():
                 seg_map = model(imgs)
-                loss_test = loss_fn(seg_map, masks)
+                loss_test = 0.5*loss_fn1(seg_map, masks) + 0.5*loss_fn2(seg_map, masks)
 
             total_epoch_test_score += [loss_test.item()]
 
@@ -351,7 +364,7 @@ def main(params: dict[str, Any]):
                     f"Test Total Loss: {np.mean(total_epoch_test_score):.4f} "
                     f"Test IoU Score: {np.mean(iou_epoch_test_score):.4f} ")
 
-        if stopper(epoch=epoch, score= 1 - np.mean(total_epoch_test_score)):
+        if stopper(epoch=epoch, score=np.mean(total_epoch_test_score)):
             logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
             break
         else:
