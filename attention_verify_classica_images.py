@@ -286,7 +286,7 @@ def main(params: dict[str, Any]):
         }
     }
     # loss_fn = HybridLoss(loss_params)
-    loss_fn = torch.nn.BCELoss()
+    loss_fn = torch.nn.BCEWithLogitsLoss()
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
@@ -320,7 +320,7 @@ def main(params: dict[str, Any]):
             model.train()
 
             imgs = imgs.to(device=device)
-            masks = masks.long().to(device=device)
+            masks = masks.float().to(device=device)
 
             optimizer.zero_grad()
 
@@ -354,6 +354,8 @@ def main(params: dict[str, Any]):
 
         for imgs, masks in val_dataloader:
             model.eval()
+            imgs = imgs.to(device=device)
+            masks = masks.float().to(device=device)
 
             with torch.no_grad():
                 mask_out = model(imgs)
