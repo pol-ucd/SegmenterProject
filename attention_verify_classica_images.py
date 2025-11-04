@@ -320,7 +320,7 @@ def main(params: dict[str, Any]):
             model.train()
 
             imgs = imgs.to(device=device)
-            masks = masks.to(device=device)
+            masks = masks.long().to(device=device)
 
             optimizer.zero_grad()
 
