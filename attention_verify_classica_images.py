@@ -59,7 +59,12 @@ def get_image_mask_pairs(root_dir: str = None, image_types: List[str] = None):
     image_types = image_types or ['*.jpg', '*.png', '*.tiff']
     image_dirs = sorted([x[0] for x in os.walk(root_dir) if x[0].endswith('images')])
     mask_dirs = sorted([x[0] for x in os.walk(root_dir) if x[0].endswith('masks')])
-    assert len(image_dirs) == len(mask_dirs), 'Image and Mask directories do not match'
+    try:
+        assert len(image_dirs) == len(mask_dirs)
+    except:
+        msg = (f'Image and Mask directories do not match. '
+               f'Images: {image_dirs} and masks: {mask_dirs}')
+        raise ValueError(msg)
 
     result = []
     for image_dir, mask_dir in zip(image_dirs, mask_dirs):
