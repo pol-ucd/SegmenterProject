@@ -20,8 +20,6 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
-from hanija_original.modules_old import IoULoss
-
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 WEIGHTS_MAP = {'base': None,
@@ -279,7 +277,7 @@ def main(params: dict[str, Any]):
     model.to(device=device)
 
     loss_fn1 = torch.nn.BCEWithLogitsLoss()
-    loss_fn2 = IoULoss()
+    loss_fn2 = IOULoss()
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
