@@ -32,11 +32,11 @@ WEIGHTS_MAP = {'base': None,
 test_sizes = [0.9]
 # backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
 backbone = "nvidia/segformer-b5-finetuned-ade-640-640"
-hdf5_file = '../segmenter/data/Classica.h5'
-prefix = 'attention_verify_classica_images'
-image_size = 256
-checkpoint_path = "../segmenter/checkpoint/attention_mim_segformer_pretrained.pt"
-n_folds = 10
+# hdf5_file = '../segmenter/data/Classica.h5'
+prefix = 'attention_base_trained'
+# image_size = 256
+# checkpoint_path = "../segmenter/checkpoint/attention_mim_segformer_pretrained.pt"
+# n_folds = 10
 
 n_augments = 3
 n_batch = 4
@@ -199,6 +199,7 @@ class EpochStopper:
         self.min_delta = min_delta or 0.0001
         self.max_boredom = max_boredom
         self.current_boredom = 0
+        self.save_model = True
 
     def __call__(self, epoch: int, score: np.floating[Any]) -> bool:
         """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
@@ -206,11 +207,14 @@ class EpochStopper:
         if score + self.min_delta < self.best_loss:
             self.best_loss = score
             self.boredom = 0
+            self.save_model = True
         else:
             self.boredom += 1
+            self.save_model=False
 
         if self.boredom >= self.max_boredom:
             is_stopping = True
+            self.save_model = False
         return is_stopping
 
     forward = __call__
@@ -382,13 +386,18 @@ def main(params: dict[str, Any]):
 
         if stopper(epoch=epoch, score=np.mean(total_epoch_train_loss)):
             logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
-            logger.info(f"Training set: {train_names}")
-            split_loss += [stopper.best_loss]
             break
         else:
             if stopper.boredom > 0:
                 logger.info(
                     f"No obvious improvement. Current boredom level is {stopper.boredom} / {stopper.max_boredom}.")
+
+        if stopper.save_model:
+            best_model = model.state_dict()
+            save_as_name = f'../segmenter/checkpoint/{prefix}_pretrained.pt'
+            torch.save(best_model,
+                       save_as_name)
+            logger.info(f"Saving best snapshot of model state dict as {save_as_name}.")
 
 
 def get_args():
@@ -398,7 +407,7 @@ def get_args():
     :return: Dictionary of arguments
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", default=hdf5_file,
+    parser.add_argument("-i", "--input",
                         type=str, help="Path to the HDF5 file.")
     parser.add_argument("-bs", "--batch_size", type=int, default=4, )
     parser.add_argument("-nw", "--num_workers", type=int, default=4, )
