@@ -255,6 +255,8 @@ def main(params: dict[str, Any]):
 
                     train_names += [x_k for x_k in x['original_name'] if x_k not in train_names]
 
+                    train_names += [x_k for x_k in x['original_name'] if x_k not in train_names]
+
                     optimizer.zero_grad()
 
                     with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
@@ -312,8 +314,10 @@ def main(params: dict[str, Any]):
                             f"Training IoU Loss: {np.mean(iou_epoch_train_loss):.4f} "
                             f"Test Total Loss: {np.mean(total_epoch_test_loss):.4f} "
                             f"Test IoU Loss: {np.mean(iou_epoch_test_loss):.4f} ")
+
                 if stopper(epoch=epoch, score=np.mean(total_epoch_train_loss)):
                     logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
+                    logger.info(f"Training set: {train_names}")
                     split_loss += [stopper.best_loss]
                     break
                 else:
