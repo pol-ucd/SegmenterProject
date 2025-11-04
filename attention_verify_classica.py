@@ -76,25 +76,13 @@ class EpochStopper:
     def best_loss(self):
         return self.best_loss
 
-    @best_loss.setter
-    def best_loss(self, value):
-        self.best_loss = value
-
     @property
     def current_boredom(self):
         return self.current_boredom
 
-    @current_boredom.setter
-    def current_boredom(self, value):
-        self.current_boredom = value
-
     @property
     def max_boredom(self):
         return self.max_boredom
-
-    @max_boredom.setter
-    def max_boredom(self, value):
-        self.max_boredom = value
 
     def __call__(self, epoch: int, score: np.floating[Any]) -> bool:
         """ Set up stopping criteria - stop after 'boredom' steps do not improve loss by 'min_delta' """
