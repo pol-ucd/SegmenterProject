@@ -286,7 +286,7 @@ def main(params: dict[str, Any]):
         }
     }
     # loss_fn = HybridLoss(loss_params)
-    loss_fn = torch.nn.BCEWithLogitsLoss()
+    loss_fn = torch.nn.BCELoss()
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
