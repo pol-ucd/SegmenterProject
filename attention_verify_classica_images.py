@@ -52,6 +52,17 @@ def check_scores(metric: dict[str, list]) -> bool:
     return np.all(all_lens == base_len)
 
 
+def iou_loss(y_true, y_pred):
+    true = (y_true > 0.5).long().flatten()
+    pred = (y_pred > 0.5).long().flatten()
+    tp = torch.sum(true*pred)
+    tn = torch.sum((1-true)*(1-pred))
+    fn = torch.sum((1-true)*pred)
+    fp = torch.sum(true*(1-pred))
+    eps = 1e-7
+    score = tp/(tp + fp + fn + eps)
+    return score
+
 
 def get_image_mask_pairs(root_dir: str = None, image_types: List[str] = None):
     if root_dir is None:
@@ -74,6 +85,7 @@ def get_image_mask_pairs(root_dir: str = None, image_types: List[str] = None):
             result += [(i, m) for i, m in zip(images, masks)]
     return result
 
+
 def collate_fn(batch):
     """
     batch: list of items from Dataset
@@ -86,6 +98,7 @@ def collate_fn(batch):
             masks.append(mask)
     return torch.stack(imgs), torch.stack(masks)
 
+
 class ImageMaskDataset(Dataset):
     def __init__(self, root_dir, n_augment=2, image_size=(256, 256)):
         """
@@ -95,12 +108,11 @@ class ImageMaskDataset(Dataset):
             image_size (tuple): Resize dimensions for images and masks.
         """
 
-
         self.n_augment = n_augment
 
         self.mask_image_pairs = get_image_mask_pairs(root_dir=root_dir)
 
-        self.image_files,  self.mask_files = zip(*self.mask_image_pairs)
+        self.image_files, self.mask_files = zip(*self.mask_image_pairs)
         assert len(self.image_files) == len(self.mask_files), "Mismatch in image and mask count."
 
         # Base transform (resize + tensor conversion)
@@ -125,8 +137,6 @@ class ImageMaskDataset(Dataset):
         return len(self.image_files)
 
     def __getitem__(self, idx):
-
-
         # Load image and mask
         img = np.array(Image.open(self.image_files[idx]).convert("RGB"))
         mask = np.array(Image.open(self.mask_files[idx]).convert("L"))  # grayscale mask
@@ -142,8 +152,6 @@ class ImageMaskDataset(Dataset):
             pairs.append((augmented['image'], augmented['mask'].unsqueeze(0)))
 
         return pairs  # list of (image, mask) tensors
-
-
 
 
 class SimpleMaskSegmenter(torch.nn.Module):
@@ -173,14 +181,15 @@ class SimpleMaskSegmenter(torch.nn.Module):
         out = out.permute(0, 3, 1, 2)
 
         out = F.interpolate(out, size=(h, w), mode="nearest-exact")
-        assert out.shape == (b, self.num_classes,h, w), f"{__class__: }: Size mismatch between image and segmenter output"
+        assert out.shape == (b, self.num_classes, h,
+                             w), f"{__class__: }: Size mismatch between image and segmenter output"
         return out
 
     def load_model(self, path: str):
         device = next(self.model.parameters()).device
         state_dict = torch.load(path, weights_only=False,
                                 map_location=device)
-        self.model.segformer.load_state_dict(state_dict )
+        self.model.segformer.load_state_dict(state_dict)
 
 
 class EpochStopper:
@@ -215,7 +224,6 @@ def main(params: dict[str, Any]):
     image_size = (256, 256)
     learning_rate = params['learning_rate']
     prefix = params['prefix']
-
 
     num_epochs = params['num_epochs']
     batch_size = params['batch_size'] or 4
@@ -328,8 +336,8 @@ def main(params: dict[str, Any]):
                 seg_map = model(imgs)
 
                 assert seg_map.shape == masks.shape, (f"Size mismatch between "
-                                                           f"generated mask: {seg_map.shape}, "
-                                                           f"and target mask: {masks.shape}")
+                                                      f"generated mask: {seg_map.shape}, "
+                                                      f"and target mask: {masks.shape}")
                 loss_train = loss_fn(seg_map, masks)
 
             if scaler is not None:
@@ -347,8 +355,7 @@ def main(params: dict[str, Any]):
 
             total_epoch_train_loss += [loss_train.item()]
             with torch.no_grad():
-                seg = (seg_map > 0.5).float()
-                iou_epoch_train_loss += [IoULoss()(seg, masks).item()]
+                iou_epoch_train_loss += [iou_loss(seg_map, masks).item()]
 
             b, _, _, _ = seg_map.shape
 
@@ -358,13 +365,12 @@ def main(params: dict[str, Any]):
             masks = (masks > 0).float().to(device=device)
 
             with torch.no_grad():
-                mask_out = model(imgs)
-                loss_test = loss_fn(mask_out, masks)
+                seg_map = model(imgs)
+                loss_test = loss_fn(seg_map, masks)
 
             total_epoch_test_loss += [loss_test.item()]
 
-            seg = (mask_out > 0.5).float()
-            iou_epoch_test_loss += [IoULoss()(seg, masks).item()]
+            iou_epoch_test_loss += [iou_loss(seg_map, masks).item()]
 
         scheduler.step()
         logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. "
@@ -380,7 +386,8 @@ def main(params: dict[str, Any]):
             break
         else:
             if stopper.boredom > 0:
-                logger.info(f"No obvious improvement. Current boredom level is {stopper.boredom} / {stopper.max_boredom}.")
+                logger.info(
+                    f"No obvious improvement. Current boredom level is {stopper.boredom} / {stopper.max_boredom}.")
 
 
 def get_args():
