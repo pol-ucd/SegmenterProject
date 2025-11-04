@@ -151,7 +151,7 @@ class SimpleMaskSegmenter(torch.nn.Module):
                  pretrained_model_name_or_path: Union[str, Any],
                  config: SegformerConfig,
                  load_dict_path: Union[str, Any] = None,
-                 num_classes: int = 2):
+                 num_classes: int = 1):
         super().__init__()
         self.config = config
         self.num_classes = num_classes
@@ -252,7 +252,7 @@ def main(params: dict[str, Any]):
     model = SimpleMaskSegmenter(pretrained_model_name_or_path=backbone,
                                 config=config,
                                 load_dict_path=None,
-                                num_classes=2)
+                                num_classes=1)
 
     model.to(device=device)
 
