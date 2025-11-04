@@ -351,7 +351,7 @@ def main(params: dict[str, Any]):
                     f"Test Total Loss: {np.mean(total_epoch_test_score):.4f} "
                     f"Test IoU Score: {np.mean(iou_epoch_test_score):.4f} ")
 
-        if stopper(epoch=epoch, score=np.mean(total_epoch_test_score)):
+        if stopper(epoch=epoch, score= 1 - np.mean(total_epoch_test_score)):
             logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
             break
         else:
