@@ -3,7 +3,7 @@ import logging
 import math
 import sys
 import traceback
-from typing import Dict, Any, Iterable
+from typing import Dict, Any, Iterable, Tuple
 
 import numpy as np
 import torch
@@ -53,7 +53,8 @@ class MIMUpscalerMLP(nn.Module):
 # class SegformerDecodeHead(SegformerPreTrainedModel):
 class MIMSegformerReconstructionHead(nn.Module):
     """
-    Reconstruct a full image segmentation model
+    Reconstruct a full image segmentation model. Segformer produces multi-layered encodings
+    so this code implements the same layered approach in the Segformer source repo.
     """
 
     def __init__(self, config):
@@ -120,9 +121,32 @@ class MIMSegformerReconstructionHead(nn.Module):
         return logits
 
 
+class AttentionMaskedTransformerBase(nn.Module):
+    def __init__(self, config, mask_ratio=0.9):
+        super().__init__()
+        self.config = config
+        self.mask_ratio = mask_ratio
+
+    def generate_attention_mask(self, attention_map: torch.Tensor) -> torch.Tensor:
+        """
+        Mask out the (1-self.mask_ratio) most confident encodings returned as a mask
+        :param attention_map: an attention map per pixel of the batch of images [B, H, W]
+        :return: mask with pixels of the (1-self.mask_ratio) most confident encodings
+                zeroed out [B, 1, H, W].
+        """
+        B, H, W = attention_map.shape
+        flat = attention_map.view(B, -1)
+        _, indices = torch.topk(flat, int(H * W * self.mask_ratio), dim=1, largest=False)
+        mask = torch.ones_like(flat)
+        mask.scatter_(1, indices, 0)
+        return mask.view(B, H, W).unsqueeze(1)  # [B, 1, H, W]
+
+    def forward(self, encoder_hidden_states: torch.FloatTensor) -> torch.Tensor:
+        pass
+
+
 class SimCLRSegFormer(nn.Module):
     def __init__(self, config, mask_ratio=0.9):
-
         super().__init__()
         self.encoder = SegformerModel.from_pretrained(pretrained_model_name_or_path=backbone,
                                                       config=config,
@@ -135,15 +159,21 @@ class SimCLRSegFormer(nn.Module):
         self.reconstruction_head = MIMSegformerReconstructionHead(config)
         self.mask_ratio = mask_ratio
 
-    def generate_attention_mask(self, attention_map):
+    def generate_attention_mask(self, attention_map: torch.Tensor) -> torch.Tensor:
+        """
+        Mask out the (1-self.mask_ratio) most confident encodings returned as a mask
+        :param attention_map: an attention map per pixel of the batch of images [B, H, W]
+        :return: mask with pixels of the (1-self.mask_ratio) most confident encodings
+                zeroed out [B, 1, H, W].
+        """
         B, H, W = attention_map.shape
         flat = attention_map.view(B, -1)
         _, indices = torch.topk(flat, int(H * W * self.mask_ratio), dim=1, largest=False)
         mask = torch.ones_like(flat)
         mask.scatter_(1, indices, 0)
-        return mask.view(B, H, W).unsqueeze(1)
+        return mask.view(B, H, W).unsqueeze(1)  # [B, 1, H, W
 
-    def forward(self, x1, x2):
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor)-> Tuple[torch.Tensor, torch.Tensor]:
         B, C, H, W = x1.shape
         scaling = math.prod(self.strides)
         h_0, w_0 = H // scaling, W // scaling
@@ -159,9 +189,9 @@ class SimCLRSegFormer(nn.Module):
         attention_mask1 = self.generate_attention_mask(attn_map1).requires_grad_(True)
         attention_mask2 = self.generate_attention_mask(attn_map2).requires_grad_(True)
         attention_mask1 = F.interpolate(attention_mask1,
-                                       size=(H, W), mode='nearest-exact')
+                                        size=(H, W), mode='nearest-exact')
         attention_mask2 = F.interpolate(attention_mask2,
-                                       size=(H, W), mode='nearest-exact')
+                                        size=(H, W), mode='nearest-exact')
         mask1 = mask1 * attention_mask1 + MASK_VALUE
         mask2 = mask2 * attention_mask2 + MASK_VALUE
 
@@ -171,10 +201,9 @@ class SimCLRSegFormer(nn.Module):
         # Encode both views
 
         f1 = self.encoder(x1, output_hidden_states=True,
-                               return_dict=True).hidden_states
+                          return_dict=True).hidden_states
         f2 = self.encoder(x2, output_hidden_states=True,
-                               return_dict=True).hidden_states
-
+                          return_dict=True).hidden_states
 
         # Project to latent space
         z1 = F.normalize(self.reconstruction_head(f1), dim=1)
@@ -209,12 +238,14 @@ def nt_xent_loss(z1, z2, temperature=0.1):
     logits = torch.cat([positives.unsqueeze(1), negatives], dim=1)
     return F.cross_entropy(logits, labels)
 
+
 def check_is_finite(logger: logging.Logger, x: torch.Tensor, label: str = None) -> bool:
     label = label or ''
     if torch.any(torch.isinf(x)):
         logger.warning(f"{label} Tensor is not finite!")
         return False
     return True
+
 
 def check_is_attached(logger: logging.Logger, x: torch.Tensor, label: str = None) -> bool:
     try:

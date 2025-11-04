@@ -1,10 +1,8 @@
-import json
-import json
+import argparse
 import logging
 import os
-import random
 import sys
-from datetime import datetime
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -12,12 +10,13 @@ import h5py
 import numpy as np
 import pandas as pd
 import torch
-from torch import autocast
+from torch import autocast, nn
+import torch.nn.functional as F
 from torch.amp import GradScaler
+from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
 from segmenter.loss import IoULoss
 from segmenter.loss.hybrid import HybridLoss
-from segmenter.models.models import AugurSegformerSegmentation
 from segmenter.utils.data import (hdf5_worker_init_fn,
                                   HDF5DatasetOptimized, HDF5BatchSampler, SSLTransformPipeline)
 
@@ -25,14 +24,45 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 # test_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
 test_sizes = [0.9]
+backbone = "nvidia/segformer-b4-finetuned-ade-512-512"
+# model_name = "nvidia/segformer-b5-finetuned-ade-640-640"
+hdf5_file = '../segmenter/data/Classica.h5'
+prefix = 'attention_verify_classica'
+image_size = 256
+checkpoint_path = "../segmenter/checkpoint/attention_mim_segformer_pretrained.pt"
+n_folds = 5
 
-def check_scores(metric:dict[str,list])-> bool:
+
+def check_scores(metric: dict[str, list]) -> bool:
     all_lens = np.array([len(v) for v in metric.values()])
     base_len = all_lens[0]
     if not np.all(all_lens == base_len):
-        for k,v in metric.items():
+        for k, v in metric.items():
             print(f"{k}: {len(v)}")
     return np.all(all_lens == base_len)
+
+
+class SimpleMaskSegmenter(torch.nn.Module):
+    def __init__(self, pretrained_model_name_or_path, config, num_classes=2):
+        super().__init__()
+        self.config = config
+        self.num_classes = num_classes
+        self.model = SegformerForSemanticSegmentation.from_pretrained(
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            ignore_mismatched_sizes=True)
+
+        self.segmenter_head = nn.Linear(config.num_labels, num_classes)
+
+    def forward(self, pixel_map):
+        b, c, h, w = pixel_map.shape
+        out = self.model(pixel_map)[0]
+        out = out.permute(0, 2, 3, 1)
+        out = self.segmenter_head(out)
+        out = out.permute(0, 3, 1, 2)
+
+        out = F.interpolate(out, size=(h, w), mode="nearest-exact")
+        assert out.shape == (b, self.num_classes,h, w), f"{__class__: }: Size mismatch between image and segmenter output"
+        return out
 
 
 class EpochStopper:
@@ -62,79 +92,23 @@ class EpochStopper:
     forward = __call__
 
 
-
-def main():
-    # logger = logging.getLogger(__name__)
+def main(params: dict[str, Any]):
     logger = logging.getLogger()
-    home = Path.home()
-    if not os.path.exists(os.path.join(home, "segmenter")):
-        logger.warning("Creating 'segmenter' directory in $HOME directory.")
-        os.makedirs(os.path.join(home, "segmenter"))
-    if not os.path.exists(os.path.join(home, "segmenter/data")):
-        logger.warning("Creating 'data' directory in $HOME/segmenter directory.")
-        os.makedirs(os.path.join(home, "segmenter/data"))
-    if os.path.isfile(os.path.join(os.path.join(home, "segmenter"),
-                                   "classica_params.json")):
-        params_file = os.path.join(os.path.join(home, "segmenter"),
-                                   "classica_params.json")
-    else:
-        params_file = "classica_params.json"
 
-    # --- Load parameters from JSON file ---
-    try:
-        with open(params_file, 'r') as f:
-            params = json.load(f)
-    except FileNotFoundError:
-        logger.error(f"Error: {params_file} file not found. Please ensure it is in the same directory.")
-        return
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON from {params_file}: {e}")
-        return
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Control all the random seeds we will use for reproducibility
-    torch.manual_seed(42)
-    np.random.seed(42)
-    random.seed(42)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    prefix = 'attention_verify_classica'
+    image_size = (256, 256)
+    learning_rate = params['learning_rate']
+    prefix = params['prefix']
+    hdf5_file = params['dataset']
 
-    model_params = params['model']['params']
-    pretrained_model = model_params['pretrained_model']
-    pretrained_checkpoint = model_params['pretrained_checkpoint']
+    num_epochs = params['num_epochs']
+    batch_size = params['batch_size']
+    num_workers = params['num_workers']
 
-    checkpoint_path = params['checkpoints']['path']
-    checkpoint_prefix = params['checkpoints']['prefix']
-    checkpoint_patience = params['checkpoints']['patience']
-    checkpoint_min_delta = params['checkpoints']['min_delta']
-    if not os.path.isdir(checkpoint_path):
-        logger.info(
-            f"Checkpoint directory '{checkpoint_path}' not found. Saving to '[current directory]/checkpoints' instead.")
-        checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
+    config = SegformerConfig.from_pretrained(backbone)
 
-    """ Configure the run """
-    run_params = params['run']
-    num_classes = run_params['num_classes']
-    batch_size = run_params['batch_size']
-    num_workers = min(run_params['num_workers'], 1)
-    n_augments = run_params['n_augments']
-    image_size = tuple(run_params['image_size'])
-    n_epochs = run_params['n_epochs']
-
-    """ Optimiser settings """
-    opt_params = params['optimizer']['params']
-    learning_rate = opt_params['learning_rate']
-    l2_decay_penalty = opt_params['l2_decay_penalty']
-
-    """ Data settings """
-    hdf5_path = params["datasets"]["hdf5_dir"]
-    hdf5_file = [os.path.join(hdf5_path, _h) for _h in params["datasets"]["hdf5_files"]][0]
-    # logger.info(f"Loaded parameters: {params}")
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # logger.info(f"Using {device} device for model training.")
-
-    """ Load datasets for test and training """
-
-    n_folds = 5
     metrics = {"case": [],
                "test_split": [],
                "test_iteration": [],
@@ -145,7 +119,7 @@ def main():
                "recall": []}
 
     results_csv_path = os.path.join(Path.home(), "segmenter")
-    results_csv_name = os.path.join(results_csv_path, "classica_custom_segformer_results.csv")
+    results_csv_name = os.path.join(results_csv_path, f"{prefix}_results.csv")
     results = pd.DataFrame.from_dict(metrics)
     results.to_csv(results_csv_name)
 
@@ -156,8 +130,6 @@ def main():
 
     ds = HDF5DatasetOptimized(hdf5_path=hdf5_file,
                               transform=SSLTransformPipeline(size=image_size))
-
-
 
     split_loss = []
     split_iou = []
@@ -183,15 +155,45 @@ def main():
 
             all_data = [d for d in dataloader]
 
-
-            model = AugurSegformerSegmentation(pretrained_model=pretrained_model,
-                                               checkpoint_path=pretrained_checkpoint,
-                                               num_classes=num_classes).to(device)
+            # model = SegformerForSemanticSegmentation.from_pretrained(pretrained_model_name_or_path=backbone,
+            #                                                          config=config,
+            #                                                          ignore_mismatched_sizes=True)
+            model = SimpleMaskSegmenter(pretrained_model_name_or_path=backbone,
+                                        config=config,
+                                        num_classes=2)
 
             model.to(device=device)
 
-            loss_params = params['loss_function']
-            loss_fn = HybridLoss(loss_params['params'])
+            loss_params = {
+                "ce": {
+                    "weight": 0.1
+                },
+                "dice": {
+                    "weight": 0.0
+                },
+                "focal": {
+                    "weight": 0.0,
+                    "alpha": 0.25,
+                    "gamma": 2.0
+                },
+                "tversky": {
+                    "weight": 0.0,
+                    "alpha": 0.8,
+                    "beta": 0.2
+                },
+                "iou": {
+                    "weight": 1.0
+                },
+                "boundary_sdf": {
+                    "weight": 0.0,
+                    "dt_backend": "kornia"
+                },
+                "soft_chamfer": {
+                    "weight": 0.0,
+                    "dt_backend": "kornia"
+                }
+            }
+            loss_fn = HybridLoss(loss_params)
 
             # Only pass the parameters that require gradients to the optimizer
             optimizer = torch.optim.AdamW(
@@ -201,7 +203,7 @@ def main():
                 # weight_decay=l2_decay_penalty  # L2 regularization to prevent large weights
             )
 
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=params['scheduler']['T_max'])
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
             """
             Only use GradScaler if we have CUDA
@@ -210,13 +212,12 @@ def main():
             if torch.cuda.is_available():
                 scaler = GradScaler()
 
-
             logger.info(f"Starting fold [{idx + 1}/{n_folds}] for test split [{test_split}].")
             stopper = EpochStopper(max_boredom=3, min_delta=0.0001)
             train_names = []
             test_names = []
-            for epoch_idx, epoch in enumerate(range(n_epochs)):
-                logger.info(f"Epoch [{epoch_idx + 1}/{n_epochs}].")
+            for epoch_idx, epoch in enumerate(range(num_epochs)):
+                logger.info(f"Epoch [{epoch_idx + 1}/{num_epochs}].")
                 total_epoch_train_loss = []
                 total_epoch_test_loss = []
                 iou_epoch_train_loss = []
@@ -239,8 +240,13 @@ def main():
                     optimizer.zero_grad()
 
                     with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
-                        mask_out = model(x['images'])
-                        loss_train = loss_fn(mask_out, x['masks'])
+                        seg_map = model(x['images'])
+
+                        assert seg_map.shape == x['masks'].shape, (f"Size mismatch between "
+                                                                   f"generated mask: {seg_map.shape}, "
+                                                                   f"and target mask: {x['masks'].shape}")
+
+                        loss_train = loss_fn(seg_map, x['masks'])
 
                     if scaler is not None:
                         scaler.scale(loss_train).backward()
@@ -257,9 +263,9 @@ def main():
 
                     total_epoch_train_loss += [loss_train.item()]
                     with torch.no_grad():
-                        iou_epoch_train_loss += [IoULoss()(mask_out, x['masks']).item()]
+                        iou_epoch_train_loss += [IoULoss()(seg_map, x['masks']).item()]
 
-                    b, _, _, _ = mask_out.shape
+                    b, _, _, _ = seg_map.shape
 
                 for data in all_data[n_train:]:
                     model.eval()
@@ -283,44 +289,72 @@ def main():
                         iou_epoch_test_loss += [IoULoss()(mask_out, x['masks']).item()]
 
                 scheduler.step()
-                logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. "
+                logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. "
                             f"Training Total Loss: {np.mean(total_epoch_train_loss):.4f} "
                             f"Training IoU Loss: {np.mean(iou_epoch_train_loss):.4f} "
                             f"Test Total Loss: {np.mean(total_epoch_test_loss):.4f} "
                             f"Test IoU Loss: {np.mean(iou_epoch_test_loss):.4f} ")
                 if stopper.forward(epoch=epoch, score=np.mean(total_epoch_train_loss)):
-                    logger.info(f"Epoch {epoch + 1}/{n_epochs} completed. ")
+                    logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
                     split_loss += [stopper.get_score()]
                     break
 
 
+def get_args():
+    """
+    Command line arguments
+
+    :return: Dictionary of arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--input", default=hdf5_file,
+                        type=str, help="Path to the HDF5 file.")
+    parser.add_argument("-bs", "--batch_size", type=int, default=4, )
+    parser.add_argument("-nw", "--num_workers", type=int, default=4, )
+    parser.add_argument("-e", "--num_epochs", type=int, default=200, )
+    parser.add_argument("-lr", "--learning_rate", type=float, default=1e-5, )
+    parser.add_argument("-p", "--prefix", type=str, default=prefix, )
+    parser.add_argument("-ro", "--run_once", type=bool, default=False, )
+    parser.add_argument("-ns", "--num_shapes", type=int, default=24, )
+
+    args = parser.parse_args()
+
+    params = {'dataset': args.input,
+              'batch_size': args.batch_size,
+              'num_workers': args.num_workers,
+              'num_epochs': args.num_epochs,
+              'learning_rate': args.learning_rate,
+              'prefix': args.prefix,
+              'run_once': bool(args.run_once),
+              'num_shapes': int(args.num_shapes), }
+
+    return params
+
+
 if __name__ == "__main__":
     # --- Logging Setup ---
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    home_dir = Path.home()
-    if not os.path.exists(os.path.join(home_dir, "segmenter")):
-        os.makedirs(os.path.join(home_dir, "segmenter"))
-    logfile = os.path.join(home_dir, "segmenter", f"training_{timestamp}.log")
-
     logging.basicConfig(
         level=logging.INFO,
         force=True,  # Resets any previous configuration - in Colab for example
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(logfile)
+            logging.FileHandler("training.log")
         ]
     )
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger()
     try:
-        main()
+        params = get_args()
+        main(params)
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt detected. Shutting down gracefully.")
-        sys.exit(0)
+    except Exception as ex:
+        logger.error(f"Unknown exception occurred. Error: {ex}")
+        logger.error(traceback.format_exc())
     finally:
-        # This block will always be executed, allowing you to clean up resources
         # ensure log handlers are flushed.
         for handler in logger.handlers:
             handler.flush()
             handler.close()
         logger.info("Logger handlers flushed and closed. Exiting now.")
+        sys.exit(0)
