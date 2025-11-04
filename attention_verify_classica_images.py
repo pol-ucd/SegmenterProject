@@ -330,7 +330,6 @@ def main(params: dict[str, Any]):
                 assert seg_map.shape == masks.shape, (f"Size mismatch between "
                                                            f"generated mask: {seg_map.shape}, "
                                                            f"and target mask: {masks.shape}")
-                print(masks.max(), masks.min())
                 loss_train = loss_fn(seg_map, masks)
 
             if scaler is not None:
