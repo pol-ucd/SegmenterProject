@@ -338,7 +338,7 @@ def main(params: dict[str, Any]):
                 assert seg_map.shape == masks.shape, (f"Size mismatch between "
                                                       f"generated mask: {seg_map.shape}, "
                                                       f"and target mask: {masks.shape}")
-                print("seg_map min/max range:", np.min(seg_map), np.max(seg_map))
+                print("seg_map min/max range:", seg_map.min(), seg_map.max())
                 loss_train = 0.5*loss_fn1(seg_map, masks) + 0.5*loss_fn2(seg_map, masks)
 
             if scaler is not None:
