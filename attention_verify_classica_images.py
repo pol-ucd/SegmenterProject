@@ -41,6 +41,9 @@ n_batch = 4
 path_to_training_images = '../segmenter/data/training'
 path_to_validation_images = '../segmenter/data/validation'
 
+LOSS_ALPHA = 0.8
+LOSS_BETA = 0.2
+
 
 def check_scores(metric: dict[str, list]) -> bool:
     all_lens = np.array([len(v) for v in metric.values()])
@@ -75,6 +78,19 @@ def iou_score(y_true, y_pred, eps=1e-06, logits=True):
     score = tp/(tp + fp + fn + eps)
     return score
 
+class CompoundLoss(nn.Module):
+    def __init__(self, alpha=0.5, beta=0.5, eps=1e-06):
+        super(CompoundLoss, self).__init__()
+        self.iou_loss = IOULoss()
+        self.bce_loss = torch.nn.BCEWithLogitsLoss()
+        self.alpha = alpha
+        self.beta = beta
+        self.eps = eps
+
+    def forward(self, y_pred, y_true):
+        return self.alpha*self.iou_loss(y_pred, y_true) + self.beta*self.bce_loss(y_pred, y_true)
+
+    __call__ = forward
 
 def get_image_mask_pairs(root_dir: str = None, image_types: List[str] = None):
     if root_dir is None:
@@ -288,8 +304,9 @@ def main(params: dict[str, Any]):
 
     model.to(device=device)
 
-    loss_fn1 = torch.nn.BCEWithLogitsLoss()
-    loss_fn2 = IOULoss()
+    # loss_fn1 = torch.nn.BCEWithLogitsLoss()
+    # loss_fn2 = IOULoss()
+    loss_fn = CompoundLoss(alpha=LOSS_ALPHA, beta=LOSS_BETA)
 
     # Only pass the parameters that require gradients to the optimizer
     optimizer = torch.optim.AdamW(
@@ -335,7 +352,7 @@ def main(params: dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 seg_map = model(imgs)
 
-                loss_train = 0.5*loss_fn1(seg_map, masks) + 0.5*loss_fn2(seg_map, masks)
+                loss_train = loss_fn(seg_map, masks)
 
             if scaler is not None:
                 scaler.scale(loss_train).backward()
@@ -363,7 +380,7 @@ def main(params: dict[str, Any]):
 
             with torch.no_grad():
                 seg_map = model(imgs)
-                loss_test = 0.5*loss_fn1(seg_map, masks) + 0.5*loss_fn2(seg_map, masks)
+                loss_test = loss_fn(seg_map, masks)
 
             total_epoch_test_score += [loss_test.item()]
 
@@ -371,10 +388,10 @@ def main(params: dict[str, Any]):
 
         scheduler.step()
         logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. "
-                    f"Training Total Loss: {np.mean(total_epoch_train_loss):.4f} "
-                    f"Training IoU Score: {np.mean(iou_epoch_train_score):.4f} "
-                    f"Test Total Loss: {np.mean(total_epoch_test_score):.4f} "
-                    f"Test IoU Score: {np.mean(iou_epoch_test_score):.4f} ")
+                    f"Training [Loss: {np.mean(total_epoch_train_loss):.4f}] "
+                    f"[IoU: {100*np.mean(iou_epoch_train_score):.2f}%] || "
+                    f"Test: [Loss: {np.mean(total_epoch_test_score):.4f}] "
+                    f"[IoU: {100*np.mean(iou_epoch_test_score):.2f}%]")
 
         if stopper(epoch=epoch, score=np.mean(total_epoch_test_score)):
             logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
