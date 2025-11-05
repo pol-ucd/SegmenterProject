@@ -14,7 +14,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from albumentations import ToTensorV2
-from torch import autocast, nn
+from torch import autocast, nn, softmax
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
@@ -50,17 +50,20 @@ def check_scores(metric: dict[str, list]) -> bool:
     return np.all(all_lens == base_len)
 
 class IOULoss(nn.Module):
-    def __init__(self, eps=1e-06):
+    def __init__(self, eps=1e-06, logits=True):
         super(IOULoss, self).__init__()
         self.eps = eps
+        self.logits = logits
 
     def forward(self, y_pred, y_true):
-        return 1.0 - iou_score(y_true, y_pred, self.eps)
+        return 1.0 - iou_score(y_true, y_pred, self.eps, self.logits)
 
     __call__ = forward
 
 
-def iou_score(y_true, y_pred, eps=1e-06):
+def iou_score(y_true, y_pred, eps=1e-06, logits=True):
+    if logits:
+        y_pred = softmax(y_pred)
     true = (y_true > 0.5).long().flatten()
     pred = (y_pred > 0.5).long().flatten()
     tp = torch.sum(true*pred)
