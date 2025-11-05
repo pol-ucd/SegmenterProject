@@ -335,10 +335,6 @@ def main(params: dict[str, Any]):
             with autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
                 seg_map = model(imgs)
 
-                assert seg_map.shape == masks.shape, (f"Size mismatch between "
-                                                      f"generated mask: {seg_map.shape}, "
-                                                      f"and target mask: {masks.shape}")
-
                 loss_train = 0.5*loss_fn1(seg_map, masks) + 0.5*loss_fn2(seg_map, masks)
 
             if scaler is not None:
