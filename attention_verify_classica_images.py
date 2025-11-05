@@ -41,9 +41,8 @@ n_batch = 4
 path_to_training_images = '../segmenter/data/training'
 path_to_validation_images = '../segmenter/data/validation'
 
-LOSS_ALPHA = 0.8
-LOSS_BETA = 0.2
-
+LOSS_ALPHA = 0.9
+LOSS_BETA = 0.1
 
 def check_scores(metric: dict[str, list]) -> bool:
     all_lens = np.array([len(v) for v in metric.values()])
