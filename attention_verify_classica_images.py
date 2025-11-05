@@ -336,7 +336,7 @@ def main(params: dict[str, Any]):
         iou_epoch_train_score = []
         iou_epoch_test_score = []
 
-        for imgs, masks in tqdm(train_dataloader):
+        for imgs, masks in tqdm(train_dataloader, desc=f"Epoch [{epoch_idx + 1}/{num_epochs}]", colour="yellow"):
             model.train()
 
             imgs = imgs.to(device=device)
@@ -373,7 +373,7 @@ def main(params: dict[str, Any]):
 
             b, _, _, _ = seg_map.shape
 
-        for imgs, masks in tqdm(val_dataloader):
+        for imgs, masks in tqdm(val_dataloader, desc="Validation", colour="green"):
             model.eval()
             imgs = imgs.to(device=device)
             masks = (masks > 0).float().to(device=device)
