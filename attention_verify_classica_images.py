@@ -63,7 +63,7 @@ class IOULoss(nn.Module):
 
 def iou_score(y_true, y_pred, eps=1e-06, logits=True):
     if logits:
-        y_pred = softmax(y_pred)
+        y_pred = softmax(y_pred, dim=1)
     true = (y_true > 0.5).long().flatten()
     pred = (y_pred > 0.5).long().flatten()
     tp = torch.sum(true*pred)
