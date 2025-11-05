@@ -432,7 +432,7 @@ def main(params: dict[str, Any]):
 
         if stopper.save_model:
             best_model = model.base_model.state_dict()
-            save_as_name = f'../segmenter/checkpoint/{prefix}_pretrained.pt'
+            save_as_name = f'../segmenter/checkpoint/{prefix}_pretrained_dice_bce.pt'
             torch.save(best_model,
                        save_as_name)
             logger.info(f"Saving best snapshot of base_model state dict as {save_as_name}.")
