@@ -178,12 +178,12 @@ class SimpleMaskSegmenter(torch.nn.Module):
         self.num_classes = num_classes
         self.load_dict_path = load_dict_path
         self.projection_hidden_sizes = projection_hidden_size
-        self.model = SegformerForSemanticSegmentation.from_pretrained(
+        self.base_model = SegformerForSemanticSegmentation.from_pretrained(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=True)
 
         if self.load_dict_path is not None:
-            self.load_model(self.load_dict_path)
+            self.load_base_model(self.load_dict_path)
 
         self.projection_head = nn.Sequential(
             OrderedDict([
@@ -195,7 +195,7 @@ class SimpleMaskSegmenter(torch.nn.Module):
 
     def forward(self, pixel_map):
         b, c, h, w = pixel_map.shape
-        out = self.model(pixel_map)[0]
+        out = self.base_model(pixel_map)[0]
         out = out.permute(0, 2, 3, 1)
         out = self.projection_head(out)
         out = out.permute(0, 3, 1, 2)
@@ -205,11 +205,11 @@ class SimpleMaskSegmenter(torch.nn.Module):
                              w), f"{__class__: }: Size mismatch between image and segmenter output"
         return out
 
-    def load_model(self, path: str):
-        device = next(self.model.parameters()).device
+    def load_base_model(self, path: str):
+        device = next(self.base_model.parameters()).device
         state_dict = torch.load(path, weights_only=False,
                                 map_location=device)
-        self.model.segformer.load_state_dict(state_dict)
+        self.base_model.load_state_dict(state_dict)
 
 
 class EpochStopper:
@@ -284,7 +284,7 @@ def main(params: dict[str, Any]):
     model = SimpleMaskSegmenter(pretrained_model_name_or_path=backbone,
                                 config=config,
                                 load_dict_path=None,
-                                num_classes=2)
+                                num_classes=1)   # Binary classification
 
     model.to(device=device)
 
@@ -385,11 +385,11 @@ def main(params: dict[str, Any]):
                     f"No obvious improvement. Current boredom level is {stopper.boredom} / {stopper.max_boredom}.")
 
         if stopper.save_model:
-            best_model = model.state_dict()
+            best_model = model.base_model.state_dict()
             save_as_name = f'../segmenter/checkpoint/{prefix}_pretrained.pt'
             torch.save(best_model,
                        save_as_name)
-            logger.info(f"Saving best snapshot of model state dict as {save_as_name}.")
+            logger.info(f"Saving best snapshot of base_model state dict as {save_as_name}.")
 
 
 def get_args():
