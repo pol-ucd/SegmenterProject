@@ -42,8 +42,8 @@ n_batch = 4
 path_to_training_images = '../segmenter/data/training'
 path_to_validation_images = '../segmenter/data/validation'
 
-LOSS_ALPHA = 0.9
-LOSS_BETA = 0.1
+LOSS_ALPHA = 0.95
+LOSS_BETA = 0.05
 
 
 def check_scores(metric: dict[str, list]) -> bool:
