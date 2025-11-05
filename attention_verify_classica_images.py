@@ -314,7 +314,12 @@ def main(params: dict[str, Any]):
             model.train()
 
             imgs = imgs.to(device=device)
-            masks = (masks > 0).float().to(device=device)
+
+            """
+            Some masks have a range of values after image processing
+            We only want binary masks here, so filter out hi/lo values
+            """
+            masks = (masks > masks.max()//2).float().to(device=device)
 
             optimizer.zero_grad()
 
@@ -324,6 +329,7 @@ def main(params: dict[str, Any]):
                 assert seg_map.shape == masks.shape, (f"Size mismatch between "
                                                       f"generated mask: {seg_map.shape}, "
                                                       f"and target mask: {masks.shape}")
+                print("seg_map min/max range:", np.min(seg_map), np.max(seg_map))
                 loss_train = 0.5*loss_fn1(seg_map, masks) + 0.5*loss_fn2(seg_map, masks)
 
             if scaler is not None:
