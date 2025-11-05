@@ -42,7 +42,7 @@ n_batch = 4
 path_to_training_images = '../segmenter/data/training'
 path_to_validation_images = '../segmenter/data/validation'
 
-LOSS_ALPHA = 0.9
+LOSS_ALPHA = 1.0
 LOSS_BETA = 0.1
 
 
@@ -334,8 +334,6 @@ def main(params: dict[str, Any]):
 
     model.to(device=device)
 
-    # loss_fn1 = torch.nn.BCEWithLogitsLoss()
-    # loss_fn2 = IOULoss()
     loss_fn = CompoundLoss(alpha=LOSS_ALPHA, beta=LOSS_BETA)
 
     # Only pass the parameters that require gradients to the optimizer
