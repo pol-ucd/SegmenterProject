@@ -5,7 +5,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, Union, List
+from typing import Any, Union, List, OrderedDict
 
 import albumentations as A
 import numpy as np
@@ -16,6 +16,7 @@ from PIL import Image
 from albumentations import ToTensorV2
 from torch import autocast, nn, softmax
 from torch.amp import GradScaler
+from torch.nn import Sequential
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
@@ -170,11 +171,13 @@ class SimpleMaskSegmenter(torch.nn.Module):
                  pretrained_model_name_or_path: Union[str, Any],
                  config: SegformerConfig,
                  load_dict_path: Union[str, Any] = None,
-                 num_classes: int = 1):
+                 num_classes: int = 2,
+                 projection_hidden_size: int = 128):
         super().__init__()
         self.config = config
         self.num_classes = num_classes
         self.load_dict_path = load_dict_path
+        self.projection_hidden_sizes = projection_hidden_size
         self.model = SegformerForSemanticSegmentation.from_pretrained(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=True)
@@ -182,13 +185,19 @@ class SimpleMaskSegmenter(torch.nn.Module):
         if self.load_dict_path is not None:
             self.load_model(self.load_dict_path)
 
-        self.segmenter_head = nn.Linear(config.num_labels, num_classes)
+        self.projection_head = nn.Sequential(
+            OrderedDict([
+                ("fc1", nn.Linear(self.config.num_labels, self.projection_hidden_sizes)),
+                ("relu", nn.ReLU()),
+                ("fc2", nn.Linear(self.projection_hidden_sizes, self.num_classes))
+                ])
+        )
 
     def forward(self, pixel_map):
         b, c, h, w = pixel_map.shape
         out = self.model(pixel_map)[0]
         out = out.permute(0, 2, 3, 1)
-        out = self.segmenter_head(out)
+        out = self.projection_head(out)
         out = out.permute(0, 3, 1, 2)
 
         out = F.interpolate(out, size=(h, w), mode="nearest-exact")
