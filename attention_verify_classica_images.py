@@ -16,7 +16,6 @@ from PIL import Image
 from albumentations import ToTensorV2
 from torch import autocast, nn, softmax
 from torch.amp import GradScaler
-from torch.nn import Sequential
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
@@ -44,6 +43,7 @@ path_to_validation_images = '../segmenter/data/validation'
 LOSS_ALPHA = 0.9
 LOSS_BETA = 0.1
 
+
 def check_scores(metric: dict[str, list]) -> bool:
     all_lens = np.array([len(v) for v in metric.values()])
     base_len = all_lens[0]
@@ -51,6 +51,7 @@ def check_scores(metric: dict[str, list]) -> bool:
         for k, v in metric.items():
             print(f"{k}: {len(v)}")
     return np.all(all_lens == base_len)
+
 
 class IOULoss(nn.Module):
     def __init__(self, eps=1e-06, logits=True):
@@ -69,13 +70,14 @@ def iou_score(y_true, y_pred, eps=1e-06, logits=True):
         y_pred = softmax(y_pred, dim=1)
     true = (y_true > 0.5).long().flatten()
     pred = (y_pred > 0.5).long().flatten()
-    tp = torch.sum(true*pred)
-    tn = torch.sum((1-true)*(1-pred))
-    fn = torch.sum((1-true)*pred)
-    fp = torch.sum(true*(1-pred))
+    tp = torch.sum(true * pred)
+    tn = torch.sum((1 - true) * (1 - pred))
+    fn = torch.sum((1 - true) * pred)
+    fp = torch.sum(true * (1 - pred))
 
-    score = tp/(tp + fp + fn + eps)
+    score = tp / (tp + fp + fn + eps)
     return score
+
 
 class CompoundLoss(nn.Module):
     def __init__(self, alpha=0.5, beta=0.5, eps=1e-06):
@@ -87,9 +89,10 @@ class CompoundLoss(nn.Module):
         self.eps = eps
 
     def forward(self, y_pred, y_true):
-        return self.alpha*self.iou_loss(y_pred, y_true) + self.beta*self.bce_loss(y_pred, y_true)
+        return self.alpha * self.iou_loss(y_pred, y_true) + self.beta * self.bce_loss(y_pred, y_true)
 
     __call__ = forward
+
 
 def get_image_mask_pairs(root_dir: str = None, image_types: List[str] = None):
     if root_dir is None:
@@ -205,7 +208,7 @@ class SimpleMaskSegmenter(torch.nn.Module):
                 ("fc1", nn.Linear(self.config.num_labels, self.projection_hidden_sizes)),
                 ("relu", nn.ReLU()),
                 ("fc2", nn.Linear(self.projection_hidden_sizes, self.num_classes))
-                ])
+            ])
         )
 
     def forward(self, pixel_map):
@@ -244,7 +247,7 @@ class EpochStopper:
             self.save_model = True
         else:
             self.boredom += 1
-            self.save_model=False
+            self.save_model = False
 
         if self.boredom >= self.max_boredom:
             is_stopping = True
@@ -299,7 +302,7 @@ def main(params: dict[str, Any]):
     model = SimpleMaskSegmenter(pretrained_model_name_or_path=backbone,
                                 config=config,
                                 load_dict_path=None,
-                                num_classes=1)   # Binary classification
+                                num_classes=1)  # Binary classification
 
     model.to(device=device)
 
@@ -344,7 +347,7 @@ def main(params: dict[str, Any]):
             Some masks have a range of values after image processing
             We only want binary masks here, so filter out hi/lo values
             """
-            masks = (masks > masks.max()//2).float().to(device=device)
+            masks = (masks > masks.max() // 2).float().to(device=device)
 
             optimizer.zero_grad()
 
@@ -388,9 +391,9 @@ def main(params: dict[str, Any]):
         scheduler.step()
         logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. "
                     f"Training [Loss: {np.mean(total_epoch_train_loss):.4f}] "
-                    f"[IoU: {100*np.mean(iou_epoch_train_score):.2f}%] || "
+                    f"[IoU: {100 * np.mean(iou_epoch_train_score):.2f}%] || "
                     f"Test: [Loss: {np.mean(total_epoch_test_score):.4f}] "
-                    f"[IoU: {100*np.mean(iou_epoch_test_score):.2f}%]")
+                    f"[IoU: {100 * np.mean(iou_epoch_test_score):.2f}%]")
 
         if stopper(epoch=epoch, score=np.mean(total_epoch_test_score)):
             logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
