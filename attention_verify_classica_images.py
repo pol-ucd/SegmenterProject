@@ -355,7 +355,7 @@ def main(params: dict[str, Any]):
     if torch.cuda.is_available():
         scaler = GradScaler()
 
-    stopper = EpochStopper(max_boredom=3, min_delta=0.0001)
+    stopper = EpochStopper(max_boredom=10, min_delta=0.0001)
 
     train_names = []
     test_names = []
