@@ -67,6 +67,18 @@ class IOULoss(nn.Module):
     __call__ = forward
 
 
+class DICELoss(nn.Module):
+    def __init__(self, eps=1e-06, logits=True):
+        super(DICELoss, self).__init__()
+        self.eps = eps
+        self.logits = logits
+
+    def forward(self, y_pred, y_true):
+        return 1 - dice_score(y_true, y_pred, self.eps, self.logits)
+
+    __call__ = forward
+
+
 def iou_score(y_true, y_pred, eps=1e-06, logits=True):
     if logits:
         y_pred = softmax(y_pred, dim=1)
@@ -80,18 +92,32 @@ def iou_score(y_true, y_pred, eps=1e-06, logits=True):
     score = tp / (tp + fp + fn + eps)
     return score
 
+def dice_score(y_true, y_pred, eps=1e-06, logits=True):
+    if logits:
+        y_pred = softmax(y_pred, dim=1)
+    true = (y_true > 0.5).long().flatten()
+    pred = (y_pred > 0.5).long().flatten()
+    tp = torch.sum(true * pred)
+    tn = torch.sum((1 - true) * (1 - pred))
+    fn = torch.sum((1 - true) * pred)
+    fp = torch.sum(true * (1 - pred))
+
+    score = 2*tp / (2*tp + fp + fn + eps)
+    return score
+
 
 class CompoundLoss(nn.Module):
     def __init__(self, alpha=0.5, beta=0.5, eps=1e-06):
         super(CompoundLoss, self).__init__()
-        self.iou_loss = IOULoss()
+        # self.iou_loss = IOULoss()
+        self.dice_loss = DICELoss()
         self.bce_loss = torch.nn.BCEWithLogitsLoss()
         self.alpha = alpha
         self.beta = beta
         self.eps = eps
 
     def forward(self, y_pred, y_true):
-        return self.alpha * self.iou_loss(y_pred, y_true) + self.beta * self.bce_loss(y_pred, y_true)
+        return self.alpha * self.dice_loss(y_pred, y_true) + self.beta * self.bce_loss(y_pred, y_true)
 
     __call__ = forward
 
@@ -346,8 +372,9 @@ def main(params: dict[str, Any]):
             imgs = imgs.to(device=device)
 
             """
-            Some masks have a range of values after image processing
-            We only want binary masks here, so filter out hi/lo values
+            For Classica only: 
+                Some masks have a range of values after image processing
+                We only want binary masks here, so filter out hi/lo values
             """
             masks = (masks > masks.max() // 2).float().to(device=device)
 
@@ -397,7 +424,7 @@ def main(params: dict[str, Any]):
                     f"Test: [Loss: {np.mean(total_epoch_test_score):.4f}] "
                     f"[IoU: {100 * np.mean(iou_epoch_test_score):.2f}%]")
 
-        if stopper(epoch=epoch, score=np.mean(total_epoch_test_score)):
+        if stopper(epoch=epoch, score=1.0 - np.mean(iou_epoch_test_score)):
             logger.info(f"Epoch {epoch + 1}/{num_epochs} completed. ")
             break
         else:
