@@ -3,12 +3,18 @@ import os
 import h5py
 from PIL import Image
 
-hdf5_file = "/Users/polmacaonghusa/Library/CloudStorage/GoogleDrive-pol.macaonghusa@ucd.ie/My Drive/polyp_data/data/Classica.h5"
-base_dir = "/Users/polmacaonghusa/Documents/Projects/polyp_data/Classica"
-outdir_images = os.path.join(base_dir, "images/val")
-outdir_masks = os.path.join(base_dir, "masks/val")
+hdf5_file = ("/Users/polmacaonghusa/Library/CloudStorage/GoogleDrive-pol.macaonghusa@ucd.ie/"
+             "My Drive/Dresden_data/images/dresden_preprocessed.h5")
+base_dir = "/Users/polmacaonghusa/dresden_data"
+outdir_images = os.path.join(base_dir, "images")
+outdir_masks = os.path.join(base_dir, "masks")
 
 if __name__ == "__main__":
+    if not os.path.exists(outdir_images):
+        os.makedirs(outdir_images)
+    if not os.path.exists(outdir_masks):
+        os.makedirs(outdir_masks)
+
     hdf5_file = h5py.File(hdf5_file, 'r', swmr=True)
 
     images = hdf5_file['images']
