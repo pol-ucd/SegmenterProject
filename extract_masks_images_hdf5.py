@@ -16,6 +16,8 @@ if __name__ == "__main__":
 
     hdf5_file = h5py.File(hdf5_file, 'r', swmr=True)
 
+    print(hdf5_file.keys())
+
     images = hdf5_file['images']
     masks = hdf5_file['masks']
     orig_sizes = hdf5_file['orig_size']
