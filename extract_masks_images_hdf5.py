@@ -3,7 +3,7 @@ import os
 import h5py
 from PIL import Image
 
-hdf5_file = "home/pol/segmenter/data/dresden_preprocessed.h5"
+hdf5_file = "/home/pol/segmenter/data/dresden_preprocessed.h5"
 base_dir = "/home/pol/dresden_data"
 outdir_images = os.path.join(base_dir, "images")
 outdir_masks = os.path.join(base_dir, "masks")
