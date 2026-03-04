@@ -1,0 +1,139 @@
+model:
+  pretrained_model: "nvidia/segformer-b2-finetuned-ade-512-512"
+  num_classes: 2
+  intermediate_channels: 256
+  median_kernel_size: 3
+  cache_dir: null
+
+training:
+  epochs: 50
+  batch_size: 8
+  image_size: 512
+  num_workers: 4
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  min_lr: 1.0e-6
+  grad_clip: 1.0
+  gradient_accumulation_steps: 1
+  checkpoint_interval: 1
+  image_log_interval: 100
+  prediction_threshold: 0.5
+  metric_smooth: 1.0e-6
+  warmup_epochs: 3
+  backbone_lr_scale: 0.1
+  checkpoint_keep: 3
+
+paths:
+  data_root: "data/augur/data"
+  checkpoint_dir: "checkpoints"
+  log_dir: "runs"
+
+loss:
+  dice_weight: 0.5
+  focal_weight: 0.3
+  boundary_weight: 0.2
+  dice_smooth: 1.0e-6
+  focal_alpha: 0.75
+  focal_gamma: 2.0
+  boundary_sigma: 5.0
+  boundary_kernel_size: 3
+  tversky_alpha: 0.7
+  tversky_beta: 0.3
+  label_smoothing: 0.05
+
+augmentation:
+  geometric:
+    h_flip_p: 0.5
+    v_flip_p: 0.3
+    rot90_p: 0.5
+    shift_limit: 0.1
+    scale_limit: 0.2
+    rotate_limit: 45
+    shift_scale_rotate_p: 0.5
+  color:
+    brightness_limit: 0.3
+    contrast_limit: 0.3
+    brightness_contrast_p: 0.5
+    gamma_min: 50
+    gamma_max: 150
+    gamma_p: 0.5
+    hue_shift_limit: 20
+    sat_shift_limit: 30
+    val_shift_limit: 20
+    hsv_p: 0.5
+    group_p: 0.5
+  texture:
+    clahe_clip_limit: 4.0
+    clahe_tile_grid_size: [8, 8]
+    clahe_p: 0.5
+    color_jitter_brightness: 0.2
+    color_jitter_contrast: 0.2
+    color_jitter_saturation: 0.2
+    color_jitter_hue: 0.1
+    color_jitter_p: 0.5
+    group_p: 0.3
+  noise:
+    gauss_std_min: 0.01
+    gauss_std_max: 0.05
+    gauss_p: 0.5
+    iso_color_shift_min: 0.01
+    iso_color_shift_max: 0.05
+    iso_intensity_min: 0.1
+    iso_intensity_max: 0.5
+    iso_p: 0.5
+    group_p: 0.2
+  channel:
+    rgb_shift_limit: 20
+    rgb_p: 0.5
+    channel_shuffle_p: 0.5
+    group_p: 0.2
+  blur:
+    blur_limit: 7
+    motion_p: 0.5
+    median_p: 0.5
+    gaussian_p: 0.5
+    blur_p: 0.5
+    group_p: 0.3
+  dropout:
+    coarse_num_holes_min: 4
+    coarse_num_holes_max: 8
+    coarse_hole_height_min: 30
+    coarse_hole_height_max: 50
+    coarse_hole_width_min: 30
+    coarse_hole_width_max: 50
+    coarse_p: 0.5
+    grid_ratio: 0.3
+    grid_holes_x: 4
+    grid_holes_y: 6
+    grid_p: 0.5
+    group_p: 0.2
+
+endoscopy:
+  blood_artifact_prob: 0.2
+  blood_artifact_alpha_min: 0.1
+  blood_artifact_alpha_max: 0.4
+  tool_occlusion_prob: 0.15
+  nbi_simulation_prob: 0.15
+  blood_pooling_prob: 0.25
+  blood_pooling_alpha_min: 0.15
+  blood_pooling_alpha_max: 0.45
+  specular_highlight_prob: 0.3
+  specular_num_spots_min: 3
+  specular_num_spots_max: 12
+  dark_field_prob: 0.25
+  red_shift_prob: 0.3
+  close_zoom_prob: 0.3
+  close_zoom_scale_min: 0.4
+  close_zoom_scale_max: 0.8
+
+data:
+  supported_extensions: [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"]
+  mask_threshold: 127
+  mixup_alpha: 0.4
+  mixup_prob: 0.5
+  target_domain_weight: 0.4
+
+inference:
+  prediction_threshold: 0.5
+  foreground_class_index: 1
+  image_extensions: ["*.jpg", "*.png"]
