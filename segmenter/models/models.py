@@ -3,7 +3,7 @@ from torch import nn as nn
 from torch.nn import functional as F
 from transformers import SegformerForSemanticSegmentation, SegformerConfig
 
-from segmenter.models.base import MedianPool2d, SegformerModelError, AugurSegmenterBase
+from segmenter.models.base import MedianPool2d, SegformerModelError, AugurSegmenterBase, get_pretrained_model
 
 
 class BaseSegmenter(AugurSegmenterBase):
@@ -13,12 +13,27 @@ class BaseSegmenter(AugurSegmenterBase):
     forward() - Rescales the output logits to match the
     expected size
     """
-    def __init__(self, /, pretrained_model: str = None, num_classes: int = None,):
-        super().__init__()
+    def __init__(
+        self,
+        /,
+        pretrained_model: str = None,
+        num_classes: int = None,
+        cache_dir: str = None,
+        force_download: bool = False,
+    ):
+        super().__init__(pretrained_model=pretrained_model, num_classes=num_classes)
+        self.cache_dir = cache_dir
+        self.force_download = force_download
+        
         if self.pretrained_model is not None:
-            self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+            config, local_path = get_pretrained_model(
                 self.pretrained_model,
-                config=self.config,
+                cache_dir=self.cache_dir,
+                force_download=self.force_download
+            )
+            self.base_model = SegformerForSemanticSegmentation.from_pretrained(
+                local_path,
+                config=config,
                 ignore_mismatched_sizes=True
             )
         else:
@@ -77,28 +92,38 @@ class CustomSegformerDecodeHead(nn.Module):
 
 
 class AugurSegformerSegmentation(AugurSegmenterBase):
-    def __init__(self, pretrained_model: str = None, num_classes: int = None,
-                 checkpoint_path:str=None,
-                 k:int=3):
+    def __init__(
+        self,
+        pretrained_model: str = None,
+        num_classes: int = None,
+        checkpoint_path: str = None,
+        k: int = 3,
+        intermediate_channels: int = 256,
+        cache_dir: str = None,
+        force_download: bool = False,
+    ):
         super().__init__(pretrained_model, num_classes, checkpoint_path)
-        # Load the full SegformerForSemanticSegmentation model.
-        # Set `ignore_mismatched_sizes=True` because we will replace the
-        # final classification layer, which will have a different output size.
+        self.cache_dir = cache_dir
+        self.force_download = force_download
+        
         if self.pretrained_model is not None:
-            config = SegformerConfig.from_pretrained(self.pretrained_model)
+            config, local_path = get_pretrained_model(
+                self.pretrained_model,
+                cache_dir=self.cache_dir,
+                force_download=self.force_download
+            )
             try:
                 self.base_model = SegformerForSemanticSegmentation.from_pretrained(
-                    self.pretrained_model,
+                    local_path,
                     config=config,
                     ignore_mismatched_sizes=True
                 )
             except OSError:
-                f = torch.load(self.pretrained_model,
-                           # map_location=device,
-                           # map_location=next(model.parameters()).device,
-                           weights_only=False)
-                self.base_model = SegformerForSemanticSegmentation().load_state_dict(f, strict=False)
+                state_dict = torch.load(local_path, weights_only=False)
+                self.base_model = SegformerForSemanticSegmentation(config=config)
+                self.base_model.load_state_dict(state_dict, strict=False)
         else:
+            config = SegformerConfig()
             self.base_model = SegformerForSemanticSegmentation(config=config)
 
 
@@ -109,13 +134,13 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
         # Replace the original classifier with a custom Sequential module.
         self.base_model.decode_head.classifier = nn.Sequential(
             # First convolution layer to process the features.
-            nn.Conv2d(classifier_in_channels, 256, kernel_size=3, padding=1),
+            nn.Conv2d(classifier_in_channels, intermediate_channels, kernel_size=3, padding=1),
             # Batch normalization for training stability.
-            nn.BatchNorm2d(256),
+            nn.BatchNorm2d(intermediate_channels),
             # ReLU activation for non-linearity.
             nn.ReLU(inplace=True),
             # Final convolution to map features to the desired number of classes.
-            nn.Conv2d(256, self.num_classes, kernel_size=1)
+            nn.Conv2d(intermediate_channels, self.num_classes, kernel_size=1)
         )
         self.median = MedianPool2d(kernel_size=k, padding=k // 2)
 
@@ -156,9 +181,18 @@ class AugurSegformerSegmentation(AugurSegmenterBase):
                                mode='bilinear',
                                align_corners=False)
 
-        # return logits
-        return self.median(logits)   # Smoothed logits
+        if self.training:
+            return logits
+        return self.median(logits)
 
     def load_model(self, path: str):
         state_dict = torch.load(path, weights_only=False, map_location='cpu')
-        self.base_model.load_state_dict(state_dict )
+        self.base_model.load_state_dict(state_dict)
+
+    def freeze_backbone(self):
+        for param in self.base_model.segformer.parameters():
+            param.requires_grad = False
+
+    def unfreeze_backbone(self):
+        for param in self.base_model.segformer.parameters():
+            param.requires_grad = True

@@ -1,10 +1,63 @@
 from abc import abstractmethod
+import os
+from pathlib import Path
 
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
 from torch.nn.modules.utils import _pair
 from transformers import SegformerConfig, SegformerModel, SegformerForSemanticSegmentation
+
+
+DEFAULT_CACHE_DIR = Path.home() / '.cache' / 'huggingface' / 'hub'
+
+
+def get_pretrained_model(model_name: str, cache_dir: str = None, force_download: bool = False):
+    """
+    Load a pretrained Segformer model with caching support.
+    
+    Args:
+        model_name: The model name (e.g., 'nvidia/segformer-b2-finetuned-ade-512-512')
+                   or local path to a pretrained model.
+        cache_dir: Custom cache directory. If None, uses default HuggingFace cache.
+        force_download: If True, re-download even if cached model exists.
+    
+    Returns:
+        tuple: (config, local_path) where local_path is the path to the cached/downloaded model.
+    """
+    if cache_dir is None:
+        cache_dir = str(DEFAULT_CACHE_DIR)
+    
+    if os.path.exists(model_name):
+        local_path = model_name
+        config = SegformerConfig.from_pretrained(model_name)
+        return config, local_path
+    
+    model_cache_path = os.path.join(cache_dir, f"models--{model_name.replace('/', '--')}")
+    snapshot_path = os.path.join(model_cache_path, 'snapshots')
+    
+    if os.path.exists(snapshot_path) and not force_download:
+        snapshots = os.listdir(snapshot_path)
+        if snapshots:
+            local_path = os.path.join(snapshot_path, snapshots[0])
+            config = SegformerConfig.from_pretrained(local_path)
+            return config, local_path
+    
+    if force_download and os.path.exists(model_cache_path):
+        import shutil
+        shutil.rmtree(model_cache_path)
+    
+    from huggingface_hub import snapshot_download
+    local_path = snapshot_download(
+        repo_id=model_name,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        local_files_only=False,
+    )
+    
+    config = SegformerConfig.from_pretrained(local_path)
+    
+    return config, local_path
 
 class MedianPool2d(nn.Module):
     def __init__(self, kernel_size, stride=1, padding=0):
