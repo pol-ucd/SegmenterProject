@@ -40,7 +40,7 @@ class FocalLoss(nn.Module):
         if self.label_smoothing > 0:
             target = target * (1 - self.label_smoothing) + self.label_smoothing / 2
 
-        bce = F.binary_cross_entropy(pred, target, reduction='none')
+        bce = F.binary_cross_entropy(pred.float(), target.float(), reduction='none')
 
         pt = torch.exp(-bce)
         alpha_t = self.alpha * target + (1.0 - self.alpha) * (1.0 - target)
@@ -68,7 +68,7 @@ class BoundaryLoss(nn.Module):
     def forward(self, pred, target):
         boundary = self._get_boundary(target)
         weight = 1.0 + self.sigma * boundary
-        bce = F.binary_cross_entropy(pred, target, reduction='none')
+        bce = F.binary_cross_entropy(pred.float(), target.float(), reduction='none')
         return (bce * weight).mean()
 
 
